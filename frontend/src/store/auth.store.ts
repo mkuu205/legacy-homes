@@ -1,3 +1,5 @@
+'use client';
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
@@ -5,100 +7,86 @@ export interface User {
   id: string;
   fullName: string;
   email: string;
-  role: 'RESIDENT' | 'ADMIN' | 'SUPER_ADMIN';
+  role: 'SUPER_ADMIN' | 'RESIDENT';
   houseNumber?: string;
   accountNumber?: string;
   profilePicture?: string;
-  phoneNumber?: string;
+  phone?: string;
 }
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
-  hasHydrated: boolean;
-  activeRole: 'RESIDENT' | 'ADMIN' | null;
-
-  login: (
+  hydrated: boolean;
+  setAuth: (
     user: User,
     accessToken: string,
     refreshToken: string
   ) => void;
-
   logout: () => void;
-
+  clearSession: () => void;
   setHydrated: (value: boolean) => void;
-  updateUser: (user: Partial<User>) => void;
 }
-
-const getTokenKeys = (role: 'RESIDENT' | 'ADMIN') => {
-  if (role === 'ADMIN') {
-    return {
-      access: 'admin_accessToken',
-      refresh: 'admin_refreshToken',
-    };
-  }
-
-  return {
-    access: 'resident_accessToken',
-    refresh: 'resident_refreshToken',
-  };
-};
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       isAuthenticated: false,
-      hasHydrated: false,
-      activeRole: null,
+      hydrated: false,
 
-      login: (user, accessToken, refreshToken) => {
-        const keys = getTokenKeys(user.role);
+      setAuth: (user, accessToken, refreshToken) => {
+        const sessionId = crypto.randomUUID();
 
-        localStorage.setItem(keys.access, accessToken);
-        localStorage.setItem(keys.refresh, refreshToken);
+        sessionStorage.setItem('accessToken', accessToken);
+        sessionStorage.setItem('refreshToken', refreshToken);
+        sessionStorage.setItem('sessionId', sessionId);
 
         set({
           user,
           isAuthenticated: true,
-          activeRole: user.role,
         });
       },
 
       logout: () => {
-        localStorage.removeItem('resident_accessToken');
-        localStorage.removeItem('resident_refreshToken');
-        localStorage.removeItem('admin_accessToken');
-        localStorage.removeItem('admin_refreshToken');
+        sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('refreshToken');
+        sessionStorage.removeItem('sessionId');
 
         set({
           user: null,
           isAuthenticated: false,
-          activeRole: null,
         });
       },
 
-      setHydrated: (value) => {
-        set({ hasHydrated: value });
-      },
-
-      updateUser: (updates) => {
-        const current = get().user;
-        if (!current) return;
+      clearSession: () => {
+        sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('refreshToken');
+        sessionStorage.removeItem('sessionId');
 
         set({
-          user: {
-            ...current,
-            ...updates,
-          },
+          user: null,
+          isAuthenticated: false,
         });
       },
+
+      setHydrated: (value) =>
+        set({
+          hydrated: value,
+        }),
     }),
     {
-      name: 'legacy-homes-auth',
+      name: 'auth-storage',
+
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+      }),
 
       onRehydrateStorage: () => (state) => {
-        state?.setHydrated(true);
+        if (state) {
+          state.setHydrated(true);
+        }
       },
     }
   )
