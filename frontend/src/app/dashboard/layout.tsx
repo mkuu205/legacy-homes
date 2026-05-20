@@ -49,6 +49,12 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!hydrated) return;
 
+    const loggingOut =
+      typeof window !== 'undefined' &&
+      sessionStorage.getItem('loggingOut') === 'true';
+
+    if (loggingOut) return;
+
     if (!isAuthenticated || !user) {
       router.push('/login');
       return;
@@ -69,8 +75,15 @@ export default function DashboardLayout({
       }
     } catch {}
 
+    sessionStorage.setItem('loggingOut', 'true');
+
     logout();
-    router.push('/');
+
+    router.replace('/');
+
+    setTimeout(() => {
+      sessionStorage.removeItem('loggingOut');
+    }, 1000);
   };
 
   if (!hydrated || !isAuthenticated || !user) return null;
@@ -373,14 +386,6 @@ export default function DashboardLayout({
                   cursor: 'pointer',
                   transition: 'all 0.15s'
                 }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background =
-                    'rgba(255, 255, 255, 0.05)')
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background =
-                    'transparent')
-                }
               >
                 <Bell
                   size={18}
