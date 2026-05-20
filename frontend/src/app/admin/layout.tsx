@@ -45,31 +45,36 @@ export default function AdminLayout({
     user,
     isAuthenticated,
     logout,
-    hydrated,
+    hasHydrated,
   } = useAuthStore();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hasHydrated) return;
 
     if (!isAuthenticated || !user) {
       router.push('/login');
       return;
     }
 
-    if (user.role !== 'SUPER_ADMIN') {
+    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
       router.push('/dashboard');
     }
-  }, [hydrated, isAuthenticated, user, router]);
+  }, [hasHydrated, isAuthenticated, user, router]);
 
   const handleLogout = async () => {
     try {
-      const refreshToken = localStorage.getItem('refreshToken');
+      const refreshToken =
+        localStorage.getItem('admin_refreshToken') ||
+        localStorage.getItem('refreshToken');
 
       if (refreshToken) {
         const { api } = await import('@/lib/api');
-        await api.post('/auth/logout', { refreshToken });
+
+        await api.post('/auth/logout', {
+          refreshToken,
+        });
       }
     } catch {}
 
@@ -77,7 +82,7 @@ export default function AdminLayout({
     router.push('/');
   };
 
-  if (!hydrated) {
+  if (!hasHydrated) {
     return null;
   }
 
@@ -163,6 +168,7 @@ export default function AdminLayout({
                   background: 'var(--gl)',
                   border: '1px solid rgba(0, 198, 167, 0.25)',
                   color: 'var(--ac)',
+                  overflow: 'hidden',
                 }}
               >
                 {user.profilePicture ? (
@@ -173,7 +179,9 @@ export default function AdminLayout({
                       width: '100%',
                       height: '100%',
                       objectFit: 'cover',
-                      borderRadius: '8px',
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
                     }}
                   />
                 ) : (
@@ -202,7 +210,7 @@ export default function AdminLayout({
                     marginTop: '2px',
                   }}
                 >
-                  Super Admin
+                  {user.role}
                 </div>
               </div>
             </div>
