@@ -15,6 +15,8 @@ import {
   LogOut,
   Menu,
   X,
+  ChevronRight,
+  Settings
 } from 'lucide-react';
 
 const navItems = [
@@ -27,7 +29,7 @@ const navItems = [
 ];
 
 export default function DashboardLayout({
-  children,
+  children
 }: {
   children: React.ReactNode;
 }) {
@@ -38,7 +40,7 @@ export default function DashboardLayout({
     user,
     isAuthenticated,
     logout,
-    hydrated,
+    hydrated
   } = useAuthStore();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -57,33 +59,13 @@ export default function DashboardLayout({
     }
   }, [hydrated, isAuthenticated, user, router]);
 
-  useEffect(() => {
-    const fetchUnreadCount = async () => {
-      try {
-        const { api } = await import('@/lib/api');
-        const res = await api.get('/notifications/unread-count');
-        setUnreadCount(res.data?.count || 0);
-      } catch {
-        setUnreadCount(0);
-      }
-    };
-
-    if (isAuthenticated && user) {
-      fetchUnreadCount();
-    }
-  }, [isAuthenticated, user]);
-
   const handleLogout = async () => {
     try {
-      const refreshToken =
-        sessionStorage.getItem('refreshToken');
+      const refreshToken = sessionStorage.getItem('refreshToken');
 
       if (refreshToken) {
         const { api } = await import('@/lib/api');
-
-        await api.post('/auth/logout', {
-          refreshToken,
-        });
+        await api.post('/auth/logout', { refreshToken });
       }
     } catch {}
 
@@ -91,13 +73,12 @@ export default function DashboardLayout({
     router.push('/');
   };
 
-  if (!hydrated || !isAuthenticated || !user) {
-    return null;
-  }
+  if (!hydrated || !isAuthenticated || !user) return null;
 
   return (
     <div className="dashboard-container">
       <div className="shell">
+        {/* Sidebar */}
         <aside
           className={`sb fixed inset-y-0 left-0 z-50 lg:static lg:inset-auto transition-transform duration-300 ${
             sidebarOpen
@@ -105,9 +86,13 @@ export default function DashboardLayout({
               : '-translate-x-full lg:translate-x-0'
           }`}
         >
+          {/* Logo */}
           <div className="sb-logo">
             <div className="sb-logo-icon">
-              <Droplets size={18} style={{ color: 'var(--ac)' }} />
+              <Droplets
+                size={18}
+                style={{ color: 'var(--ac)' }}
+              />
             </div>
 
             <div style={{ minWidth: 0 }}>
@@ -116,7 +101,7 @@ export default function DashboardLayout({
                   fontSize: '13px',
                   fontWeight: 700,
                   color: 'var(--t1)',
-                  fontFamily: 'var(--f1)',
+                  fontFamily: 'var(--f1)'
                 }}
               >
                 Legacy Homes
@@ -126,7 +111,7 @@ export default function DashboardLayout({
                 style={{
                   fontSize: '10px',
                   color: 'var(--t3)',
-                  marginTop: '1px',
+                  marginTop: '1px'
                 }}
               >
                 Resident Portal
@@ -141,13 +126,14 @@ export default function DashboardLayout({
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: 'var(--t2)',
+                color: 'var(--t2)'
               }}
             >
               <X size={18} />
             </button>
           </div>
 
+          {/* User Card */}
           <div
             className="sb-user-card"
             style={{ margin: '12px 8px' }}
@@ -156,7 +142,7 @@ export default function DashboardLayout({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
+                gap: '10px'
               }}
             >
               <div
@@ -174,18 +160,18 @@ export default function DashboardLayout({
                   fontSize: '14px',
                   fontWeight: 700,
                   color: 'var(--ac)',
-                  fontFamily: 'var(--f1)',
-                  overflow: 'hidden',
+                  fontFamily: 'var(--f1)'
                 }}
               >
                 {user.profilePicture ? (
                   <img
                     src={user.profilePicture}
-                    alt={user.fullName}
+                    alt=""
                     style={{
                       width: '100%',
                       height: '100%',
                       objectFit: 'cover',
+                      borderRadius: '8px'
                     }}
                   />
                 ) : (
@@ -196,7 +182,7 @@ export default function DashboardLayout({
               <div
                 style={{
                   minWidth: 0,
-                  flex: 1,
+                  flex: 1
                 }}
               >
                 <div
@@ -206,7 +192,7 @@ export default function DashboardLayout({
                     color: 'var(--t1)',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
-                    textOverflow: 'ellipsis',
+                    textOverflow: 'ellipsis'
                   }}
                 >
                   {user.fullName}
@@ -216,7 +202,7 @@ export default function DashboardLayout({
                   style={{
                     fontSize: '11px',
                     color: 'var(--t3)',
-                    marginTop: '2px',
+                    marginTop: '2px'
                   }}
                 >
                   House {user.houseNumber}
@@ -225,35 +211,76 @@ export default function DashboardLayout({
             </div>
           </div>
 
+          {/* Navigation */}
           <nav
             style={{
               flex: 1,
               overflowY: 'auto',
-              padding: '8px 0',
+              padding: '8px 0'
             }}
           >
-            {navItems.map(({ href, icon: Icon, label }) => {
-              const isActive =
-                pathname === href ||
-                (href !== '/dashboard' &&
-                  pathname.startsWith(href));
+            <div className="sb-section">
+              <div className="sb-section-label">Main</div>
 
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`sb-link ${
-                    isActive ? 'on' : ''
-                  }`}
-                >
-                  <Icon size={16} />
-                  <span>{label}</span>
-                </Link>
-              );
-            })}
+              {navItems.slice(0, 3).map(
+                ({ href, icon: Icon, label }) => {
+                  const isActive =
+                    pathname === href ||
+                    (href !== '/dashboard' &&
+                      pathname.startsWith(href));
+
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() =>
+                        setSidebarOpen(false)
+                      }
+                      className={`sb-link ${
+                        isActive ? 'on' : ''
+                      }`}
+                    >
+                      <Icon size={16} />
+                      <span>{label}</span>
+                    </Link>
+                  );
+                }
+              )}
+            </div>
+
+            <div className="sb-section">
+              <div className="sb-section-label">
+                Support
+              </div>
+
+              {navItems.slice(3).map(
+                ({ href, icon: Icon, label }) => {
+                  const isActive =
+                    pathname === href ||
+                    (href !== '/dashboard' &&
+                      pathname.startsWith(href));
+
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() =>
+                        setSidebarOpen(false)
+                      }
+                      className={`sb-link ${
+                        isActive ? 'on' : ''
+                      }`}
+                    >
+                      <Icon size={16} />
+                      <span>{label}</span>
+                    </Link>
+                  );
+                }
+              )}
+            </div>
           </nav>
 
+          {/* Footer */}
           <div className="sb-foot">
             <button
               onClick={handleLogout}
@@ -261,6 +288,8 @@ export default function DashboardLayout({
               style={{
                 width: '100%',
                 color: '#f87171',
+                marginLeft: 0,
+                marginRight: 0
               }}
             >
               <LogOut size={16} />
@@ -269,7 +298,116 @@ export default function DashboardLayout({
           </div>
         </aside>
 
-        <div className="main-col">{children}</div>
+        {/* Overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 lg:hidden"
+            style={{
+              background: 'rgba(0, 0, 0, 0.5)'
+            }}
+            onClick={() =>
+              setSidebarOpen(false)
+            }
+          />
+        )}
+
+        {/* Main Column */}
+        <div className="main-col">
+          {/* Topbar */}
+          <div className="topbar">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--t1)'
+              }}
+            >
+              <Menu size={20} />
+            </button>
+
+            <div style={{ flex: 1 }}>
+              <p
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--t3)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  fontWeight: 700
+                }}
+              >
+                Account
+              </p>
+
+              <p
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--t1)',
+                  fontWeight: 600,
+                  marginTop: '2px'
+                }}
+              >
+                {user.accountNumber}
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}
+            >
+              <Link
+                href="/dashboard/notifications"
+                className="notif-wrap"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '9px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background =
+                    'rgba(255, 255, 255, 0.05)')
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background =
+                    'transparent')
+                }
+              >
+                <Bell
+                  size={18}
+                  style={{ color: 'var(--t2)' }}
+                />
+                {unreadCount > 0 && (
+                  <div className="notif-dot" />
+                )}
+              </Link>
+
+              <button
+                onClick={handleLogout}
+                className="btn-icon bg"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Page Content */}
+          <div className="pg">{children}</div>
+        </div>
       </div>
     </div>
   );
