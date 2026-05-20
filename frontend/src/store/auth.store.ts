@@ -5,7 +5,7 @@ export interface User {
   id: string;
   fullName: string;
   email: string;
-  role: 'RESIDENT' | 'ADMIN';
+  role: 'RESIDENT' | 'ADMIN' | 'SUPER_ADMIN';
   houseNumber?: string;
   accountNumber?: string;
   profilePicture?: string;
