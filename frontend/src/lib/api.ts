@@ -1,62 +1,35 @@
-import axios, {
-  AxiosError,
-  AxiosInstance,
-  InternalAxiosRequestConfig,
-} from 'axios';
+import axios, { AxiosError, AxiosInstance } from 'axios';
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  'https://legacy-homes-backend.onrender.com/api/v1';
+  'https://legacy-homes.onrender.com/api';
 
 export const api: AxiosInstance = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
 });
 
-const isBrowser = typeof window !== 'undefined';
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = sessionStorage.getItem('accessToken');
+    const sessionId = sessionStorage.getItem('sessionId');
 
-const clearAuth = async () => {
-  if (!isBrowser) return;
-
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('sessionId');
-  sessionStorage.removeItem('sessionId');
-
-  try {
-    const { useAuthStore } = await import('@/store/auth.store');
-    useAuthStore.getState().logout();
-  } catch {}
-
-  window.location.href = '/login';
-};
-
-api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    if (isBrowser) {
-      const token = localStorage.getItem('accessToken');
-      const sessionId = localStorage.getItem('sessionId');
-
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-
-      if (sessionId) {
-        config.headers['X-Session-ID'] = sessionId;
-      }
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+    if (sessionId) {
+      config.headers['X-Session-ID'] = sessionId;
+    }
+  }
+
+  return config;
+});
 
 api.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError<any>) => {
+  async (error: AxiosError) => {
     const originalRequest = error.config as any;
 
     if (
@@ -67,11 +40,11 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        if (!isBrowser) {
+        if (typeof window === 'undefined') {
           return Promise.reject(error);
         }
 
-        const refreshToken = localStorage.getItem('refreshToken');
+        const refreshToken = sessionStorage.getItem('refreshToken');
 
         if (!refreshToken) {
           throw new Error('No refresh token');
@@ -94,10 +67,13 @@ api.interceptors.response.use(
           throw new Error('Invalid refresh response');
         }
 
-        localStorage.setItem('accessToken', accessToken);
+        sessionStorage.setItem('accessToken', accessToken);
 
         if (newRefreshToken) {
-          localStorage.setItem('refreshToken', newRefreshToken);
+          sessionStorage.setItem(
+            'refreshToken',
+            newRefreshToken
+          );
         }
 
         originalRequest.headers = {
@@ -107,7 +83,16 @@ api.interceptors.response.use(
 
         return api(originalRequest);
       } catch {
-        await clearAuth();
+        sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('refreshToken');
+        sessionStorage.removeItem('sessionId');
+
+        const { useAuthStore } = await import(
+          '@/store/auth.store'
+        );
+
+        useAuthStore.getState().logout();
+
         return Promise.reject(error);
       }
     }
@@ -116,11 +101,12 @@ api.interceptors.response.use(
   }
 );
 
-export const getErrorMessage = (error: unknown): string => {
+export const getErrorMessage = (
+  error: unknown
+): string => {
   if (axios.isAxiosError(error)) {
     return (
       error.response?.data?.message ||
-      error.response?.data?.error ||
       error.message ||
       'An error occurred'
     );
