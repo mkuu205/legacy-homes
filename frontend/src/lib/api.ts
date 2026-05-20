@@ -1,87 +1,52 @@
-import axios from 'axios';
-import { useAuthStore } from '@/store/auth.store';
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  InternalAxiosRequestConfig,
+} from 'axios';
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  'https://your-backend-url.onrender.com/api/v1';
+  'https://legacy-homes-backend.onrender.com/api/v1';
 
-export const api = axios.create({
+export const api: AxiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000,
 });
 
-export const getErrorMessage = (error: any): string => {
-  if (error?.response?.data?.message) {
-    return error.response.data.message;
-  }
+const isBrowser = typeof window !== 'undefined';
 
-  if (error?.message) {
-    return error.message;
-  }
+const clearAuth = async () => {
+  if (!isBrowser) return;
 
-  return 'Something went wrong';
-};
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('sessionId');
+  sessionStorage.removeItem('sessionId');
 
-const getAccessToken = () => {
-  if (typeof window === 'undefined') return null;
+  try {
+    const { useAuthStore } = await import('@/store/auth.store');
+    useAuthStore.getState().logout();
+  } catch {}
 
-  const { activeRole } = useAuthStore.getState();
-
-  if (activeRole === 'ADMIN') {
-    return localStorage.getItem('admin_accessToken');
-  }
-
-  if (activeRole === 'RESIDENT') {
-    return localStorage.getItem('resident_accessToken');
-  }
-
-  return null;
-};
-
-const getRefreshToken = () => {
-  if (typeof window === 'undefined') return null;
-
-  const { activeRole } = useAuthStore.getState();
-
-  if (activeRole === 'ADMIN') {
-    return localStorage.getItem('admin_refreshToken');
-  }
-
-  if (activeRole === 'RESIDENT') {
-    return localStorage.getItem('resident_refreshToken');
-  }
-
-  return null;
-};
-
-const saveTokens = (
-  accessToken: string,
-  refreshToken: string
-) => {
-  if (typeof window === 'undefined') return;
-
-  const { activeRole } = useAuthStore.getState();
-
-  if (activeRole === 'ADMIN') {
-    localStorage.setItem('admin_accessToken', accessToken);
-    localStorage.setItem('admin_refreshToken', refreshToken);
-    return;
-  }
-
-  if (activeRole === 'RESIDENT') {
-    localStorage.setItem('resident_accessToken', accessToken);
-    localStorage.setItem('resident_refreshToken', refreshToken);
-  }
+  window.location.href = '/login';
 };
 
 api.interceptors.request.use(
-  (config) => {
-    const token = getAccessToken();
+  (config: InternalAxiosRequestConfig) => {
+    if (isBrowser) {
+      const token = localStorage.getItem('accessToken');
+      const sessionId = localStorage.getItem('sessionId');
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      if (sessionId) {
+        config.headers['X-Session-ID'] = sessionId;
+      }
     }
 
     return config;
@@ -91,48 +56,81 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
+  async (error: AxiosError<any>) => {
+    const originalRequest = error.config as any;
 
     if (
       error.response?.status === 401 &&
-      !originalRequest?._retry
+      originalRequest &&
+      !originalRequest._retry
     ) {
       originalRequest._retry = true;
 
       try {
-        const refreshToken = getRefreshToken();
+        if (!isBrowser) {
+          return Promise.reject(error);
+        }
+
+        const refreshToken = localStorage.getItem('refreshToken');
 
         if (!refreshToken) {
-          useAuthStore.getState().logout();
-          return Promise.reject(error);
+          throw new Error('No refresh token');
         }
 
         const response = await axios.post(
           `${API_URL}/auth/refresh-token`,
-          {
-            refreshToken,
-          }
+          { refreshToken }
         );
 
         const accessToken =
-          response.data.accessToken;
+          response.data?.data?.accessToken ||
+          response.data?.accessToken;
 
         const newRefreshToken =
-          response.data.refreshToken || refreshToken;
+          response.data?.data?.refreshToken ||
+          response.data?.refreshToken;
 
-        saveTokens(accessToken, newRefreshToken);
+        if (!accessToken) {
+          throw new Error('Invalid refresh response');
+        }
 
-        originalRequest.headers.Authorization =
-          `Bearer ${accessToken}`;
+        localStorage.setItem('accessToken', accessToken);
+
+        if (newRefreshToken) {
+          localStorage.setItem('refreshToken', newRefreshToken);
+        }
+
+        originalRequest.headers = {
+          ...originalRequest.headers,
+          Authorization: `Bearer ${accessToken}`,
+        };
 
         return api(originalRequest);
-      } catch (refreshError) {
-        useAuthStore.getState().logout();
-        return Promise.reject(refreshError);
+      } catch {
+        await clearAuth();
+        return Promise.reject(error);
       }
     }
 
     return Promise.reject(error);
   }
 );
+
+export const getErrorMessage = (error: unknown): string => {
+  if (axios.isAxiosError(error)) {
+    return (
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      error.message ||
+      'An error occurred'
+    );
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'An unexpected error occurred';
+};
+
+export default api;
