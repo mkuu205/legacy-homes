@@ -12,7 +12,21 @@ export const api = axios.create({
   },
 });
 
+export const getErrorMessage = (error: any): string => {
+  if (error?.response?.data?.message) {
+    return error.response.data.message;
+  }
+
+  if (error?.message) {
+    return error.message;
+  }
+
+  return 'Something went wrong';
+};
+
 const getAccessToken = () => {
+  if (typeof window === 'undefined') return null;
+
   const { activeRole } = useAuthStore.getState();
 
   if (activeRole === 'ADMIN') {
@@ -27,6 +41,8 @@ const getAccessToken = () => {
 };
 
 const getRefreshToken = () => {
+  if (typeof window === 'undefined') return null;
+
   const { activeRole } = useAuthStore.getState();
 
   if (activeRole === 'ADMIN') {
@@ -40,12 +56,18 @@ const getRefreshToken = () => {
   return null;
 };
 
-const saveTokens = (accessToken: string, refreshToken: string) => {
+const saveTokens = (
+  accessToken: string,
+  refreshToken: string
+) => {
+  if (typeof window === 'undefined') return;
+
   const { activeRole } = useAuthStore.getState();
 
   if (activeRole === 'ADMIN') {
     localStorage.setItem('admin_accessToken', accessToken);
     localStorage.setItem('admin_refreshToken', refreshToken);
+    return;
   }
 
   if (activeRole === 'RESIDENT') {
@@ -54,25 +76,27 @@ const saveTokens = (accessToken: string, refreshToken: string) => {
   }
 };
 
-api.interceptors.request.use((config) => {
-  const token = getAccessToken();
+api.interceptors.request.use(
+  (config) => {
+    const token = getAccessToken();
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
 
-  return config;
-});
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 api.interceptors.response.use(
   (response) => response,
-
   async (error) => {
     const originalRequest = error.config;
 
     if (
       error.response?.status === 401 &&
-      !originalRequest._retry
+      !originalRequest?._retry
     ) {
       originalRequest._retry = true;
 
@@ -84,22 +108,28 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        const res = await axios.post(`${API_URL}/auth/refresh-token`, {
-          refreshToken,
-        });
-
-        const { accessToken, newRefreshToken } = res.data;
-
-        saveTokens(
-          accessToken,
-          newRefreshToken || refreshToken
+        const response = await axios.post(
+          `${API_URL}/auth/refresh-token`,
+          {
+            refreshToken,
+          }
         );
 
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        const accessToken =
+          response.data.accessToken;
+
+        const newRefreshToken =
+          response.data.refreshToken || refreshToken;
+
+        saveTokens(accessToken, newRefreshToken);
+
+        originalRequest.headers.Authorization =
+          `Bearer ${accessToken}`;
 
         return api(originalRequest);
-      } catch {
+      } catch (refreshError) {
         useAuthStore.getState().logout();
+        return Promise.reject(refreshError);
       }
     }
 
