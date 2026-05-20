@@ -18,7 +18,7 @@ import {
   LogOut,
   Menu,
   X,
-  Shield,
+  Shield
 } from 'lucide-react';
 
 const navItems = [
@@ -34,7 +34,7 @@ const navItems = [
 ];
 
 export default function AdminLayout({
-  children,
+  children
 }: {
   children: React.ReactNode;
 }) {
@@ -45,13 +45,19 @@ export default function AdminLayout({
     user,
     isAuthenticated,
     logout,
-    hydrated,
+    hydrated
   } = useAuthStore();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!hydrated) return;
+
+    const loggingOut =
+      typeof window !== 'undefined' &&
+      sessionStorage.getItem('loggingOut') === 'true';
+
+    if (loggingOut) return;
 
     if (!isAuthenticated || !user) {
       router.push('/login');
@@ -65,20 +71,26 @@ export default function AdminLayout({
 
   const handleLogout = async () => {
     try {
-      const refreshToken =
-        sessionStorage.getItem('refreshToken');
+      const refreshToken = sessionStorage.getItem('refreshToken');
 
       if (refreshToken) {
         const { api } = await import('@/lib/api');
 
         await api.post('/auth/logout', {
-          refreshToken,
+          refreshToken
         });
       }
     } catch {}
 
+    sessionStorage.setItem('loggingOut', 'true');
+
     logout();
-    router.push('/');
+
+    router.replace('/');
+
+    setTimeout(() => {
+      sessionStorage.removeItem('loggingOut');
+    }, 1000);
   };
 
   if (!hydrated || !isAuthenticated || !user) {
@@ -102,7 +114,10 @@ export default function AdminLayout({
         >
           <div className="sb-logo">
             <div className="sb-logo-icon">
-              <Droplets size={18} style={{ color: 'var(--ac)' }} />
+              <Droplets
+                size={18}
+                style={{ color: 'var(--ac)' }}
+              />
             </div>
 
             <div style={{ minWidth: 0 }}>
@@ -111,7 +126,7 @@ export default function AdminLayout({
                   fontSize: '13px',
                   fontWeight: 700,
                   color: 'var(--t1)',
-                  fontFamily: 'var(--f1)',
+                  fontFamily: 'var(--f1)'
                 }}
               >
                 Legacy Homes
@@ -121,7 +136,7 @@ export default function AdminLayout({
                 style={{
                   fontSize: '10px',
                   color: 'var(--t3)',
-                  marginTop: '1px',
+                  marginTop: '1px'
                 }}
               >
                 Admin Panel
@@ -136,7 +151,7 @@ export default function AdminLayout({
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: 'var(--t2)',
+                color: 'var(--t2)'
               }}
             >
               <X size={18} />
@@ -151,7 +166,7 @@ export default function AdminLayout({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
+                gap: '10px'
               }}
             >
               <div
@@ -167,7 +182,7 @@ export default function AdminLayout({
                   border:
                     '1px solid rgba(0, 198, 167, 0.25)',
                   color: 'var(--ac)',
-                  overflow: 'hidden',
+                  overflow: 'hidden'
                 }}
               >
                 {user.profilePicture ? (
@@ -177,7 +192,7 @@ export default function AdminLayout({
                     style={{
                       width: '100%',
                       height: '100%',
-                      objectFit: 'cover',
+                      objectFit: 'cover'
                     }}
                   />
                 ) : (
@@ -193,7 +208,7 @@ export default function AdminLayout({
                     color: 'var(--t1)',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
-                    textOverflow: 'ellipsis',
+                    textOverflow: 'ellipsis'
                   }}
                 >
                   {user.fullName}
@@ -203,7 +218,7 @@ export default function AdminLayout({
                   style={{
                     fontSize: '11px',
                     color: 'var(--t3)',
-                    marginTop: '2px',
+                    marginTop: '2px'
                   }}
                 >
                   {user.role}
@@ -216,24 +231,30 @@ export default function AdminLayout({
             style={{
               flex: 1,
               overflowY: 'auto',
-              padding: '8px 0',
+              padding: '8px 0'
             }}
           >
-            {navItems.map(({ href, icon: Icon, label, exact }) => {
-              const active = isActive(href, exact);
+            {navItems.map(
+              ({ href, icon: Icon, label, exact }) => {
+                const active = isActive(href, exact);
 
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`sb-link ${active ? 'on' : ''}`}
-                >
-                  <Icon size={16} />
-                  <span>{label}</span>
-                </Link>
-              );
-            })}
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() =>
+                      setSidebarOpen(false)
+                    }
+                    className={`sb-link ${
+                      active ? 'on' : ''
+                    }`}
+                  >
+                    <Icon size={16} />
+                    <span>{label}</span>
+                  </Link>
+                );
+              }
+            )}
           </nav>
 
           <div className="sb-foot">
@@ -242,7 +263,7 @@ export default function AdminLayout({
               className="sb-link"
               style={{
                 width: '100%',
-                color: '#f87171',
+                color: '#f87171'
               }}
             >
               <LogOut size={16} />
@@ -254,8 +275,12 @@ export default function AdminLayout({
         {sidebarOpen && (
           <div
             className="fixed inset-0 z-40 lg:hidden"
-            style={{ background: 'rgba(0,0,0,0.5)' }}
-            onClick={() => setSidebarOpen(false)}
+            style={{
+              background: 'rgba(0,0,0,0.5)'
+            }}
+            onClick={() =>
+              setSidebarOpen(false)
+            }
           />
         )}
 
@@ -269,7 +294,12 @@ export default function AdminLayout({
             </button>
 
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: '11px', color: 'var(--t3)' }}>
+              <p
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--t3)'
+                }}
+              >
                 Admin
               </p>
             </div>
