@@ -45,29 +45,28 @@ export default function AdminLayout({
     user,
     isAuthenticated,
     logout,
-    hasHydrated,
+    hydrated,
   } = useAuthStore();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (!hasHydrated) return;
+    if (!hydrated) return;
 
     if (!isAuthenticated || !user) {
       router.push('/login');
       return;
     }
 
-    if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
+    if (user.role !== 'SUPER_ADMIN') {
       router.push('/dashboard');
     }
-  }, [hasHydrated, isAuthenticated, user, router]);
+  }, [hydrated, isAuthenticated, user, router]);
 
   const handleLogout = async () => {
     try {
       const refreshToken =
-        localStorage.getItem('admin_refreshToken') ||
-        localStorage.getItem('refreshToken');
+        sessionStorage.getItem('refreshToken');
 
       if (refreshToken) {
         const { api } = await import('@/lib/api');
@@ -82,11 +81,7 @@ export default function AdminLayout({
     router.push('/');
   };
 
-  if (!hasHydrated) {
-    return null;
-  }
-
-  if (!isAuthenticated || !user) {
+  if (!hydrated || !isAuthenticated || !user) {
     return null;
   }
 
@@ -148,7 +143,10 @@ export default function AdminLayout({
             </button>
           </div>
 
-          <div className="sb-user-card" style={{ margin: '12px 8px' }}>
+          <div
+            className="sb-user-card"
+            style={{ margin: '12px 8px' }}
+          >
             <div
               style={{
                 display: 'flex',
@@ -166,7 +164,8 @@ export default function AdminLayout({
                   justifyContent: 'center',
                   flexShrink: 0,
                   background: 'var(--gl)',
-                  border: '1px solid rgba(0, 198, 167, 0.25)',
+                  border:
+                    '1px solid rgba(0, 198, 167, 0.25)',
                   color: 'var(--ac)',
                   overflow: 'hidden',
                 }}
@@ -179,9 +178,6 @@ export default function AdminLayout({
                       width: '100%',
                       height: '100%',
                       objectFit: 'cover',
-                    }}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
                     }}
                   />
                 ) : (
@@ -216,46 +212,28 @@ export default function AdminLayout({
             </div>
           </div>
 
-          <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-            <div className="sb-section">
-              <div className="sb-section-label">Main</div>
+          <nav
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '8px 0',
+            }}
+          >
+            {navItems.map(({ href, icon: Icon, label, exact }) => {
+              const active = isActive(href, exact);
 
-              {navItems.slice(0, 5).map(({ href, icon: Icon, label, exact }) => {
-                const active = isActive(href, exact);
-
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`sb-link ${active ? 'on' : ''}`}
-                  >
-                    <Icon size={16} />
-                    <span>{label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-
-            <div className="sb-section">
-              <div className="sb-section-label">Management</div>
-
-              {navItems.slice(5).map(({ href, icon: Icon, label, exact }) => {
-                const active = isActive(href, exact);
-
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`sb-link ${active ? 'on' : ''}`}
-                  >
-                    <Icon size={16} />
-                    <span>{label}</span>
-                  </Link>
-                );
-              })}
-            </div>
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setSidebarOpen(false)}
+                  className={`sb-link ${active ? 'on' : ''}`}
+                >
+                  <Icon size={16} />
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
           </nav>
 
           <div className="sb-foot">
@@ -292,10 +270,7 @@ export default function AdminLayout({
 
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: '11px', color: 'var(--t3)' }}>
-                Page
-              </p>
-              <p style={{ fontSize: '13px', fontWeight: 600 }}>
-                {navItems.find((n) => isActive(n.href, n.exact))?.label || 'Admin'}
+                Admin
               </p>
             </div>
           </div>
