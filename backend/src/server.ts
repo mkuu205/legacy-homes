@@ -87,7 +87,13 @@ app.use(cors({
   allowedHeaders: [
     'Content-Type',
     'Authorization',
-    'X-Requested-With'
+    'X-Requested-With',
+    'x-session-id',
+    'X-Session-Id',
+  ],
+  exposedHeaders: [
+    'Content-Length',
+    'Content-Type',
   ],
 }));
 
