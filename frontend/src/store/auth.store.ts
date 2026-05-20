@@ -12,6 +12,9 @@ export interface User {
   accountNumber?: string;
   profilePicture?: string;
   phone?: string;
+  accountStatus?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface AuthState {
