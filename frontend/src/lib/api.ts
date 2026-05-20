@@ -1,86 +1,108 @@
-import axios, { AxiosError, AxiosInstance } from 'axios';
+import axios from 'axios';
+import { useAuthStore } from '@/store/auth.store';
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  'https://legacy-homes.onrender.com/api';
-export const api: AxiosInstance = axios.create({
+  'https://your-backend-url.onrender.com/api/v1';
+
+export const api = axios.create({
   baseURL: API_URL,
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('accessToken');
-    const sessionId = localStorage.getItem('sessionId');
-    
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    
-    if (sessionId) {
-      config.headers['X-Session-ID'] = sessionId;
-    }
+const getAccessToken = () => {
+  const { activeRole } = useAuthStore.getState();
+
+  if (activeRole === 'ADMIN') {
+    return localStorage.getItem('admin_accessToken');
   }
+
+  if (activeRole === 'RESIDENT') {
+    return localStorage.getItem('resident_accessToken');
+  }
+
+  return null;
+};
+
+const getRefreshToken = () => {
+  const { activeRole } = useAuthStore.getState();
+
+  if (activeRole === 'ADMIN') {
+    return localStorage.getItem('admin_refreshToken');
+  }
+
+  if (activeRole === 'RESIDENT') {
+    return localStorage.getItem('resident_refreshToken');
+  }
+
+  return null;
+};
+
+const saveTokens = (accessToken: string, refreshToken: string) => {
+  const { activeRole } = useAuthStore.getState();
+
+  if (activeRole === 'ADMIN') {
+    localStorage.setItem('admin_accessToken', accessToken);
+    localStorage.setItem('admin_refreshToken', refreshToken);
+  }
+
+  if (activeRole === 'RESIDENT') {
+    localStorage.setItem('resident_accessToken', accessToken);
+    localStorage.setItem('resident_refreshToken', refreshToken);
+  }
+};
+
+api.interceptors.request.use((config) => {
+  const token = getAccessToken();
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
   return config;
 });
 
 api.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError) => {
-    const originalRequest = error.config as any;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry
+    ) {
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
+        const refreshToken = getRefreshToken();
 
-        const response = await axios.post(
-          `${API_URL}/auth/refresh-token`,
-          { refreshToken }
-        );
+        if (!refreshToken) {
+          useAuthStore.getState().logout();
+          return Promise.reject(error);
+        }
 
-        const {
+        const res = await axios.post(`${API_URL}/auth/refresh-token`, {
+          refreshToken,
+        });
+
+        const { accessToken, newRefreshToken } = res.data;
+
+        saveTokens(
           accessToken,
-          refreshToken: newRefreshToken,
-        } = response.data.data;
-
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', newRefreshToken);
+          newRefreshToken || refreshToken
+        );
 
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
 
         return api(originalRequest);
       } catch {
-        // Clear auth on refresh failure
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('sessionId');
-        sessionStorage.removeItem('sessionId');
-        
-        // Import here to avoid circular dependency
-        const { useAuthStore } = await import('@/store/auth.store');
         useAuthStore.getState().logout();
-        
-        window.location.href = '/login';
-        return Promise.reject(error);
       }
     }
 
     return Promise.reject(error);
   }
 );
-
-export const getErrorMessage = (error: unknown): string => {
-  if (axios.isAxiosError(error)) {
-    return error.response?.data?.message || error.message || 'An error occurred';
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'An unexpected error occurred';
-};
