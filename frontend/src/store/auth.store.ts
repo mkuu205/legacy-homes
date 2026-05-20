@@ -18,11 +18,15 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   hydrated: boolean;
+
   setAuth: (
     user: User,
     accessToken: string,
     refreshToken: string
   ) => void;
+
+  updateUser: (user: Partial<User>) => void;
+
   logout: () => void;
   clearSession: () => void;
   setHydrated: (value: boolean) => void;
@@ -47,6 +51,16 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         });
       },
+
+      updateUser: (updatedUser) =>
+        set((state) => ({
+          user: state.user
+            ? {
+                ...state.user,
+                ...updatedUser,
+              }
+            : null,
+        })),
 
       logout: () => {
         sessionStorage.removeItem('accessToken');
