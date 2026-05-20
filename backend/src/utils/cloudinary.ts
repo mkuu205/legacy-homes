@@ -2,9 +2,9 @@ import { v2 as cloudinary } from 'cloudinary';
 import { logger } from './logger';
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
+  api_key: process.env.CLOUDINARY_API_KEY!,
+  api_secret: process.env.CLOUDINARY_API_SECRET!,
 });
 
 export const uploadToCloudinary = async (
@@ -12,15 +12,26 @@ export const uploadToCloudinary = async (
   folder: string = 'legacy-homes'
 ): Promise<string> => {
   try {
-    const result = await cloudinary.uploader.upload(filePath, {
+    const options: any = {
       folder: `legacy-homes/${folder}`,
       resource_type: 'auto',
-      transformation: folder === 'profile-pictures' ? [
-        { width: 400, height: 400, crop: 'fill', gravity: 'face' },
-        { quality: 'auto', fetch_format: 'auto' },
-      ] : undefined,
-    });
+    };
+
+    if (folder === 'profile-pictures') {
+      options.transformation = {
+        width: 400,
+        height: 400,
+        crop: 'fill',
+        gravity: 'face',
+        quality: 'auto',
+        fetch_format: 'auto',
+      };
+    }
+
+    const result = await cloudinary.uploader.upload(filePath, options);
+
     logger.info(`File uploaded to Cloudinary: ${result.secure_url}`);
+
     return result.secure_url;
   } catch (error) {
     logger.error('Cloudinary upload failed:', error);
@@ -28,7 +39,9 @@ export const uploadToCloudinary = async (
   }
 };
 
-export const deleteFromCloudinary = async (publicId: string): Promise<void> => {
+export const deleteFromCloudinary = async (
+  publicId: string
+): Promise<void> => {
   try {
     await cloudinary.uploader.destroy(publicId);
   } catch (error) {
