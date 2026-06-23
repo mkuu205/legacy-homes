@@ -12,8 +12,8 @@ export const api: AxiosInstance = axios.create({
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = sessionStorage.getItem('accessToken');
-    const sessionId = sessionStorage.getItem('sessionId');
+    const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+    const sessionId = sessionStorage.getItem('sessionId') || localStorage.getItem('sessionId');
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -32,11 +32,14 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as any;
 
+    // Handle 401 Unauthorized
     if (
       error.response?.status === 401 &&
       originalRequest &&
       !originalRequest._retry
     ) {
+      // If the request was already a status check, we might want to be careful about retrying
+      // but standard token refresh logic applies.
       originalRequest._retry = true;
 
       try {
@@ -44,15 +47,17 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        const refreshToken = sessionStorage.getItem('refreshToken');
+        const refreshToken = sessionStorage.getItem('refreshToken') || localStorage.getItem('refreshToken');
 
         if (!refreshToken) {
-          throw new Error('No refresh token');
+          throw new Error('No refresh token available');
         }
 
+        // Use standard axios to avoid interceptor loop
         const response = await axios.post(
           `${API_URL}/auth/refresh-token`,
-          { refreshToken }
+          { refreshToken },
+          { timeout: 10000 }
         );
 
         const accessToken =
@@ -64,34 +69,36 @@ api.interceptors.response.use(
           response.data?.refreshToken;
 
         if (!accessToken) {
-          throw new Error('Invalid refresh response');
+          throw new Error('Invalid refresh response: No access token');
         }
 
         sessionStorage.setItem('accessToken', accessToken);
 
         if (newRefreshToken) {
-          sessionStorage.setItem(
-            'refreshToken',
-            newRefreshToken
-          );
+          sessionStorage.setItem('refreshToken', newRefreshToken);
         }
 
-        originalRequest.headers = {
-          ...originalRequest.headers,
-          Authorization: `Bearer ${accessToken}`,
-        };
+        // Update the original request with the new token
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
 
         return api(originalRequest);
-      } catch {
+      } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
+        
+        // Clear tokens on failure
         sessionStorage.removeItem('accessToken');
         sessionStorage.removeItem('refreshToken');
         sessionStorage.removeItem('sessionId');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
 
-        const { useAuthStore } = await import(
-          '@/store/auth.store'
-        );
-
+        const { useAuthStore } = await import('@/store/auth.store');
         useAuthStore.getState().logout();
+
+        // Redirect to login if in browser
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login?expired=true';
+        }
 
         return Promise.reject(error);
       }

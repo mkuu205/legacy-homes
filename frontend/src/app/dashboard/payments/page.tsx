@@ -56,21 +56,47 @@ export default function PaymentsPage() {
     onError: (error) => toast({ type: 'error', title: 'Failed to clear history', description: getErrorMessage(error) }),
   });
 
-  const { data: statusData } = useQuery({
+  const { data: statusData, error: statusError } = useQuery({
     queryKey: ['payment-status', pendingPaymentId],
     queryFn: async () => {
       if (!pendingPaymentId) return null;
-
-      const res = await api.get(`/payments/status/${pendingPaymentId}`);
-      return res.data.data;
+      try {
+        const res = await api.get(`/payments/status/${pendingPaymentId}`);
+        return res.data.data;
+      } catch (err: any) {
+        // If we get a 401, the interceptor will handle it, but we should stop polling if it's unrecoverable
+        if (err.response?.status === 401) {
+          throw err;
+        }
+        return null;
+      }
     },
     enabled: !!pendingPaymentId,
-    refetchInterval: pendingPaymentId ? 3000 : false,
+    refetchInterval: (query) => {
+      const data: any = query.state.data;
+      // Stop polling if payment is successful or failed
+      if (data?.status === 'SUCCESSFUL' || data?.status === 'FAILED') {
+        return false;
+      }
+      // Stop polling on error
+      if (query.state.error) {
+        return false;
+      }
+      return 3000;
+    },
+    retry: false,
   });
 
   useEffect(() => {
+    if (statusError) {
+      setPendingPaymentId(null);
+      setPaymentStartedAt(null);
+      return;
+    }
+
     const status = (statusData as any)?.status;
     const receipt = (statusData as any)?.mpesaReceiptCode;
+    const failureReason = (statusData as any)?.failureReason;
 
     if (status === 'SUCCESSFUL' && pendingPaymentId) {
       toast({
@@ -91,30 +117,31 @@ export default function PaymentsPage() {
       toast({
         type: 'error',
         title: 'Payment Failed',
-        description:
-          'Payment failed, cancelled, timed out, or insufficient funds.',
+        description: failureReason || 'Payment failed, cancelled, or insufficient funds.',
       });
 
       setPendingPaymentId(null);
       setPaymentStartedAt(null);
+      queryClient.invalidateQueries({ queryKey: ['my-payments'] });
     }
 
     if (
       pendingPaymentId &&
       paymentStartedAt &&
-      Date.now() - paymentStartedAt > 95000
+      Date.now() - paymentStartedAt > 120000 // Increased to 2 minutes
     ) {
       toast({
         type: 'error',
-        title: 'Payment Timeout',
+        title: 'Polling Timeout',
         description:
-          'Confirmation took too long. If money was deducted, it will reflect shortly.',
+          'We haven\'t received confirmation yet. If you completed the payment, it will reflect in your history shortly.',
       });
 
       setPendingPaymentId(null);
       setPaymentStartedAt(null);
+      queryClient.invalidateQueries({ queryKey: ['my-payments'] });
     }
-  }, [statusData, pendingPaymentId, paymentStartedAt, queryClient]);
+  }, [statusData, statusError, pendingPaymentId, paymentStartedAt, queryClient]);
 
   const initiateMutation = useMutation({
     mutationFn: async (data: {

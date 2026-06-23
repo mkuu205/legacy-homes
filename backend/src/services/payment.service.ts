@@ -199,6 +199,8 @@ export class PaymentService {
   async handleCallback(payload: any, signature: string) {
     const webhookSecret = process.env.PAYHERO_WEBHOOK_SECRET;
 
+    logger.info('Processing PayHero callback payload:', JSON.stringify(payload));
+
     if (webhookSecret && signature) {
       const expectedSig = crypto
         .createHmac('sha256', webhookSecret)
@@ -206,49 +208,71 @@ export class PaymentService {
         .digest('hex');
 
       if (signature !== expectedSig) {
+        logger.error('Invalid webhook signature detected');
         throw new AppError('Invalid webhook signature', 401);
       }
+      logger.info('Webhook signature verified successfully');
     }
 
     const paymentId =
       payload?.external_reference ||
       payload?.reference ||
-      payload?.payment_reference;
+      payload?.payment_reference ||
+      payload?.CheckoutRequestID;
 
-    const status = payload?.status;
+    const status = payload?.status || payload?.Status;
     const mpesaReceiptCode =
-      payload?.MpesaReceiptNumber || payload?.mpesa_receipt || null;
+      payload?.MpesaReceiptNumber || 
+      payload?.mpesa_receipt || 
+      payload?.transaction_id ||
+      payload?.TransactionID ||
+      null;
 
     const amount = Number(payload?.Amount || payload?.amount || 0);
 
+    logger.info(`Extracted Callback Data - PaymentID: ${paymentId}, Status: ${status}, Receipt: ${mpesaReceiptCode}, Amount: ${amount}`);
+
     if (!paymentId) {
+      logger.warn('Callback received without a valid payment reference');
       return { received: true };
     }
 
-    const payment = await prisma.payment.findUnique({
-      where: { paymentId },
+    const payment = await prisma.payment.findFirst({
+      where: {
+        OR: [
+          { paymentId: paymentId },
+          { checkoutRequestId: paymentId },
+          { payHeroReference: paymentId }
+        ]
+      },
     });
 
     if (!payment) {
-      logger.warn(`Callback received for unknown payment: ${paymentId}`);
+      logger.warn(`Callback received for unknown payment reference: ${paymentId}`);
       return { received: true };
     }
+
+    logger.info(`Matched Payment Found: ${payment.id} (Current Status: ${payment.status})`);
 
     // If payment is already successful, don't re-process but log it
     if (payment.status === 'SUCCESSFUL') {
-      logger.info(`Callback received for already successful payment: ${paymentId}`);
+      logger.info(`Callback received for already successful payment: ${payment.paymentId}`);
       return { received: true };
     }
 
-    if (
-      status === 'SUCCESS' ||
-      status === 'COMPLETED'
-    ) {
-      // SUCCESS: Process the payment regardless of previous status (Pending or Failed)
+    const isSuccessful = 
+      status === 'SUCCESS' || 
+      status === 'COMPLETED' || 
+      status === 'Successful' ||
+      payload?.ResultCode === 0 ||
+      payload?.ResultCode === "0";
+
+    if (isSuccessful) {
+      logger.info(`Payment ${payment.paymentId} confirmed SUCCESSFUL. Reconciling...`);
       await this.reconcilePayment(payment.id, mpesaReceiptCode, amount);
+      logger.info(`Payment ${payment.paymentId} reconciliation complete.`);
     } else {
-      // FAILURE: Only update to FAILED if it was PENDING. 
-      // If it was already FAILED, we just update the reason/receipt if provided.
+      logger.info(`Payment ${payment.paymentId} marked as FAILED in callback.`);
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
@@ -256,6 +280,7 @@ export class PaymentService {
           failureReason:
             payload?.ResultDesc ||
             payload?.message ||
+            payload?.StatusDescription ||
             'Payment failed',
           mpesaReceiptCode: mpesaReceiptCode || payment.mpesaReceiptCode,
         },
@@ -270,15 +295,23 @@ export class PaymentService {
     mpesaReceiptCode: string,
     amount: number
   ) {
+    logger.info(`Starting reconciliation for payment ID: ${paymentId}`);
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
       include: { bill: true },
     });
 
-    if (!payment || payment.status === 'SUCCESSFUL') {
+    if (!payment) {
+      logger.error(`Reconciliation failed: Payment ${paymentId} not found`);
+      return;
+    }
+    
+    if (payment.status === 'SUCCESSFUL') {
+      logger.info(`Reconciliation skipped: Payment ${paymentId} is already SUCCESSFUL`);
       return;
     }
 
+    logger.info(`Updating payment ${payment.paymentId} status to SUCCESSFUL`);
     await prisma.payment.update({
       where: { id: paymentId },
       data: {
@@ -291,6 +324,7 @@ export class PaymentService {
     const newAmountPaid = payment.bill.amountPaid + amount;
     const newBalance = payment.bill.totalAmount - newAmountPaid;
 
+    logger.info(`Updating bill ${payment.bill.billNumber}: New Amount Paid = ${newAmountPaid}, New Balance = ${newBalance}`);
     await prisma.bill.update({
       where: { id: payment.billId },
       data: {
@@ -301,6 +335,7 @@ export class PaymentService {
     });
 
     // Notify the user via Socket.io
+    logger.info(`Emitting payment_success event to user_${payment.residentId}`);
     io.to(`user_${payment.residentId}`).emit('payment_success', {
       paymentId: payment.paymentId,
       amount,
@@ -309,6 +344,7 @@ export class PaymentService {
 
     // Trigger SMS and Email notifications
     try {
+      logger.info(`Sending success notifications to resident ${payment.residentId}`);
       await notificationService.sendPaymentSuccessNotification(
         payment.residentId,
         amount,
@@ -320,49 +356,54 @@ export class PaymentService {
   }
 
   async checkPaymentStatus(paymentId: string, userId: string) {
-  const payment = await prisma.payment.findUnique({
-    where: { paymentId },
-    include: {
-      bill: {
-        select: {
-          billNumber: true,
-          status: true,
-          balance: true,
+    const payment = await prisma.payment.findUnique({
+      where: { paymentId },
+      include: {
+        bill: {
+          select: {
+            billNumber: true,
+            status: true,
+            balance: true,
+          },
         },
-      },
-    },
-  });
-
-  if (!payment) {
-    throw new AppError('Payment not found', 404);
-  }
-
-  if (payment.residentId !== userId) {
-    throw new AppError('Unauthorized', 403);
-  }
-
-  const pendingAge =
-    Date.now() - new Date(payment.createdAt).getTime();
-
-  // Do NOT auto-fail PENDING payments too early. 
-  // Let them stay PENDING for up to 5 minutes to allow for slow STK pushes or Fuliza.
-  if (payment.status === 'PENDING' && pendingAge > 5 * 60 * 1000) {
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'FAILED',
-        failureReason: 'Payment timed out after 5 minutes',
       },
     });
 
-    return {
-      ...payment,
-      status: 'FAILED',
-      failureReason: 'Payment timed out after 5 minutes',
-    };
-  }
+    if (!payment) {
+      throw new AppError('Payment not found', 404);
+    }
 
-  return payment;
+    if (payment.residentId !== userId) {
+      throw new AppError('Unauthorized', 403);
+    }
+
+    const pendingAge = Date.now() - new Date(payment.createdAt).getTime();
+
+    // If payment is PENDING and more than 10 minutes have passed, we mark it as FAILED locally
+    // but the callback can still override this if it eventually arrives (e.g., Fuliza)
+    if (payment.status === 'PENDING' && pendingAge > 10 * 60 * 1000) {
+      logger.info(`Payment ${paymentId} timed out after 10 minutes. Marking as FAILED.`);
+      const updatedPayment = await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'FAILED',
+          failureReason: 'Payment timed out. If you have been charged, please wait a few minutes for it to reflect.',
+        },
+        include: {
+          bill: {
+            select: {
+              billNumber: true,
+              status: true,
+              balance: true,
+            },
+          },
+        },
+      });
+
+      return updatedPayment;
+    }
+
+    return payment;
   }
 
   async getResidentPayments(residentId: string, query: any) {
