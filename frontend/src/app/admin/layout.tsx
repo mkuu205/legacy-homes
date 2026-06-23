@@ -60,9 +60,34 @@ export default function AdminLayout({
   }, []);
 
   useEffect(() => {
+    // 1. If not hydrated or not authenticated, do not start polling
     if (!hydrated || !isAuthenticated) return;
+
+    // 2. Fetch immediately on mount/auth
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
+
+    // 3. Start polling interval
+    const interval = setInterval(async () => {
+      try {
+        // Double check auth state before each poll
+        const token = sessionStorage.getItem('accessToken');
+        if (!token) {
+           clearInterval(interval);
+           return;
+        }
+
+        const res = await api.get('/notifications/all?limit=1');
+        setUnreadCount(res.data.data?.unreadCount || 0);
+      } catch (error: any) {
+        // 4. Stop polling on 401 (Unauthorized) or 403 (Forbidden)
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          console.warn('Stopping notification polling due to auth failure');
+          clearInterval(interval);
+        }
+      }
+    }, 30000);
+
+    // 5. Clear interval on unmount
     return () => clearInterval(interval);
   }, [hydrated, isAuthenticated, fetchUnreadCount]);
 

@@ -1,6 +1,7 @@
 import prisma from '../config/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { sendBillNotificationEmail } from '../utils/email';
+import { notificationService } from './notification.service';
 import logger from '../utils/logger';
 import PDFDocument from 'pdfkit';
 import axios from 'axios';
@@ -125,16 +126,23 @@ export class BillingService {
       bills.push(bill);
 
       try {
-        await sendBillNotificationEmail(
-          house.resident.email,
-          house.resident.fullName,
-          bill.billNumber,
-          bill.totalAmount,
-          billingMonth,
-          dueDate.toLocaleDateString('en-KE')
-        );
+        await Promise.all([
+          sendBillNotificationEmail(
+            house.resident.email,
+            house.resident.fullName,
+            bill.billNumber,
+            bill.totalAmount,
+            billingMonth,
+            dueDate.toLocaleDateString('en-KE')
+          ),
+          notificationService.sendBillGeneratedNotification(
+            house.resident.id,
+            bill.billNumber,
+            bill.totalAmount
+          )
+        ]);
       } catch (err) {
-        logger.error(`Failed to send bill email for ${bill.billNumber}:`, err);
+        logger.error(`Failed to send bill notifications for ${bill.billNumber}:`, err);
       }
     }
 

@@ -4,6 +4,7 @@ import prisma from '../config/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { io } from '../server';
+import { notificationService } from './notification.service';
 
 const generatePaymentId = (): string => {
   return `PAY-${Date.now()}-${Math.random()
@@ -228,7 +229,14 @@ export class PaymentService {
       where: { paymentId },
     });
 
-    if (!payment || payment.status === 'SUCCESSFUL') {
+    if (!payment) {
+      logger.warn(`Callback received for unknown payment: ${paymentId}`);
+      return { received: true };
+    }
+
+    // If payment is already successful, don't re-process but log it
+    if (payment.status === 'SUCCESSFUL') {
+      logger.info(`Callback received for already successful payment: ${paymentId}`);
       return { received: true };
     }
 
@@ -236,8 +244,11 @@ export class PaymentService {
       status === 'SUCCESS' ||
       status === 'COMPLETED'
     ) {
+      // SUCCESS: Process the payment regardless of previous status (Pending or Failed)
       await this.reconcilePayment(payment.id, mpesaReceiptCode, amount);
     } else {
+      // FAILURE: Only update to FAILED if it was PENDING. 
+      // If it was already FAILED, we just update the reason/receipt if provided.
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
@@ -246,7 +257,7 @@ export class PaymentService {
             payload?.ResultDesc ||
             payload?.message ||
             'Payment failed',
-          mpesaReceiptCode,
+          mpesaReceiptCode: mpesaReceiptCode || payment.mpesaReceiptCode,
         },
       });
     }
@@ -273,6 +284,7 @@ export class PaymentService {
       data: {
         status: 'SUCCESSFUL',
         mpesaReceiptCode,
+        failureReason: null, // Clear any previous failure reason
       },
     });
 
@@ -288,11 +300,23 @@ export class PaymentService {
       },
     });
 
+    // Notify the user via Socket.io
     io.to(`user_${payment.residentId}`).emit('payment_success', {
       paymentId: payment.paymentId,
       amount,
       mpesaReceiptCode,
     });
+
+    // Trigger SMS and Email notifications
+    try {
+      await notificationService.sendPaymentSuccessNotification(
+        payment.residentId,
+        amount,
+        mpesaReceiptCode
+      );
+    } catch (err) {
+      logger.error('Failed to send payment success notifications:', err);
+    }
   }
 
   async checkPaymentStatus(paymentId: string, userId: string) {
@@ -320,20 +344,21 @@ export class PaymentService {
   const pendingAge =
     Date.now() - new Date(payment.createdAt).getTime();
 
-  // Auto-fail abandoned/cancelled payments after 15 seconds
-  if (payment.status === 'PENDING' && pendingAge > 15 * 1000) {
+  // Do NOT auto-fail PENDING payments too early. 
+  // Let them stay PENDING for up to 5 minutes to allow for slow STK pushes or Fuliza.
+  if (payment.status === 'PENDING' && pendingAge > 5 * 60 * 1000) {
     await prisma.payment.update({
       where: { id: payment.id },
       data: {
         status: 'FAILED',
-        failureReason: 'Payment cancelled / timed out / insufficient funds',
+        failureReason: 'Payment timed out after 5 minutes',
       },
     });
 
     return {
       ...payment,
       status: 'FAILED',
-      failureReason: 'Payment cancelled / timed out / insufficient funds',
+      failureReason: 'Payment timed out after 5 minutes',
     };
   }
 

@@ -8,6 +8,7 @@ import axios from 'axios';
 let AT: any = null;
 let TALKSASA_API_KEY = process.env.TALKSASA_API_KEY || '';
 let TALKSASA_SENDER_ID = 'TALK-SASA';
+let TALKSASA_BASE_URL = 'https://bulksms.talksasa.com/api/v3/';
 
 try {
   const AfricasTalking = require('africastalking');
@@ -28,9 +29,9 @@ async function sendTalkSasaSMS(phoneNumber: string, message: string): Promise<vo
   }
 
   try {
-    const axios = require('axios');
-    let phone = phoneNumber;
+    let phone = phoneNumber.trim().replace(/\s+/g, '');
     
+    // Format to E.164 without the plus sign for TalkSasa
     if (phone.startsWith('0')) {
       phone = '254' + phone.slice(1);
     }
@@ -39,23 +40,35 @@ async function sendTalkSasaSMS(phoneNumber: string, message: string): Promise<vo
       phone = phone.slice(1);
     }
     
-    if (!phone.startsWith('254')) {
+    if (!phone.startsWith('254') && phone.length === 9) {
       phone = '254' + phone;
     }
 
-    await axios.post('https://api.talksasa.com/v1/send', {
-      phone_number: phone,
-      message,
+    const response = await axios.post(`${TALKSASA_BASE_URL}sms/send`, {
+      recipient: phone,
       sender_id: TALKSASA_SENDER_ID,
+      type: 'plain',
+      message: message,
     }, {
       headers: {
         'Authorization': `Bearer ${TALKSASA_API_KEY}`,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
+      timeout: 15000,
     });
-  } catch (error) {
-    logger.error('Failed to send TalkSasa SMS:', error);
-    throw error;
+
+    logger.info(`TalkSasa SMS sent to ${phone}. Response: ${JSON.stringify(response.data)}`);
+  } catch (error: any) {
+    const errorData = error.response?.data;
+    logger.error('Failed to send TalkSasa SMS:', {
+      message: error.message,
+      response: errorData,
+      phone: phoneNumber
+    });
+    
+    const errorMessage = errorData?.message || error.message || 'TalkSasa SMS delivery failed';
+    throw new Error(`TalkSasa Error: ${errorMessage}`);
   }
 }
 
@@ -113,7 +126,20 @@ export class NotificationService {
       );
     }
 
+    // BROADCAST FILTERING LOGIC
     if (data.targetAll) {
+      // 1. All Residents
+      const residents = await prisma.user.findMany({
+        where: {
+          role: 'RESIDENT',
+        },
+        select: {
+          id: true,
+        },
+      });
+      residentIds = residents.map((r) => r.id);
+    } else if (data.targetGroup === 'active') {
+      // 2. Active Residents Only
       const residents = await prisma.user.findMany({
         where: {
           role: 'RESIDENT',
@@ -123,9 +149,9 @@ export class NotificationService {
           id: true,
         },
       });
-
       residentIds = residents.map((r) => r.id);
     } else if (data.targetGroup === 'overdue') {
+      // 3. Residents with Overdue Bills
       const overdueBills = await prisma.bill.findMany({
         where: {
           status: 'OVERDUE',
@@ -135,9 +161,34 @@ export class NotificationService {
         },
         distinct: ['residentId'],
       });
-
       residentIds = overdueBills.map((b) => b.residentId);
+    } else if (data.targetGroup === 'unpaid') {
+      // 4. Residents with Unpaid Bills
+      const unpaidBills = await prisma.bill.findMany({
+        where: {
+          status: { in: ['UNPAID', 'OVERDUE', 'PARTIAL'] },
+        },
+        select: {
+          residentId: true,
+        },
+        distinct: ['residentId'],
+      });
+      residentIds = unpaidBills.map((b) => b.residentId);
+    } else if (data.targetGroup?.startsWith('house:')) {
+      // 5. Residents of a selected house
+      const houseId = data.targetGroup.split(':')[1];
+      const residents = await prisma.user.findMany({
+        where: {
+          role: 'RESIDENT',
+          houseId: houseId,
+        },
+        select: {
+          id: true,
+        },
+      });
+      residentIds = residents.map((r) => r.id);
     } else if (data.targetResidentIds?.length) {
+      // 6. Individual Residents
       residentIds = data.targetResidentIds;
     }
 
@@ -190,6 +241,15 @@ export class NotificationService {
 
     for (const resident of residents) {
       for (const channel of data.channels) {
+        // According to requirements, do NOT send SMS for general notifications
+        // only for specific automated events (Bill, Payment, Reminder, Outage, Emergency)
+        if (channel === 'SMS') {
+          const allowedSmsTypes = ['BILLING_ALERT', 'PAYMENT_CONFIRMATION', 'BILLING_REMINDER', 'WATER_OUTAGE', 'EMERGENCY'];
+          if (!allowedSmsTypes.includes(data.type)) {
+             continue; 
+          }
+        }
+
         await this.deliverNotification(
           notification.id,
           resident,
@@ -500,9 +560,9 @@ export class NotificationService {
     totalAmount: number
   ) {
     const resident = await prisma.user.findUnique({
-    where: { id: residentId },
-    select: { id: true, fullName: true, email: true, phone: true },
-  });
+      where: { id: residentId },
+      select: { id: true, fullName: true, email: true, phone: true },
+    });
 
     if (!resident) throw new AppError('Resident not found', 404);
 
@@ -511,7 +571,7 @@ export class NotificationService {
       try {
         await sendTalkSasaSMS(
           resident.phone,
-          `Legacy Homes: Your water bill has been generated. Please log in to view and pay.`
+          `Legacy Homes: Your water bill ${billNumber} for KES ${totalAmount.toFixed(2)} has been generated. Please log in to pay.`
         );
       } catch (error) {
         logger.error('Failed to send bill notification SMS:', error);
@@ -554,9 +614,9 @@ export class NotificationService {
     mpesaCode?: string
   ) {
     const resident = await prisma.user.findUnique({
-    where: { id: residentId },
-    select: { id: true, fullName: true, email: true, phone: true },
-  });
+      where: { id: residentId },
+      select: { id: true, fullName: true, email: true, phone: true },
+    });
 
     if (!resident) throw new AppError('Resident not found', 404);
 
@@ -565,7 +625,7 @@ export class NotificationService {
       try {
         await sendTalkSasaSMS(
           resident.phone,
-          `Legacy Homes: Your payment has been received successfully. Thank you.`
+          `Legacy Homes: Payment of KES ${paymentAmount.toFixed(2)} received successfully. Ref: ${mpesaCode || 'N/A'}. Thank you.`
         );
       } catch (error) {
         logger.error('Failed to send payment success SMS:', error);
@@ -598,7 +658,7 @@ export class NotificationService {
           </div>
         `,
       });
-        } catch (error) {
+    } catch (error) {
       logger.error('Failed to send payment success email:', error);
     }
   }
