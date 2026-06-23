@@ -300,7 +300,7 @@ model Payment {
   payHeroReference  String? // Deprecated after PayHero removal
   merchantRequestId String?
   checkoutRequestId String?
-  provider          String                    @default("TUMA")
+  provider          String                    @default("TUMA") // Defaults to TUMA for new, but existing will be PAYHERO
   callbackPayload   Json?
   verificationTimestamp DateTime?
   status            PaymentStatus             @default(PENDING)
