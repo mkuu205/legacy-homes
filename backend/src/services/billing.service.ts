@@ -5,7 +5,22 @@ import logger from '../utils/logger';
 import PDFDocument from 'pdfkit';
 import axios from 'axios';
 
-const UNIT_RATE = 250; // KES per unit
+/** Fallback hardcoded rate — only used when the DB has no UNIT_RATE setting yet. */
+const DEFAULT_UNIT_RATE = 250; // KES per unit
+
+/** Read the water tariff from system_settings; fall back to DEFAULT_UNIT_RATE. */
+async function getUnitRate(): Promise<number> {
+  try {
+    const setting = await prisma.systemSetting.findUnique({ where: { key: 'UNIT_RATE' } });
+    if (setting) {
+      const parsed = parseFloat(setting.value);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+  } catch {
+    // ignore — fall through to default
+  }
+  return DEFAULT_UNIT_RATE;
+}
 
 const generateBillNumber = (): string => {
   const prefix = 'BILL';
@@ -83,6 +98,7 @@ export class BillingService {
 
       if (!house || !house.resident) continue;
 
+      const UNIT_RATE = await getUnitRate();
       const totalAmount = reading.unitsConsumed * UNIT_RATE;
       const billNumber = generateBillNumber();
 

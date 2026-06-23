@@ -65,8 +65,12 @@ export default function AdminNotificationsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['admin-notifications'],
     queryFn: async () => {
-      const res = await api.get('/notifications');
-      return res.data.data;
+      try {
+        const res = await api.get('/notifications');
+        return res.data.data ?? { notifications: [], unreadCount: 0 };
+      } catch {
+        return { notifications: [], unreadCount: 0 };
+      }
     },
   });
 
@@ -359,7 +363,7 @@ export default function AdminNotificationsPage() {
             >
               Sent History
             </h2>
-            {data?.notifications?.length > 0 && (
+            {(data?.notifications ?? []).length > 0 && (
               <button
                 onClick={() => {
                   if (window.confirm('Are you sure you want to delete all sent history? This will also remove them from resident dashboards.')) {
@@ -395,7 +399,7 @@ export default function AdminNotificationsPage() {
                 />
               ))}
             </div>
-          ) : data?.notifications?.length === 0 ? (
+          ) : (data?.notifications ?? []).length === 0 ? (
             <div
               style={{
                 textAlign: 'center',
@@ -430,7 +434,7 @@ export default function AdminNotificationsPage() {
                 overflowY: 'auto',
               }}
             >
-              {data.notifications.map((n: any) => (
+              {(data?.notifications ?? []).map((n: any) => (
                 <div
                   key={n.id}
                   style={{

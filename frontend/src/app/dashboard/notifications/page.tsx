@@ -11,8 +11,12 @@ export default function NotificationsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['my-notifications'],
     queryFn: async () => {
-      const res = await api.get('/notifications/my');
-      return res.data.data;
+      try {
+        const res = await api.get('/notifications/my');
+        return res.data.data ?? { notifications: [], unread: 0 };
+      } catch {
+        return { notifications: [], unread: 0 };
+      }
     },
   });
 
@@ -86,8 +90,8 @@ export default function NotificationsPage() {
     SUPPORT: 'rgba(139, 92, 246, 0.14)',
   };
 
-  const notifications = data?.notifications || [];
-  const unread = data?.unread || 0;
+  const notifications = data?.notifications ?? [];
+  const unread = data?.unread ?? 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} className="fu">
