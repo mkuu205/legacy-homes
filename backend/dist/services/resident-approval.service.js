@@ -109,6 +109,7 @@ class ResidentApprovalService {
                     fullName: true,
                     email: true,
                     phone: true,
+                    accountNumber: true,
                     registrationStatus: true,
                     createdAt: true,
                 },
@@ -126,37 +127,40 @@ class ResidentApprovalService {
     // Approve resident application
     async approveResident(residentId, assignedHouseId) {
         try {
-            // Update resident status
             const resident = await prisma_1.default.user.update({
                 where: { id: residentId },
                 data: {
                     registrationStatus: client_1.RegistrationStatus.APPROVED,
                     accountStatus: client_1.AccountStatus.ACTIVE,
-                    houseId: assignedHouseId,
+                    ...(assignedHouseId && { houseId: assignedHouseId }),
                 },
             });
-            // If house is assigned, update house occupancy status
-            if (assignedHouseId) {
-                await prisma_1.default.house.update({
-                    where: { id: assignedHouseId },
-                    data: { occupancyStatus: 'OCCUPIED' },
-                });
-            }
-            // Fetch house for email
-            const house = assignedHouseId
-                ? await prisma_1.default.house.findUnique({ where: { id: assignedHouseId } })
+            // Fetch house info if assigned
+            const house = resident.houseId
+                ? await prisma_1.default.house.findUnique({ where: { id: resident.houseId } })
                 : null;
             // Send approval email
             await (0, email_1.sendEmail)({
                 to: resident.email,
                 subject: 'Registration Approved - Legacy Homes Water Billing',
                 html: `
-          <h2>Welcome to Legacy Homes Water Billing System</h2>
-          <p>Dear ${resident.fullName},</p>
-          <p>Your registration has been approved! You can now log in to your account.</p>
-          <p>Account Number: ${resident.accountNumber}</p>
-          ${house ? `<p>Your house has been assigned: ${house.houseNumber}. Please check your dashboard for details.</p>` : ''}
-          <p>Best regards,<br>Legacy Homes Management</p>
+          <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+            <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+              <h2 style="color:#fff;margin:0;font-size:24px;font-weight:bold;">Legacy Homes</h2>
+              <p style="color:#e0e7ff;margin:8px 0 0 0;font-size:12px;">Water Billing System</p>
+            </div>
+            <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
+              <h3 style="color:#1e293b;">Registration Approved</h3>
+              <p style="color:#64748b;line-height:1.6;">Dear ${resident.fullName},</p>
+              <p style="color:#64748b;line-height:1.6;">Your registration has been approved! You can now log in to your account and start managing your water billing.</p>
+              <div style="background:#f1f5f9;padding:16px;border-radius:8px;margin:16px 0;">
+                <p style="margin:0;color:#1e293b;"><strong>Account Number:</strong> ${resident.accountNumber}</p>
+                ${house ? `<p style="margin:8px 0 0 0;color:#1e293b;"><strong>Assigned House:</strong> ${house.houseNumber}</p>` : ''}
+              </div>
+              <p style="color:#64748b;line-height:1.6;">Please log in to your dashboard to view your details and billing information.</p>
+              <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Legacy Homes Water Billing System</p>
+            </div>
+          </div>
         `,
             });
             logger_1.default.info(`Resident approved: ${residentId}`);
@@ -167,98 +171,7 @@ class ResidentApprovalService {
             throw error;
         }
     }
-    // Reject resident application
-    async rejectResident(residentId, reason) {
-        try {
-            const resident = await prisma_1.default.user.update({
-                where: { id: residentId },
-                data: {
-                    registrationStatus: client_1.RegistrationStatus.REJECTED,
-                    accountStatus: client_1.AccountStatus.INACTIVE,
-                },
-            });
-            // Send rejection email
-            await (0, email_1.sendEmail)({
-                to: resident.email,
-                subject: 'Registration Status - Legacy Homes Water Billing',
-                html: `
-          <h2>Registration Update</h2>
-          <p>Dear ${resident.fullName},</p>
-          <p>Unfortunately, your registration application has been rejected.</p>
-          <p><strong>Reason:</strong> ${reason}</p>
-          <p>If you have any questions, please contact our support team.</p>
-          <p>Best regards,<br>Legacy Homes Management</p>
-        `,
-            });
-            logger_1.default.info(`Resident rejected: ${residentId}`);
-            return resident;
-        }
-        catch (error) {
-            logger_1.default.error(`Error rejecting resident: ${error}`);
-            throw error;
-        }
-    }
-    // Assign house to resident
-    async assignHouseToResident(residentId, houseId) {
-        try {
-            // Check if house is available
-            const house = await prisma_1.default.house.findUnique({
-                where: { id: houseId },
-                select: { id: true, resident: true },
-            });
-            if (!house) {
-                throw new Error('House not found');
-            }
-            if (house.resident) {
-                throw new Error('House is already assigned to another resident');
-            }
-            // Assign house to resident
-            const resident = await prisma_1.default.user.update({
-                where: { id: residentId },
-                data: { houseId },
-            });
-            // Update house occupancy
-            await prisma_1.default.house.update({
-                where: { id: houseId },
-                data: { occupancyStatus: 'OCCUPIED' },
-            });
-            logger_1.default.info(`House ${houseId} assigned to resident ${residentId}`);
-            return resident;
-        }
-        catch (error) {
-            logger_1.default.error(`Error assigning house: ${error}`);
-            throw error;
-        }
-    }
-    // Unassign house from resident
-    async unassignHouseFromResident(residentId) {
-        try {
-            const resident = await prisma_1.default.user.findUnique({
-                where: { id: residentId },
-                select: { houseId: true },
-            });
-            if (!resident)
-                throw new Error('Resident not found');
-            const updated = await prisma_1.default.user.update({
-                where: { id: residentId },
-                data: { houseId: null },
-            });
-            // Update house occupancy
-            if (resident.houseId) {
-                await prisma_1.default.house.update({
-                    where: { id: resident.houseId },
-                    data: { occupancyStatus: 'VACANT' },
-                });
-            }
-            logger_1.default.info(`House unassigned from resident ${residentId}`);
-            return updated;
-        }
-        catch (error) {
-            logger_1.default.error(`Error unassigning house: ${error}`);
-            throw error;
-        }
-    }
-    // Get application count by status
+    // Get application counts by status
     async getApplicationCountByStatus() {
         try {
             const [pending, approved, rejected] = await Promise.all([
@@ -281,10 +194,10 @@ class ResidentApprovalService {
                     },
                 }),
             ]);
-            return { pending, approved, rejected };
+            return { pending, approved, rejected, total: pending + approved + rejected };
         }
         catch (error) {
-            logger_1.default.error(`Error getting application counts: ${error}`);
+            logger_1.default.error(`Error fetching application counts: ${error}`);
             throw error;
         }
     }
@@ -294,13 +207,50 @@ class ResidentApprovalService {
             const result = await prisma_1.default.user.updateMany({
                 where: {
                     id: { in: residentIds },
-                    registrationStatus: client_1.RegistrationStatus.PENDING,
+                    role: 'RESIDENT',
                 },
                 data: {
                     registrationStatus: client_1.RegistrationStatus.APPROVED,
                     accountStatus: client_1.AccountStatus.ACTIVE,
                 },
             });
+            // Send approval emails
+            const residents = await prisma_1.default.user.findMany({
+                where: { id: { in: residentIds } },
+            });
+            for (const resident of residents) {
+                try {
+                    const house = resident.houseId
+                        ? await prisma_1.default.house.findUnique({ where: { id: resident.houseId } })
+                        : null;
+                    await (0, email_1.sendEmail)({
+                        to: resident.email,
+                        subject: 'Registration Approved - Legacy Homes Water Billing',
+                        html: `
+              <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+                <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+                  <h2 style="color:#fff;margin:0;font-size:24px;font-weight:bold;">Legacy Homes</h2>
+                  <p style="color:#e0e7ff;margin:8px 0 0 0;font-size:12px;">Water Billing System</p>
+                </div>
+                <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
+                  <h3 style="color:#1e293b;">Registration Approved</h3>
+                  <p style="color:#64748b;line-height:1.6;">Dear ${resident.fullName},</p>
+                  <p style="color:#64748b;line-height:1.6;">Your registration has been approved! You can now log in to your account and start managing your water billing.</p>
+                  <div style="background:#f1f5f9;padding:16px;border-radius:8px;margin:16px 0;">
+                    <p style="margin:0;color:#1e293b;"><strong>Account Number:</strong> ${resident.accountNumber}</p>
+                    ${house ? `<p style="margin:8px 0 0 0;color:#1e293b;"><strong>Assigned House:</strong> ${house.houseNumber}</p>` : ''}
+                  </div>
+                  <p style="color:#64748b;line-height:1.6;">Please log in to your dashboard to view your details and billing information.</p>
+                  <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Legacy Homes Water Billing System</p>
+                </div>
+              </div>
+            `,
+                    });
+                }
+                catch (error) {
+                    logger_1.default.error(`Failed to send approval email to ${resident.email}:`, error);
+                }
+            }
             logger_1.default.info(`Bulk approved ${result.count} residents`);
             return result.count;
         }
@@ -315,18 +265,126 @@ class ResidentApprovalService {
             const result = await prisma_1.default.user.updateMany({
                 where: {
                     id: { in: residentIds },
-                    registrationStatus: client_1.RegistrationStatus.PENDING,
+                    role: 'RESIDENT',
                 },
                 data: {
                     registrationStatus: client_1.RegistrationStatus.REJECTED,
                     accountStatus: client_1.AccountStatus.INACTIVE,
                 },
             });
+            // Send rejection emails
+            const residents = await prisma_1.default.user.findMany({
+                where: { id: { in: residentIds } },
+            });
+            for (const resident of residents) {
+                try {
+                    await (0, email_1.sendEmail)({
+                        to: resident.email,
+                        subject: 'Registration Status - Legacy Homes Water Billing',
+                        html: `
+              <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+                <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+                  <h2 style="color:#fff;margin:0;font-size:24px;font-weight:bold;">Legacy Homes</h2>
+                  <p style="color:#e0e7ff;margin:8px 0 0 0;font-size:12px;">Water Billing System</p>
+                </div>
+                <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
+                  <h3 style="color:#1e293b;">Registration Status Update</h3>
+                  <p style="color:#64748b;line-height:1.6;">Dear ${resident.fullName},</p>
+                  <p style="color:#64748b;line-height:1.6;">Thank you for your interest in Legacy Homes Water Billing System. Unfortunately, your registration application could not be approved at this time.</p>
+                  <div style="background:#fef2f2;padding:16px;border-radius:8px;margin:16px 0;border-left:4px solid #ef4444;">
+                    <p style="margin:0;color:#7f1d1d;"><strong>Reason:</strong> ${reason}</p>
+                  </div>
+                  <p style="color:#64748b;line-height:1.6;">If you have any questions or would like to reapply, please contact our support team.</p>
+                  <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Legacy Homes Water Billing System</p>
+                </div>
+              </div>
+            `,
+                    });
+                }
+                catch (error) {
+                    logger_1.default.error(`Failed to send rejection email to ${resident.email}:`, error);
+                }
+            }
             logger_1.default.info(`Bulk rejected ${result.count} residents`);
             return result.count;
         }
         catch (error) {
             logger_1.default.error(`Error bulk rejecting residents: ${error}`);
+            throw error;
+        }
+    }
+    // Assign house to resident
+    async assignHouseToResident(residentId, houseId) {
+        try {
+            // Check if house exists and is available
+            const house = await prisma_1.default.house.findUnique({ where: { id: houseId } });
+            if (!house)
+                throw new Error('House not found');
+            const resident = await prisma_1.default.user.update({
+                where: { id: residentId },
+                data: { houseId },
+            });
+            logger_1.default.info(`House ${houseId} assigned to resident ${residentId}`);
+            return resident;
+        }
+        catch (error) {
+            logger_1.default.error(`Error assigning house: ${error}`);
+            throw error;
+        }
+    }
+    // Unassign house from resident
+    async unassignHouseFromResident(residentId) {
+        try {
+            const resident = await prisma_1.default.user.update({
+                where: { id: residentId },
+                data: { houseId: null },
+            });
+            logger_1.default.info(`House unassigned from resident ${residentId}`);
+            return resident;
+        }
+        catch (error) {
+            logger_1.default.error(`Error unassigning house: ${error}`);
+            throw error;
+        }
+    }
+    // Reject resident application
+    async rejectResident(residentId, reason) {
+        try {
+            const resident = await prisma_1.default.user.update({
+                where: { id: residentId },
+                data: {
+                    registrationStatus: client_1.RegistrationStatus.REJECTED,
+                    accountStatus: client_1.AccountStatus.INACTIVE,
+                },
+            });
+            // Send rejection email
+            await (0, email_1.sendEmail)({
+                to: resident.email,
+                subject: 'Registration Status - Legacy Homes Water Billing',
+                html: `
+          <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+            <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+              <h2 style="color:#fff;margin:0;font-size:24px;font-weight:bold;">Legacy Homes</h2>
+              <p style="color:#e0e7ff;margin:8px 0 0 0;font-size:12px;">Water Billing System</p>
+            </div>
+            <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
+              <h3 style="color:#1e293b;">Registration Status Update</h3>
+              <p style="color:#64748b;line-height:1.6;">Dear ${resident.fullName},</p>
+              <p style="color:#64748b;line-height:1.6;">Thank you for your interest in Legacy Homes Water Billing System. Unfortunately, your registration application could not be approved at this time.</p>
+              <div style="background:#fef2f2;padding:16px;border-radius:8px;margin:16px 0;border-left:4px solid #ef4444;">
+                <p style="margin:0;color:#7f1d1d;"><strong>Reason:</strong> ${reason}</p>
+              </div>
+              <p style="color:#64748b;line-height:1.6;">If you have any questions or would like to reapply, please contact our support team.</p>
+              <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Legacy Homes Water Billing System</p>
+            </div>
+          </div>
+        `,
+            });
+            logger_1.default.info(`Resident rejected: ${residentId}`);
+            return resident;
+        }
+        catch (error) {
+            logger_1.default.error(`Error rejecting resident: ${error}`);
             throw error;
         }
     }

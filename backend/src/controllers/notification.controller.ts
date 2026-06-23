@@ -27,10 +27,31 @@ export class NotificationController {
     } catch (error) { next(error); }
   }
 
+  async markAsUnread(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await notificationService.markAsUnread(req.user!.userId, req.params.id as string);
+      res.json({ success: true, ...result });
+    } catch (error) { next(error); }
+  }
+
   async markAllAsRead(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const result = await notificationService.markAllAsRead(req.user!.userId);
       res.json({ success: true, ...result });
+    } catch (error) { next(error); }
+  }
+
+  async deleteOne(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await notificationService.deleteOne(req.user!.userId, req.params.id as string);
+      res.json({ success: true, ...result });
+    } catch (error) { next(error); }
+  }
+
+  async getNotificationLogs(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await notificationService.getNotificationLogs(req.query as any);
+      res.json({ success: true, data: result });
     } catch (error) { next(error); }
   }
 
@@ -54,6 +75,7 @@ export class NotificationController {
       res.json({ success: true, ...result });
     } catch (error) { next(error); }
   }
+
 }
 
 export const notificationController = new NotificationController();

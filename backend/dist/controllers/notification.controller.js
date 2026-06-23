@@ -33,10 +33,37 @@ class NotificationController {
             next(error);
         }
     }
+    async markAsUnread(req, res, next) {
+        try {
+            const result = await notification_service_1.notificationService.markAsUnread(req.user.userId, req.params.id);
+            res.json({ success: true, ...result });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
     async markAllAsRead(req, res, next) {
         try {
             const result = await notification_service_1.notificationService.markAllAsRead(req.user.userId);
             res.json({ success: true, ...result });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async deleteOne(req, res, next) {
+        try {
+            const result = await notification_service_1.notificationService.deleteOne(req.user.userId, req.params.id);
+            res.json({ success: true, ...result });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async getNotificationLogs(req, res, next) {
+        try {
+            const result = await notification_service_1.notificationService.getNotificationLogs(req.query);
+            res.json({ success: true, data: result });
         }
         catch (error) {
             next(error);

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Droplets, Loader2, ArrowLeft, Mail, CheckCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, Mail, CheckCircle } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
 import { toast } from '@/components/ui/toaster';
 
@@ -38,7 +38,15 @@ export default function ForgotPasswordPage() {
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '32px' }}>
           <div style={{ width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gl)', border: '1px solid rgba(0, 198, 167, 0.25)' }}>
-            <Droplets size={16} style={{ color: 'var(--ac)' }} />
+            <img
+              src="https://i.ibb.co/5hvy5zXd/Chat-GPT-Image-Jun-23-2026-01-17-11-AM.png"
+              alt="Legacy Homes Logo"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain'
+              }}
+            />
           </div>
           <span style={{ fontWeight: 700, fontSize: '16px', color: 'var(--t1)', fontFamily: 'var(--f1)' }}>Legacy Homes</span>
         </div>

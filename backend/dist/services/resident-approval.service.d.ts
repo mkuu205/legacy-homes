@@ -44,6 +44,7 @@ export declare class ResidentApprovalService {
         email: string;
         phone: string;
         registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+        accountNumber: string;
     }[]>;
     approveResident(residentId: string, assignedHouseId?: string): Promise<{
         id: string;
@@ -62,23 +63,14 @@ export declare class ResidentApprovalService {
         accountNumber: string;
         emailVerified: boolean;
     }>;
-    rejectResident(residentId: string, reason: string): Promise<{
-        id: string;
-        createdAt: Date;
-        updatedAt: Date;
-        houseId: string | null;
-        fullName: string;
-        email: string;
-        phone: string;
-        passwordHash: string;
-        role: import(".prisma/client").$Enums.Role;
-        accountStatus: import(".prisma/client").$Enums.AccountStatus;
-        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
-        profilePicture: string | null;
-        nationalId: string | null;
-        accountNumber: string;
-        emailVerified: boolean;
+    getApplicationCountByStatus(): Promise<{
+        pending: number;
+        approved: number;
+        rejected: number;
+        total: number;
     }>;
+    bulkApproveResidents(residentIds: string[]): Promise<number>;
+    bulkRejectResidents(residentIds: string[], reason: string): Promise<number>;
     assignHouseToResident(residentId: string, houseId: string): Promise<{
         id: string;
         createdAt: Date;
@@ -113,13 +105,23 @@ export declare class ResidentApprovalService {
         accountNumber: string;
         emailVerified: boolean;
     }>;
-    getApplicationCountByStatus(): Promise<{
-        pending: number;
-        approved: number;
-        rejected: number;
+    rejectResident(residentId: string, reason: string): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        houseId: string | null;
+        fullName: string;
+        email: string;
+        phone: string;
+        passwordHash: string;
+        role: import(".prisma/client").$Enums.Role;
+        accountStatus: import(".prisma/client").$Enums.AccountStatus;
+        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+        profilePicture: string | null;
+        nationalId: string | null;
+        accountNumber: string;
+        emailVerified: boolean;
     }>;
-    bulkApproveResidents(residentIds: string[]): Promise<number>;
-    bulkRejectResidents(residentIds: string[], reason: string): Promise<number>;
 }
 export declare const residentApprovalService: ResidentApprovalService;
 //# sourceMappingURL=resident-approval.service.d.ts.map

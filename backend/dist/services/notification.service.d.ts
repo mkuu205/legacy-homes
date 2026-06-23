@@ -105,6 +105,31 @@ export declare class NotificationService {
     }>;
     sendBillGeneratedNotification(residentId: string, billNumber: string, totalAmount: number): Promise<void>;
     sendPaymentSuccessNotification(residentId: string, paymentAmount: number, mpesaCode?: string): Promise<void>;
+    markAsUnread(userId: string, notificationId: string): Promise<{
+        message: string;
+    }>;
+    deleteOne(userId: string, notificationId: string): Promise<{
+        message: string;
+    }>;
+    getNotificationLogs(query: any): Promise<{
+        logs: {
+            message: string;
+            id: string;
+            createdAt: Date;
+            title: string;
+            type: import(".prisma/client").$Enums.NotificationType;
+            channels: import(".prisma/client").$Enums.NotificationChannel[];
+            sentBy: string | null;
+            targetAll: boolean;
+            targetGroup: string | null;
+        }[];
+        pagination: {
+            page: number;
+            limit: number;
+            total: number;
+            pages: number;
+        };
+    }>;
 }
 export declare const notificationService: NotificationService;
 //# sourceMappingURL=notification.service.d.ts.map

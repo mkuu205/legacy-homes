@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Loader2, ArrowRight, CheckCircle } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/components/ui/toaster';
@@ -87,13 +87,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Error Alert */}
-        {errorMsg && (
-          <div className="err-bar" style={{ marginBottom: '16px' }}>
-            <CheckCircle size={16} style={{ color: '#f87171', flexShrink: 0 }} />
-            <span>{errorMsg}</span>
-          </div>
-        )}
+        {/* Error handled via toast notification */}
 
         {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

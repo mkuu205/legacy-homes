@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getErrorMessage } from '@/lib/api';
 import { toast } from '@/components/ui/toaster';
-import { Bell, CheckCheck, Info, AlertCircle, CheckCircle, Megaphone, Trash2 } from 'lucide-react';
+import { Bell, CheckCheck, Info, AlertCircle, CheckCircle, Megaphone, Trash2, Eye, EyeOff } from 'lucide-react';
 
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
@@ -33,6 +33,28 @@ export default function NotificationsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
     },
+  });
+
+  const markUnreadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.patch(`/notifications/${id}/unread`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+    },
+  });
+
+  const deleteOneMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/notifications/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+      toast({ type: 'success', title: 'Notification deleted' });
+    },
+    onError: (err) => {
+      toast({ type: 'error', title: 'Failed to delete notification', description: getErrorMessage(err) });
+    }
   });
 
   const deleteAllMutation = useMutation({
@@ -120,7 +142,7 @@ export default function NotificationsPage() {
             No notifications yet
           </p>
           <p style={{ fontSize: '12px', color: 'var(--t2)' }}>
-            You&apos;ll be notified about bills, payments, and announcements
+            You'll be notified about bills, payments, and announcements
           </p>
         </div>
       ) : (
@@ -178,9 +200,35 @@ export default function NotificationsPage() {
                     <p style={{ fontSize: '12px', color: 'var(--t2)', marginBottom: '6px' }}>
                       {notif?.message}
                     </p>
-                    <p style={{ fontSize: '11px', color: 'var(--t3)' }}>
-                      {new Date(n.createdAt).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <p style={{ fontSize: '11px', color: 'var(--t3)' }}>
+                        {new Date(n.createdAt).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            markUnreadMutation.mutate(n.notificationId);
+                          }}
+                          disabled={markUnreadMutation.isPending}
+                          title={isUnread ? "Mark as read" : "Mark as unread"}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--t2)', fontSize: '12px' }}
+                        >
+                          {isUnread ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteOneMutation.mutate(n.id);
+                          }}
+                          disabled={deleteOneMutation.isPending}
+                          title="Delete"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#f87171', fontSize: '12px' }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

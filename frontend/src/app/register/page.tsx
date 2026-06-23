@@ -9,10 +9,8 @@ import { z } from 'zod';
 import {
   Eye,
   EyeOff,
-  Droplets,
   Loader2,
   ArrowRight,
-  AlertCircle
 } from 'lucide-react';
 import { api, getErrorMessage } from '@/lib/api';
 import { toast } from '@/components/ui/toaster';
@@ -99,7 +97,15 @@ export default function RegisterPage() {
       <div className="auth-card" style={{ maxWidth: '520px' }}>
         <div className="auth-logo">
           <div className="auth-logo-ico">
-            <Droplets size={20} style={{ color: 'var(--ac)' }} />
+            <img
+              src="https://i.ibb.co/5hvy5zXd/Chat-GPT-Image-Jun-23-2026-01-17-11-AM.png"
+              alt="Legacy Homes Logo"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain'
+              }}
+            />
           </div>
           <div>
             <div
@@ -141,12 +147,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        {errorMsg && (
-          <div className="err-bar" style={{ marginBottom: '16px' }}>
-            <AlertCircle size={16} style={{ color: '#f87171', flexShrink: 0 }} />
-            <span>{errorMsg}</span>
-          </div>
-        )}
+        {/* Error handled via toast notification */}
 
         <form
           onSubmit={handleSubmit(onSubmit)}

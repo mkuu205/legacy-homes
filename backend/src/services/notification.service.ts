@@ -246,7 +246,8 @@ export class NotificationService {
           html: `
             <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
               <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
-                <h2 style="color:#fff;margin:0;">ðŸ’§ Legacy Homes</h2>
+                <h2 style="color:#fff;margin:0;font-size:24px;font-weight:bold;">Legacy Homes</h2>
+                <p style="color:#e0e7ff;margin:8px 0 0 0;font-size:12px;">Water Billing System</p>
               </div>
               <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
                 <h3 style="color:#1e293b;">${title}</h3>
@@ -519,7 +520,8 @@ export class NotificationService {
         html: `
           <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
             <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
-              <h2 style="color:#fff;margin:0;">💧 Legacy Homes</h2>
+              <h2 style="color:#fff;margin:0;font-size:24px;font-weight:bold;">Legacy Homes</h2>
+              <p style="color:#e0e7ff;margin:8px 0 0 0;font-size:12px;">Water Billing System</p>
             </div>
             <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
               <h3 style="color:#1e293b;">Your Water Bill is Ready</h3>
@@ -572,10 +574,11 @@ export class NotificationService {
         html: `
           <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
             <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
-              <h2 style="color:#fff;margin:0;">💧 Legacy Homes</h2>
+              <h2 style="color:#fff;margin:0;font-size:24px;font-weight:bold;">Legacy Homes</h2>
+              <p style="color:#e0e7ff;margin:8px 0 0 0;font-size:12px;">Water Billing System</p>
             </div>
             <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
-              <h3 style="color:#1e293b;">✓ Payment Received</h3>
+              <h3 style="color:#1e293b;">Payment Received</h3>
               <p style="color:#64748b;line-height:1.6;">Dear ${resident.fullName},</p>
               <p style="color:#64748b;line-height:1.6;">Thank you for your payment. Your transaction has been processed successfully.</p>
               <div style="background:#f1f5f9;padding:16px;border-radius:8px;margin:16px 0;">
@@ -592,6 +595,66 @@ export class NotificationService {
         } catch (error) {
       logger.error('Failed to send payment success email:', error);
     }
+  }
+
+  async markAsUnread(userId: string, notificationId: string) {
+    const notification = await prisma.userNotification.findFirst({
+      where: {
+        id: notificationId,
+        userId,
+      },
+    });
+
+    if (!notification) throw new AppError('Notification not found', 404);
+
+    await prisma.userNotification.update({
+      where: { id: notificationId },
+      data: { status: 'READ' },
+    });
+
+    return { message: 'Notification marked as read' };
+  }
+
+  async deleteOne(userId: string, notificationId: string) {
+    const notification = await prisma.userNotification.findFirst({
+      where: {
+        id: notificationId,
+        userId,
+      },
+    });
+
+    if (!notification) throw new AppError('Notification not found', 404);
+
+    await prisma.userNotification.delete({
+      where: { id: notificationId },
+    });
+
+    return { message: 'Notification deleted' };
+  }
+
+  async getNotificationLogs(query: any) {
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    const [logs, total] = await Promise.all([
+      prisma.notification.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.notification.count(),
+    ]);
+
+    return {
+      logs,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
   }
 }
 

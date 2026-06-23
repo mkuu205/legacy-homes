@@ -54,38 +54,53 @@ export function Toaster() {
     return () => { globalToast = null; };
   }, [addToast]);
 
-  const icons = {
-    success: <CheckCircle className="w-5 h-5 text-green-500" />,
-    error: <AlertCircle className="w-5 h-5 text-red-500" />,
-    info: <Info className="w-5 h-5 text-blue-500" />,
-    warning: <AlertTriangle className="w-5 h-5 text-yellow-500" />,
+  const colors = {
+    success: 'border-green-500 bg-green-500 dark:bg-green-600 dark:border-green-500',
+    error: 'border-red-500 bg-red-500 dark:bg-red-600 dark:border-red-500',
+    info: 'border-blue-500 bg-blue-500 dark:bg-blue-600 dark:border-blue-500',
+    warning: 'border-orange-500 bg-orange-500 dark:bg-orange-600 dark:border-orange-500',
   };
 
-  const colors = {
-    success: 'border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800',
-    error: 'border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800',
-    info: 'border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800',
-    warning: 'border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800',
+  const textColors = {
+    success: 'text-white',
+    error: 'text-white',
+    info: 'text-white',
+    warning: 'text-white',
+  };
+
+  const iconColors = {
+    success: 'text-white',
+    error: 'text-white',
+    info: 'text-white',
+    warning: 'text-white',
+  };
+
+  const icons = {
+    success: <CheckCircle className={`w-5 h-5 ${iconColors.success}`} />,
+    error: <AlertCircle className={`w-5 h-5 ${iconColors.error}`} />,
+    info: <Info className={`w-5 h-5 ${iconColors.info}`} />,
+    warning: <AlertTriangle className={`w-5 h-5 ${iconColors.warning}`} />,
   };
 
   return (
     <ToastContext.Provider value={{ toast: addToast }}>
-      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full">
+      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full px-4 sm:px-0 pointer-events-none">
         {toasts.map(t => (
           <div
             key={t.id}
-            className={`flex items-start gap-3 p-4 rounded-xl border shadow-lg ${colors[t.type]} animate-in slide-in-from-top duration-300`}
+            className={`flex items-start gap-3 p-4 rounded-xl border shadow-lg ${colors[t.type]} animate-in slide-in-from-top duration-300 pointer-events-auto`}
           >
             <div className="flex-shrink-0 mt-0.5">{icons[t.type]}</div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm" style={{ color: 'var(--foreground)' }}>{t.title}</p>
+              <p className={`font-semibold text-sm ${textColors[t.type]}`}>{t.title}</p>
               {t.description && (
-                <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>{t.description}</p>
+                <p className={`text-xs mt-1 ${textColors[t.type]} opacity-90`}>{t.description}</p>
               )}
             </div>
             <button
               onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
-              className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+              className="flex-shrink-0 opacity-80 hover:opacity-100 transition-opacity text-white"
+              aria-label="Close notification"
             >
               <X className="w-4 h-4" />
             </button>
