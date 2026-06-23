@@ -1,0 +1,177 @@
+import { Request, Response, NextFunction } from 'express';
+import { authService } from '../services/auth.service';
+import { AuthRequest } from '../middleware/auth';
+import prisma from '../config/prisma';
+
+export class AuthController {
+  async register(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await authService.register(req.body);
+      res.status(201).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async verifyOTP(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId, otp } = req.body;
+      const result = await authService.verifyOTPAndActivate(userId, otp);
+      
+      // Fetch house info for frontend
+      const house = result.user.houseId 
+        ? await prisma.house.findUnique({ where: { id: result.user.houseId } })
+        : null;
+      
+      res.json({
+        success: true,
+        message: 'Email verified successfully. Welcome to Legacy Homes!',
+        data: {
+          user: {
+            id: result.user.id,
+            fullName: result.user.fullName,
+            email: result.user.email,
+            role: result.user.role,
+            accountNumber: result.user.accountNumber,
+            houseNumber: house?.houseNumber, // Return houseNumber for frontend
+            profilePicture: result.user.profilePicture,
+          },
+          tokens: result.tokens,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async resendOTP(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId } = req.body;
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+      }
+      await authService.sendOTP(user.id, user.email, user.fullName);
+      res.json({ success: true, message: 'OTP resent successfully.' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async login(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email, password } = req.body;
+      const result = await authService.login(email, password);
+      
+      // Fetch house info for frontend
+      const house = result.user.houseId 
+        ? await prisma.house.findUnique({ where: { id: result.user.houseId } })
+        : null;
+      
+      res.json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          user: {
+            id: result.user.id,
+            fullName: result.user.fullName,
+            email: result.user.email,
+            phone: result.user.phone,
+            role: result.user.role,
+            accountNumber: result.user.accountNumber,
+            houseNumber: house?.houseNumber, // Return houseNumber for frontend
+            profilePicture: result.user.profilePicture,
+            accountStatus: result.user.accountStatus,
+          },
+          tokens: result.tokens,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async refreshToken(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { refreshToken } = req.body;
+      const tokens = await authService.refreshTokens(refreshToken);
+      res.json({ success: true, data: tokens });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async logout(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { refreshToken } = req.body;
+      await authService.logout(refreshToken);
+      res.json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async forgotPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { email } = req.body;
+      const result = await authService.forgotPassword(email);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { token, newPassword } = req.body;
+      const result = await authService.resetPassword(token, newPassword);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getMe(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.userId },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phone: true,
+          role: true,
+          accountNumber: true,
+          houseId: true,
+          profilePicture: true,
+          accountStatus: true,
+          nationalId: true,
+          emailVerified: true,
+          createdAt: true,
+        },
+      });
+      if (!user) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+      }
+      
+      // Fetch house info for frontend compatibility
+      const house = user.houseId 
+        ? await prisma.house.findUnique({ where: { id: user.houseId } })
+        : null;
+      
+      res.json({
+        success: true,
+        data: {
+          ...user,
+          houseNumber: house?.houseNumber, // Return houseNumber for frontend
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+}
+
+export const authController = new AuthController();
