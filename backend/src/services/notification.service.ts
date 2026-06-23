@@ -436,7 +436,7 @@ export class NotificationService {
     const limitNum = Number.parseInt(String(query?.limit || 20), 10);
     const skip = (pageNum - 1) * limitNum;
 
-    const [notifications, total] = await Promise.all([
+    const [notifications, total, unreadCount] = await Promise.all([
       prisma.notification.findMany({
         skip,
         take: limitNum,
@@ -453,6 +453,11 @@ export class NotificationService {
       }),
 
       prisma.notification.count(),
+
+      // Count all unread (PENDING) user notifications across all residents
+      prisma.userNotification.count({
+        where: { status: 'PENDING' },
+      }),
     ]);
 
     return {
@@ -463,6 +468,7 @@ export class NotificationService {
         total,
         pages: Math.ceil(total / limitNum),
       },
+      unreadCount,
     };
   }
 
@@ -609,10 +615,10 @@ export class NotificationService {
 
     await prisma.userNotification.update({
       where: { id: notificationId },
-      data: { status: 'READ' },
+      data: { status: 'PENDING', readAt: null },
     });
 
-    return { message: 'Notification marked as read' };
+    return { message: 'Notification marked as unread' };
   }
 
   async deleteOne(userId: string, notificationId: string) {

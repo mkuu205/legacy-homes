@@ -6,6 +6,8 @@ const router = Router();
 // Admin routes
 router.post('/send', authenticate, authorize('SUPER_ADMIN'), notificationController.send.bind(notificationController));
 router.get('/admin', authenticate, authorize('SUPER_ADMIN'), notificationController.getAll.bind(notificationController));
+// Alias for admin layout unread count polling (GET /notifications/all)
+router.get('/all', authenticate, authorize('SUPER_ADMIN'), notificationController.getAll.bind(notificationController));
 router.delete('/admin/delete-all', authenticate, authorize('SUPER_ADMIN'), notificationController.adminDeleteAllNotifications.bind(notificationController));
 router.get('/admin/logs', authenticate, authorize('SUPER_ADMIN'), notificationController.getNotificationLogs.bind(notificationController));
 

@@ -16,13 +16,12 @@ const statusConfig: Record<string, { color: string; bg: string; icon: React.Reac
 
 export default function BillingPage() {
   const [downloadingBillId, setDownloadingBillId] = useState<string | null>(null);
+  const [downloadingReceiptBillId, setDownloadingReceiptBillId] = useState<string | null>(null);
 
   const handleDownloadInvoice = async (billId: string) => {
     setDownloadingBillId(billId);
     try {
-      const res = await api.get(`/billing/${billId}/invoice`, {
-        responseType: 'blob',
-      });
+      const res = await api.get(`/billing/${billId}/invoice`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -36,6 +35,36 @@ export default function BillingPage() {
       toast({ type: 'error', title: 'Failed to download invoice' });
     } finally {
       setDownloadingBillId(null);
+    }
+  };
+
+  const handleDownloadReceipt = async (bill: any) => {
+    // Get the latest successful payment for this bill
+    setDownloadingReceiptBillId(bill.id);
+    try {
+      // Fetch payments for this bill to find the payment ID
+      const paymentsRes = await api.get(`/payments/my-payments?billId=${bill.id}`);
+      const payments = paymentsRes.data?.data?.payments || [];
+      const successfulPayment = payments.find((p: any) => p.status === 'SUCCESSFUL' && p.billId === bill.id);
+      if (!successfulPayment) {
+        // Fall back to invoice download if no receipt available
+        await handleDownloadInvoice(bill.id);
+        return;
+      }
+      const res = await api.get(`/billing/receipt/${successfulPayment.id}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `receipt-${successfulPayment.paymentId || successfulPayment.id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast({ type: 'success', title: 'Receipt downloaded successfully!' });
+    } catch (error) {
+      toast({ type: 'error', title: 'Failed to download receipt' });
+    } finally {
+      setDownloadingReceiptBillId(null);
     }
   };
 
@@ -162,14 +191,22 @@ export default function BillingPage() {
                 )}
 
                 {bill.status === 'PAID' && (
-                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--bd)' }}>
-                    <button 
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--bd)' }}>
+                    <button
+                      onClick={() => handleDownloadReceipt(bill)}
+                      disabled={downloadingReceiptBillId === bill.id}
+                      className="btn bg btn-sm"
+                    >
+                      {downloadingReceiptBillId === bill.id ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={14} />}
+                      {downloadingReceiptBillId === bill.id ? 'Downloading...' : 'Download Receipt'}
+                    </button>
+                    <button
                       onClick={() => handleDownloadInvoice(bill.id)}
                       disabled={downloadingBillId === bill.id}
                       className="btn bg btn-sm"
                     >
-                      {downloadingBillId === bill.id ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={14} />}
-                      {downloadingBillId === bill.id ? 'Downloading...' : 'Download Receipt'}
+                      {downloadingBillId === bill.id ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <FileText size={14} />}
+                      {downloadingBillId === bill.id ? 'Downloading...' : 'Invoice'}
                     </button>
                   </div>
                 )}

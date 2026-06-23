@@ -194,9 +194,7 @@ export class AuthController {
         res.status(400).json({ success: false, message: 'Incorrect password. Please try again.' });
         return;
       }
-      // Invalidate all sessions
-      await prisma.refreshToken.deleteMany({ where: { userId: user.id } }).catch(() => {});
-      // Audit log before deletion
+      // Audit log before deletion (while user still exists)
       await auditService.logAction({
         userId: user.id,
         action: 'DELETE_ACCOUNT',
@@ -205,10 +203,36 @@ export class AuthController {
         details: { email: user.email, fullName: user.fullName },
         ipAddress: req.ip,
       }).catch(() => {});
-      // Send deletion email
+      // Send deletion email asynchronously
       sendAccountDeletedEmail(user.email, user.fullName).catch(() => {});
-      // Delete the user (cascade deletes notifications, etc.)
-      await prisma.user.delete({ where: { id: user.id } });
+      // Explicitly delete all related records to avoid FK constraint violations
+      // (schema-level cascades are not defined for all relations)
+      await prisma.$transaction(async (tx) => {
+        // Payments reference bills (billId FK), delete payments first
+        await tx.payment.deleteMany({ where: { residentId: user.id } });
+        // Unlink meter readings from bills before deleting bills
+        const userBills = await tx.bill.findMany({ where: { residentId: user.id }, select: { id: true } });
+        const userBillIds = userBills.map((b) => b.id);
+        if (userBillIds.length > 0) {
+          await tx.meterReading.updateMany({ where: { billId: { in: userBillIds } }, data: { billId: null } });
+        }
+        // Delete bills
+        await tx.bill.deleteMany({ where: { residentId: user.id } });
+        // Delete user notifications (UserNotification has cascade on user)
+        await tx.userNotification.deleteMany({ where: { userId: user.id } });
+        // Delete audit logs
+        await tx.auditLog.deleteMany({ where: { userId: user.id } });
+        // Support tickets
+        await tx.ticketReply.deleteMany({ where: { userId: user.id } });
+        await tx.ticket.deleteMany({ where: { residentId: user.id } });
+        // OTP codes and refresh tokens
+        await tx.otpCode.deleteMany({ where: { userId: user.id } });
+        await tx.refreshToken.deleteMany({ where: { userId: user.id } });
+        // Unassign house before deleting user
+        await tx.user.update({ where: { id: user.id }, data: { houseId: null } });
+        // Finally delete the user
+        await tx.user.delete({ where: { id: user.id } });
+      });
       res.json({ success: true, message: 'Your account has been permanently deleted.' });
     } catch (error) {
       next(error);

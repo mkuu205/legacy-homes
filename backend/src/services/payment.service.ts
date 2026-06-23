@@ -350,6 +350,11 @@ export class PaymentService {
       where.status = query.status;
     }
 
+    // Allow filtering by billId so resident can find the payment for a specific bill
+    if (query.billId) {
+      where.billId = query.billId;
+    }
+
     const payments = await prisma.payment.findMany({
       where,
       skip: (pageNum - 1) * limitNum,
@@ -377,17 +382,46 @@ export class PaymentService {
     const pageNum = Number.parseInt(String(query?.page || 1), 10);
     const limitNum = Number.parseInt(String(query?.limit || 20), 10);
 
-    const payments = await prisma.payment.findMany({
-      skip: (pageNum - 1) * limitNum,
-      take: limitNum,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        resident: true,
-        bill: true,
-      },
-    });
+    const where: any = {};
 
-    const total = await prisma.payment.count();
+    // Filter by status
+    if (query?.status) {
+      where.status = query.status;
+    }
+
+    // Filter by residentId (used by admin resident history modal)
+    if (query?.residentId) {
+      where.residentId = query.residentId;
+    }
+
+    // Search by mpesa receipt, payment ID, or resident name/account number
+    if (query?.search) {
+      where.OR = [
+        { mpesaReceiptCode: { contains: query.search, mode: 'insensitive' } },
+        { paymentId: { contains: query.search, mode: 'insensitive' } },
+        { resident: { fullName: { contains: query.search, mode: 'insensitive' } } },
+        { resident: { accountNumber: { contains: query.search, mode: 'insensitive' } } },
+        { bill: { billNumber: { contains: query.search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          resident: {
+            select: { id: true, fullName: true, accountNumber: true, email: true, phone: true },
+          },
+          bill: {
+            select: { id: true, billNumber: true, billingMonth: true, totalAmount: true, status: true },
+          },
+        },
+      }),
+      prisma.payment.count({ where }),
+    ]);
 
     return {
       payments,

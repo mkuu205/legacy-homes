@@ -267,14 +267,14 @@ export default function AdminBillingPage() {
                 <AlertTriangle size={16} style={{ color: '#fbbf24', flexShrink: 0, marginTop: '1px' }} />
                 <div>
                   <p style={{ fontSize: '12px', fontWeight: 600, color: '#fbbf24' }}>Bills already exist for this month</p>
-                  <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '2px' }}>Force regeneration will create new bills alongside existing ones.</p>
+                  <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '2px' }}>Force regeneration will delete existing unpaid bills for this month and replace them with fresh ones based on current meter readings.</p>
                 </div>
               </div>
             )}
             {forceGenerate && (
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--t1)', marginBottom: '16px', cursor: 'pointer' }}>
                 <input type="checkbox" checked={forceGenerate} onChange={e => setForceGenerate(e.target.checked)} />
-                Force regenerate (ignore duplicates)
+                Force regenerate (replaces existing unpaid bills)
               </label>
             )}
             <div style={{ display: 'flex', gap: '10px' }}>

@@ -14,6 +14,8 @@ export class MeterService {
         { meterNumber: { contains: query.search, mode: 'insensitive' } },
         { meterSerial: { contains: query.search, mode: 'insensitive' } },
         { house: { houseNumber: { contains: query.search, mode: 'insensitive' } } },
+        { house: { resident: { fullName: { contains: query.search, mode: 'insensitive' } } } },
+        { house: { resident: { accountNumber: { contains: query.search, mode: 'insensitive' } } } },
       ];
     }
     if (query.status) where.status = query.status;
@@ -31,6 +33,7 @@ export class MeterService {
           houseId: true,
           status: true,
           installationDate: true,
+          previousReading: true,
           currentReading: true,
           createdAt: true,
         },
@@ -38,19 +41,33 @@ export class MeterService {
       prisma.meter.count({ where }),
     ]);
 
-    // Fetch house info for each meter
-    const metersWithHouse = await Promise.all(
+    // Fetch house and resident info for each meter
+    const metersWithDetails = await Promise.all(
       meters.map(async (meter) => {
-        const house = await prisma.house.findUnique({ where: { id: meter.houseId } });
+        const house = await prisma.house.findUnique({
+          where: { id: meter.houseId },
+          include: {
+            resident: {
+              select: {
+                id: true,
+                fullName: true,
+                accountNumber: true,
+                phone: true,
+                email: true,
+              },
+            },
+          },
+        });
         return {
           ...meter,
           houseNumber: house?.houseNumber,
+          resident: house?.resident || null,
         };
       })
     );
 
     return {
-      meters: metersWithHouse,
+      meters: metersWithDetails,
       pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
     };
   }
@@ -74,9 +91,22 @@ export class MeterService {
     });
     if (!meter) throw new AppError('Meter not found', 404);
 
-    // Fetch related data
+    // Fetch related data including resident info
     const [house, readings] = await Promise.all([
-      prisma.house.findUnique({ where: { id: meter.houseId } }),
+      prisma.house.findUnique({
+        where: { id: meter.houseId },
+        include: {
+          resident: {
+            select: {
+              id: true,
+              fullName: true,
+              accountNumber: true,
+              phone: true,
+              email: true,
+            },
+          },
+        },
+      }),
       prisma.meterReading.findMany({
         where: { meterId: id },
         orderBy: { createdAt: 'desc' },
@@ -95,6 +125,7 @@ export class MeterService {
     return {
       ...meter,
       houseNumber: house?.houseNumber,
+      resident: house?.resident || null,
       readings,
     };
   }
@@ -154,6 +185,27 @@ export class MeterService {
     return prisma.meter.update({ where: { id }, data });
   }
 
+  async deleteMeter(id: string) {
+    const meter = await prisma.meter.findUnique({ where: { id } });
+    if (!meter) throw new AppError('Meter not found', 404);
+
+    // Check for active bills linked to this meter
+    const activeBills = await prisma.bill.count({
+      where: { meterId: id, status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] } },
+    });
+    if (activeBills > 0) {
+      throw new AppError(
+        `Cannot delete meter: it has ${activeBills} active unpaid bill(s). Settle or delete those bills first.`,
+        409
+      );
+    }
+
+    // Delete meter readings first
+    await prisma.meterReading.deleteMany({ where: { meterId: id } });
+    await prisma.meter.delete({ where: { id } });
+    return { message: 'Meter deleted successfully' };
+  }
+
   async addReading(data: {
     meterId: string;
     billingMonth: string;
@@ -167,11 +219,16 @@ export class MeterService {
 
     if (meter.status !== 'ACTIVE') throw new AppError('Meter is not active', 400);
 
-    // Check for duplicate reading
+    // Check for duplicate reading with detailed error message
     const existing = await prisma.meterReading.findUnique({
       where: { meterId_billingMonth: { meterId: data.meterId, billingMonth: data.billingMonth } },
     });
-    if (existing) throw new AppError(`Reading for ${data.billingMonth} already exists`, 409);
+    if (existing) {
+      throw new AppError(
+        `A reading for ${data.billingMonth} already exists for this meter. Please edit or delete the existing reading first.`,
+        409
+      );
+    }
 
     if (data.currentReading < meter.currentReading) {
       throw new AppError('Current reading cannot be lower than previous reading', 400);
@@ -253,6 +310,30 @@ export class MeterService {
     });
 
     return { ...meter, readings };
+  }
+
+  async exportMetersCSV(): Promise<string> {
+    const { meters } = await this.getAllMeters({ limit: 10000 });
+    const headers = [
+      'Meter Number', 'Serial', 'House Number', 'Resident Name', 'Account Number',
+      'Phone', 'Status', 'Previous Reading', 'Current Reading', 'Installation Date', 'Created',
+    ];
+    const rows = (meters as any[]).map((m) => [
+      m.meterNumber,
+      m.meterSerial || '',
+      m.houseNumber || '',
+      m.resident?.fullName || '',
+      m.resident?.accountNumber || '',
+      m.resident?.phone || '',
+      m.status,
+      m.previousReading ?? 0,
+      m.currentReading ?? 0,
+      m.installationDate ? new Date(m.installationDate).toLocaleDateString('en-KE') : '',
+      new Date(m.createdAt).toLocaleDateString('en-KE'),
+    ]);
+    return [headers, ...rows]
+      .map((r) => r.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
   }
 }
 

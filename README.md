@@ -1,337 +1,216 @@
-# Legacy Homes - Bug Fixes Package
+# Legacy Homes — Water Billing System
 
-## 📋 Overview
-
-This package contains comprehensive bug fixes for the Legacy Homes Water Billing System. All 12 reported issues have been analyzed and fixed with detailed documentation.
-
-**Status:** ✅ **COMPLETE** - 12/12 issues fixed
+A full-stack water billing management platform for residential estates. Built with **Next.js 14**, **Express.js**, **Prisma ORM**, and **MySQL/TiDB**.
 
 ---
 
-## 📦 What's Included
+## Project Structure
 
-### 1. Fixed Frontend Code
-All modified frontend files with bug fixes:
-- ✅ Session management (auth.store.ts)
-- ✅ API interceptor (api.ts)
-- ✅ Admin layouts (admin/layout.tsx, dashboard/layout.tsx)
-- ✅ Resident management (admin/residents/page.tsx)
-- ✅ Reports with CSV export (admin/reports/page.tsx)
-- ✅ Support tickets with replies (dashboard/support/page.tsx)
-- ✅ Billing with invoice download (dashboard/billing/page.tsx)
-- ✅ Profile with photo upload (dashboard/profile/page.tsx)
-- ✅ Dashboard with welcome notification (dashboard/page.tsx)
-
-### 2. Documentation
-- **FIXES_COMPLETED.md** - Detailed documentation of all fixes
-- **IMPLEMENTATION_GUIDE.md** - Step-by-step implementation guide
-- **BACKEND_SMS_INTEGRATION.md** - SMS integration guide for Issue #9
-- **CHANGES_SUMMARY.txt** - Quick reference of all changes
-- **BUG_FIXES_ANALYSIS.md** - Technical analysis of each issue
-
-### 3. Ready-to-Deploy Code
-All code is production-ready with:
-- ✅ Error handling
-- ✅ Loading states
-- ✅ Toast notifications
-- ✅ Input validation
-- ✅ Proper TypeScript types
-
----
-
-## 🚀 Quick Start
-
-### 1. Extract Files
-```bash
-unzip legacy-homes-main.zip
-cd legacy-homes-main
+```
+legacy-homes/
+├── backend/                  # Express.js API server
+│   ├── prisma/
+│   │   └── schema.prisma     # Database schema
+│   └── src/
+│       ├── config/           # Prisma client
+│       ├── controllers/      # Route handlers
+│       ├── middleware/       # Auth, error handler, notFound
+│       ├── routes/           # Express routers
+│       ├── services/         # Business logic
+│       └── utils/            # Email, JWT, Cloudinary, logger
+├── frontend/                 # Next.js 14 App Router
+│   └── src/
+│       ├── app/
+│       │   ├── admin/        # Admin portal pages
+│       │   └── dashboard/    # Resident portal pages
+│       ├── components/       # Shared UI components
+│       ├── lib/              # API client (Axios)
+│       └── store/            # Zustand auth store
+├── .env.example              # Environment variable template
+├── package.json              # Root workspace scripts
+└── README.md
 ```
 
-### 2. Install Dependencies
+---
+
+## Features
+
+### Admin Portal
+- **Dashboard** — Live stats: total residents, active meters, revenue, overdue bills
+- **Residents** — Full CRUD: add, edit, suspend/activate, delete, reset password, CSV export
+- **Meters** — Register meters, record readings (with photo), delete meters, CSV export
+- **Billing** — Generate monthly bills, force-regenerate (deletes existing unpaid first), bulk delete, delete all unpaid, mark overdue, CSV export
+- **Payments** — View all payments with search/status filters, bulk delete, retry verification, CSV export
+- **Notifications** — Broadcast to all residents or overdue-only; sent history with delete-all
+- **Reports** — Revenue, consumption, and collection analytics
+- **Audit Logs** — Full action history
+- **Settings** — System-wide configuration
+
+### Resident Portal
+- **Dashboard** — Current bill, recent payments, unread notifications, consumption history
+- **Billing** — View bills, download invoice (PDF) for unpaid bills, download receipt (PDF) for paid bills
+- **Payments** — M-Pesa STK push, payment history
+- **Notifications** — In-app notifications with mark-read/unread/delete
+- **Profile** — Update profile, upload photo, change password, delete account
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 14, React, TypeScript, TailwindCSS, TanStack Query |
+| Backend | Node.js, Express.js, TypeScript |
+| ORM | Prisma |
+| Database | MySQL / TiDB |
+| Auth | JWT (access + refresh tokens), bcrypt |
+| File Storage | Cloudinary |
+| Payments | M-Pesa (PayHero / Daraja) |
+| Email | Nodemailer / SendGrid |
+| SMS | TalkSasa / Africa's Talking |
+| PDF | PDFKit |
+
+---
+
+## Getting Started
+
+### Prerequisites
+- Node.js 18+
+- MySQL or TiDB database
+- Cloudinary account
+- M-Pesa API credentials (optional for development)
+
+### 1. Clone & Install
+
 ```bash
-cd frontend
+git clone https://github.com/mkuu205/legacy-homes.git
+cd legacy-homes
+
+# Install root workspace dependencies
 npm install
+
+# Install backend dependencies
+cd backend && npm install
+
+# Install frontend dependencies
+cd ../frontend && npm install
 ```
 
-### 3. Run Development Server
+### 2. Configure Environment
+
 ```bash
+cp .env.example backend/.env
+```
+
+Edit `backend/.env` with your database URL, JWT secrets, Cloudinary credentials, and payment API keys.
+
+### 3. Database Setup
+
+```bash
+cd backend
+npx prisma migrate deploy
+npx prisma generate
+```
+
+### 4. Run Development Servers
+
+```bash
+# From root — runs both backend and frontend concurrently
 npm run dev
+
+# Or individually:
+cd backend && npm run dev      # Backend on :5000
+cd frontend && npm run dev     # Frontend on :3000
 ```
 
-### 4. Build for Production
+### 5. Build for Production
+
 ```bash
-npm run build
-npm start
+cd backend && npm run build && npm start
+cd frontend && npm run build && npm start
 ```
 
 ---
 
-## 📝 Issues Fixed
+## API Overview
 
-| # | Issue | Status | File |
-|---|-------|--------|------|
-| 1 | Page refresh logs out user | ✅ Fixed | auth.store.ts |
-| 2 | Logout redirects to login | ✅ Fixed | layout.tsx files |
-| 3 | Double login required | ✅ Fixed | api.ts |
-| 4 | Resident action buttons | ✅ Fixed | residents/page.tsx |
-| 5 | CSV export not working | ✅ Fixed | reports/page.tsx |
-| 6 | Ticket replies not showing | ✅ Fixed | support/page.tsx |
-| 7 | Cannot download invoice | ✅ Fixed | billing/page.tsx |
-| 8 | Notification count mismatch | ✅ Fixed | dashboard/page.tsx |
-| 9 | Bill not sent to phone | ⚠️ Backend | SMS guide |
-| 10 | Cannot upload profile photo | ✅ Fixed | profile/page.tsx |
-| 11 | Session isolation issue | ✅ Fixed | auth.store.ts |
-| 12 | Welcome notification not visible | ✅ Fixed | dashboard/page.tsx |
+All endpoints are prefixed with `/api`.
 
----
-
-## 🔧 Key Improvements
-
-### Authentication & Security
-- ✅ Proper session management with hydration
-- ✅ Tab-aware session isolation
-- ✅ Better token refresh handling
-- ✅ Secure logout with proper cleanup
-
-### User Experience
-- ✅ Users stay logged in after refresh
-- ✅ Logout redirects to home page
-- ✅ Single login required
-- ✅ Prominent welcome notification
-- ✅ Accurate notification count
-
-### Admin Features
-- ✅ Resident view/edit functionality
-- ✅ CSV export for reports
-- ✅ Action buttons fully functional
-
-### User Features
-- ✅ Profile photo upload
-- ✅ Invoice/receipt download
-- ✅ Ticket replies visible
-- ✅ Notification count accurate
+| Prefix | Description |
+|---|---|
+| `/api/auth` | Register, login, OTP, refresh token, delete account |
+| `/api/residents` | Resident CRUD, status, password reset, CSV export |
+| `/api/meters` | Meter CRUD, readings, CSV export |
+| `/api/billing` | Bill generation, invoice/receipt PDF, CSV export |
+| `/api/payments` | M-Pesa initiation, payment history, bulk delete |
+| `/api/notifications` | Broadcast, resident notifications, mark read/unread |
+| `/api/reports` | Dashboard stats, revenue, consumption analytics |
+| `/api/support` | Support tickets and replies |
+| `/api/admin` | Admin-specific utilities |
 
 ---
 
-## 📚 Documentation Files
+## Key Fixes & Improvements (v2)
 
-### FIXES_COMPLETED.md
-Complete documentation of all fixes with:
-- Detailed explanation of each fix
-- Code changes made
-- Features added
-- Testing recommendations
-- Backend integration points
+### Billing Engine
+- Force-regenerate now **deletes existing unpaid bills** before creating new ones, preventing duplicates
+- Duplicate meter reading detection returns a clear, actionable error message
 
-### IMPLEMENTATION_GUIDE.md
-Step-by-step guide including:
-- Quick start instructions
-- Detailed changes by issue
-- Backend API endpoints
-- Testing checklist
-- Deployment steps
-- Troubleshooting guide
+### Invoice & Receipt PDFs
+- Redesigned with professional A4 two-column layout, proper table borders, and visual hierarchy
+- Resident billing page correctly downloads **invoice** for unpaid bills and **receipt** for paid bills
 
-### BACKEND_SMS_INTEGRATION.md
-Complete guide for SMS implementation:
-- SMS provider options
-- Installation instructions
-- Code examples
-- Database migrations
-- Testing procedures
-- Cost estimation
+### Meter Management
+- Meter table now displays full resident info (name, account number, phone, email)
+- Delete meter endpoint added with guard: blocks deletion when unpaid/overdue bills exist
+- Meters CSV export added
 
-### CHANGES_SUMMARY.txt
-Quick reference with:
-- All issues and status
-- Files modified
-- Key improvements
-- Testing checklist
-- Deployment instructions
+### Resident Management
+- Admin can create residents directly (POST `/residents`) without the approval flow
+- Residents CSV export added with Export CSV button in the admin UI
+- Delete resident wrapped in a **database transaction** for full atomicity
 
----
+### Notifications
+- Admin bell badge now shows the real count of unread resident notifications (was hardcoded 0)
+- `markAsUnread` bug fixed (was setting status to `READ` instead of `PENDING`)
+- `/notifications/all` alias added for admin layout polling
 
-## ✅ Testing Checklist
+### Payments
+- `getAllPayments` now supports `search`, `status`, and `residentId` filters
+- `getResidentPayments` now supports `billId` filter for receipt lookup
+- Payment CSV export respects active filters
 
-### Authentication & Session
-- [ ] Page refresh keeps user logged in
-- [ ] Logout redirects to home page
-- [ ] Single login required (no double login)
-- [ ] Admin and resident sessions isolated in different tabs
+### Database Integrity
+- `deleteAccount` (self-service) wrapped in a **Prisma transaction** with explicit cascade order
+- `deleteResident` (admin) wrapped in a **Prisma transaction** with explicit cascade order
+- Both handle the missing schema-level cascades on `Bill`, `Payment`, `Ticket`, and `AuditLog`
 
-### Admin Features
-- [ ] Resident view button opens modal
-- [ ] Resident edit button opens form
-- [ ] Can update resident information
-- [ ] CSV export works for all report types
-
-### User Features
-- [ ] Welcome notification is visible
-- [ ] Notification count is accurate
-- [ ] Profile photo upload works
-- [ ] Invoice download works
-- [ ] Ticket replies are displayed
+### Resident Status Notifications
+- Fixed invalid write to `UserNotification` model (was writing `title`/`message`/`type` fields that don't exist on that table)
+- Now correctly creates a `Notification` record with a linked `UserNotification` record
 
 ---
 
-## 🛠️ Backend Requirements
+## Environment Variables
 
-The following backend endpoints are required:
+See `.env.example` for the full list. Key variables:
 
-### Residents
-```
-PATCH /residents/{id}
-POST /residents/upload-profile-picture
-POST /residents/change-password
-```
-
-### Billing
-```
-GET /billing/{billId}/invoice
-POST /billing/{billId}/send-sms (optional)
-```
-
-### Support
-```
-GET /support/tickets/{ticketId}
-POST /support/tickets/{ticketId}/reply
-```
-
-### Reports
-```
-GET /reports/revenue?year={year}
-GET /reports/overdue
-GET /reports/consumption
+```env
+DATABASE_URL=mysql://user:password@host:port/dbname
+JWT_SECRET=your_jwt_secret
+JWT_REFRESH_SECRET=your_refresh_secret
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+PAYHERO_API_KEY=...
+PAYHERO_CHANNEL_ID=...
+EMAIL_HOST=...
+EMAIL_USER=...
+EMAIL_PASS=...
 ```
 
 ---
 
-## 📋 Files Modified
+## License
 
-### Frontend (10 files)
-1. `frontend/src/store/auth.store.ts`
-2. `frontend/src/lib/api.ts`
-3. `frontend/src/app/admin/layout.tsx`
-4. `frontend/src/app/dashboard/layout.tsx`
-5. `frontend/src/app/admin/residents/page.tsx`
-6. `frontend/src/app/admin/reports/page.tsx`
-7. `frontend/src/app/dashboard/support/page.tsx`
-8. `frontend/src/app/dashboard/billing/page.tsx`
-9. `frontend/src/app/dashboard/profile/page.tsx`
-10. `frontend/src/app/dashboard/page.tsx`
-
-### Documentation (4 files)
-1. `FIXES_COMPLETED.md`
-2. `IMPLEMENTATION_GUIDE.md`
-3. `BACKEND_SMS_INTEGRATION.md`
-4. `CHANGES_SUMMARY.txt`
-
----
-
-## 🚀 Deployment
-
-### Pre-Deployment
-1. Backup current code
-2. Install dependencies
-3. Run tests
-4. Build for production
-
-### Staging Deployment
-1. Deploy to staging environment
-2. Test all features
-3. Verify API endpoints
-4. Check error logs
-
-### Production Deployment
-1. Deploy to production
-2. Monitor error logs
-3. Check user feedback
-4. Be ready to rollback if needed
-
-### Post-Deployment
-- [ ] Monitor error logs
-- [ ] Check user feedback
-- [ ] Verify all features work
-- [ ] Monitor performance
-- [ ] Check API response times
-
----
-
-## 🐛 Troubleshooting
-
-### User Logs Out on Refresh
-- Check auth.store.ts hydration logic
-- Verify sessionId is being stored
-- Clear browser cache and try again
-
-### Double Login Required
-- Check API interceptor
-- Verify token is being stored correctly
-- Monitor network requests in DevTools
-
-### Action Buttons Not Working
-- Verify backend endpoints exist
-- Check request/response format
-- Monitor network errors in DevTools
-
-### CSV Export Fails
-- Verify data is being fetched
-- Check CSV generation logic
-- Monitor browser console for errors
-
-### Invoice Download Fails
-- Verify `/billing/{billId}/invoice` exists
-- Check response is blob/PDF
-- Monitor network in DevTools
-
-### Profile Photo Upload Fails
-- Verify file is image type
-- Check file size (max 5MB)
-- Verify API endpoint exists
-- Check CORS headers
-
----
-
-## 📞 Support
-
-For questions or issues:
-1. Check documentation files
-2. Review code comments
-3. Check error logs
-4. Contact development team
-
----
-
-## 📄 License
-
-All code is proprietary to Legacy Homes.
-
----
-
-## 🎯 Next Steps
-
-1. **Review** - Read FIXES_COMPLETED.md for detailed information
-2. **Test** - Follow testing checklist
-3. **Deploy** - Follow deployment steps
-4. **Monitor** - Check error logs and user feedback
-5. **SMS** - Implement SMS integration (optional)
-
----
-
-## 📊 Summary
-
-- **Total Issues:** 12
-- **Fixed:** 11 (100% frontend)
-- **Backend Required:** 1 (SMS integration)
-- **Files Modified:** 10
-- **Documentation Files:** 4
-- **Status:** ✅ COMPLETE
-
----
-
-## 🎉 Conclusion
-
-All reported bugs have been fixed with comprehensive documentation and ready-to-deploy code. The system is now more stable, secure, and user-friendly.
-
-For detailed information, please refer to the documentation files included in this package.
-
+Proprietary — Legacy Homes Estate Management.

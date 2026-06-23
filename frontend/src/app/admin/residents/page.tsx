@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getErrorMessage } from '@/lib/api';
 import { toast } from '@/components/ui/toaster';
-import { Users, Plus, Search, Eye, Edit, Loader2, X, Trash2, AlertTriangle, Key, UserX, UserCheck, ChevronLeft, ChevronRight, CreditCard, FileText } from 'lucide-react';
+import { Users, Plus, Search, Eye, Edit, Loader2, X, Trash2, AlertTriangle, Key, UserX, UserCheck, ChevronLeft, ChevronRight, CreditCard, FileText, Download } from 'lucide-react';
 
 export default function AdminResidentsPage() {
   const queryClient = useQueryClient();
@@ -114,6 +114,18 @@ export default function AdminResidentsPage() {
     onError: (err) => toast({ type: 'error', title: 'Reset failed', description: getErrorMessage(err) }),
   });
 
+  const handleExportCSV = async () => {
+    try {
+      const res = await api.get('/residents/export/csv', { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a'); a.href = url; a.download = 'residents.csv'; a.click();
+      URL.revokeObjectURL(url);
+      toast({ type: 'success', title: 'Residents CSV exported' });
+    } catch (err) {
+      toast({ type: 'error', title: 'Export failed', description: getErrorMessage(err) });
+    }
+  };
+
   const statusColors: Record<string, { bg: string; color: string }> = {
     ACTIVE: { bg: 'rgba(16, 185, 129, 0.14)', color: '#34d399' },
     SUSPENDED: { bg: 'rgba(239, 68, 68, 0.14)', color: '#f87171' },
@@ -128,9 +140,14 @@ export default function AdminResidentsPage() {
           <h1 className="pg-h">Residents</h1>
           <p className="pg-sh">{pagination?.total || 0} total residents</p>
         </div>
-        <button onClick={() => setShowAddModal(true)} className="btn bp btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Plus size={14} /> Add Resident
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={handleExportCSV} className="btn bs btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Download size={14} /> Export CSV
+          </button>
+          <button onClick={() => setShowAddModal(true)} className="btn bp btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Plus size={14} /> Add Resident
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

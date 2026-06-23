@@ -20,6 +20,21 @@ export class ResidentController {
     } catch (error) { next(error); }
   }
 
+  async create(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const resident = await residentService.createResident(req.body);
+      await auditService.logAction({
+        userId: req.user!.userId,
+        action: 'CREATE_RESIDENT',
+        resource: 'User',
+        resourceId: (resident as any).id,
+        details: { email: (resident as any).email, fullName: (resident as any).fullName },
+        ipAddress: req.ip,
+      }).catch(() => {});
+      res.status(201).json({ success: true, data: resident });
+    } catch (error) { next(error); }
+  }
+
   async update(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const resident = await residentService.updateResident(req.params.id as string, req.body);
@@ -65,20 +80,27 @@ export class ResidentController {
         sendAccountActivatedEmail(resident.email, resident.fullName).catch(() => {});
       }
 
-      // Create in-app notification for the resident
-      const message = status === 'SUSPENDED'
+      // Create in-app notification for the resident using the correct two-table structure
+      const notifMessage = status === 'SUSPENDED'
         ? 'Your account has been suspended. Please contact support.'
         : status === 'ACTIVE'
         ? 'Your account has been activated. You can now access all features.'
         : `Your account status has been updated to ${status}.`;
 
-      await prisma.userNotification.create({
+      prisma.notification.create({
         data: {
-          userId: resident.id,
           title: status === 'SUSPENDED' ? 'Account Suspended' : status === 'ACTIVE' ? 'Account Activated' : 'Account Status Updated',
-          message,
-          type: status === 'SUSPENDED' ? 'ACCOUNT_SUSPENDED' : 'ACCOUNT_ACTIVATED',
-          status: 'UNREAD',
+          message: notifMessage,
+          type: 'ESTATE_COMMUNICATION',
+          channels: ['IN_APP'],
+          targetAll: false,
+          userNotifications: {
+            create: {
+              userId: resident.id,
+              channel: 'IN_APP',
+              status: 'PENDING',
+            },
+          },
         },
       }).catch(() => {});
 
@@ -131,6 +153,15 @@ export class ResidentController {
     try {
       const data = await residentService.getResidentDashboard(req.user!.userId);
       res.json({ success: true, data });
+    } catch (error) { next(error); }
+  }
+
+  async exportCSV(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const csv = await residentService.exportResidentsCSV(req.query as any);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=residents.csv');
+      res.send(csv);
     } catch (error) { next(error); }
   }
 }

@@ -22,6 +22,24 @@ export class BillingService {
       throw new AppError(`DUPLICATE:Bills for ${billingMonth} already exist (${existingCount} bills). Use force=true to regenerate.`, 409);
     }
 
+    // Force regenerate: delete existing unpaid/overdue bills for this month first
+    if (existingCount > 0 && force) {
+      const existingBills = await prisma.bill.findMany({
+        where: { billingMonth, status: { in: ['UNPAID', 'OVERDUE'] } },
+        select: { id: true, readingId: true },
+      });
+      const billIds = existingBills.map((b) => b.id);
+      // Delete associated payments first
+      await prisma.payment.deleteMany({ where: { billId: { in: billIds } } });
+      // Unlink readings from bills so they can be re-processed
+      await prisma.meterReading.updateMany({
+        where: { id: { in: existingBills.map((b) => b.readingId).filter(Boolean) as string[] } },
+        data: { billId: null },
+      });
+      await prisma.bill.deleteMany({ where: { id: { in: billIds } } });
+      logger.info(`Force regenerate: deleted ${billIds.length} existing unpaid bills for ${billingMonth}`);
+    }
+
     const readings = await prisma.meterReading.findMany({
       where: { billingMonth, billId: null },
       select: {
@@ -557,121 +575,134 @@ export class BillingService {
 
     return new Promise((resolve, reject) => {
       try {
-        const doc = new PDFDocument({
-          size: 'A4',
-          margin: 40,
-        });
-
+        const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
         const chunks: Buffer[] = [];
         doc.on('data', (chunk) => chunks.push(chunk));
-        doc.on('end', () => {
-          const pdfBuffer = Buffer.concat(chunks);
-          resolve({
-            pdfBuffer,
-            filename: `invoice-${bill.billNumber}.pdf`,
-          });
-        });
+        doc.on('end', () => resolve({ pdfBuffer: Buffer.concat(chunks), filename: `invoice-${bill.billNumber}.pdf` }));
         doc.on('error', reject);
 
-        // Company Header
-        doc.fontSize(20).font('Helvetica-Bold').text('LEGACY HOMES', { align: 'center' });
-        doc.fontSize(10).font('Helvetica').text('Water Billing System', { align: 'center' });
-        doc.fontSize(9).text('Nairobi, Kenya', { align: 'center' });
-        doc.moveDown(0.5);
+        const pageW = doc.page.width;
+        const marginL = 50;
+        const marginR = 50;
+        const contentW = pageW - marginL - marginR;
 
-        // Invoice Title
-        doc.fontSize(16).font('Helvetica-Bold').text('INVOICE', { align: 'center' });
-        doc.moveDown(0.5);
+        // ── Header band ──────────────────────────────────────────────────────
+        doc.rect(marginL, 40, contentW, 70).fill('#0a3d62');
+        doc.fill('#ffffff').fontSize(22).font('Helvetica-Bold')
+          .text('LEGACY HOMES', marginL + 16, 52, { width: contentW - 32 });
+        doc.fill('#a8d8ea').fontSize(10).font('Helvetica')
+          .text('Water Billing System  •  Nairobi, Kenya  •  support@legacyhomes.co.ke', marginL + 16, 78, { width: contentW - 32 });
 
-        // Invoice Details
-        doc.fontSize(10).font('Helvetica');
-        doc.text(`Invoice Number: ${bill.billNumber}`, 50);
-        doc.text(`Billing Period: ${bill.billingMonth}`);
-        doc.text(`Date Issued: ${new Date(bill.createdAt).toLocaleDateString('en-KE')}`);
-        doc.text(`Due Date: ${new Date(bill.dueDate).toLocaleDateString('en-KE')}`);
-        doc.moveDown(0.5);
+        // ── INVOICE label + status badge ─────────────────────────────────────
+        doc.fill('#0a3d62').fontSize(18).font('Helvetica-Bold').text('INVOICE', marginL, 128);
+        const statusBgColor = bill.status === 'PAID' ? '#22c55e' : bill.status === 'OVERDUE' ? '#ef4444' : '#f59e0b';
+        const badgeX = pageW - marginR - 90;
+        doc.rect(badgeX, 124, 90, 24).fill(statusBgColor);
+        doc.fill('#ffffff').fontSize(10).font('Helvetica-Bold')
+          .text(bill.status, badgeX, 130, { width: 90, align: 'center' });
 
-        // Customer Information
-        doc.fontSize(10).font('Helvetica-Bold').text('CUSTOMER INFORMATION');
-        doc.fontSize(9).font('Helvetica');
-        doc.text(`Name: ${bill.resident?.fullName || 'N/A'}`);
-        doc.text(`Account Number: ${bill.resident?.accountNumber || 'N/A'}`);
-        doc.text(`House Number: ${bill.houseNumber || 'N/A'}`);
-        doc.text(`Meter Number: ${bill.meter?.meterNumber || 'N/A'}`);
-        doc.text(`Phone: ${bill.resident?.phone || 'N/A'}`);
-        doc.text(`Email: ${bill.resident?.email || 'N/A'}`);
-        doc.moveDown(0.5);
+        doc.moveTo(marginL, 158).lineTo(pageW - marginR, 158).lineWidth(1).stroke('#cccccc');
 
-        // Billing Details Table
-        doc.fontSize(10).font('Helvetica-Bold').text('BILLING DETAILS');
-        doc.moveDown(0.3);
+        // ── Two-column meta block ─────────────────────────────────────────────
+        const colA = marginL;
+        const colB = marginL + contentW / 2 + 10;
+        let y = 168;
 
-        const tableTop = doc.y;
-        const col1 = 50;
-        const col2 = 200;
-        const col3 = 350;
-        const col4 = 480;
-        const rowHeight = 25;
+        const labelVal = (label: string, value: string, x: number, cy: number) => {
+          doc.fill('#888888').fontSize(8).font('Helvetica').text(label.toUpperCase(), x, cy);
+          doc.fill('#1a1a1a').fontSize(10).font('Helvetica-Bold').text(value, x, cy + 12);
+        };
 
-        // Table Header
-        doc.fontSize(9).font('Helvetica-Bold');
-        doc.text('Description', col1, tableTop);
-        doc.text('Quantity', col2, tableTop);
-        doc.text('Unit Price', col3, tableTop);
-        doc.text('Amount', col4, tableTop);
+        labelVal('Invoice Number', bill.billNumber, colA, y);
+        labelVal('Billing Period', bill.billingMonth, colB, y);
+        y += 38;
+        labelVal('Date Issued', new Date(bill.createdAt).toLocaleDateString('en-KE'), colA, y);
+        labelVal('Due Date', new Date(bill.dueDate).toLocaleDateString('en-KE'), colB, y);
 
-        // Table Row 1: Previous Reading
-        doc.fontSize(9).font('Helvetica');
-        doc.text('Previous Reading', col1, tableTop + rowHeight);
-        doc.text(`${bill.previousReading} m³`, col2, tableTop + rowHeight);
+        doc.moveTo(marginL, y + 36).lineTo(pageW - marginR, y + 36).lineWidth(0.5).stroke('#dddddd');
+        y += 48;
 
-        // Table Row 2: Current Reading
-        doc.text('Current Reading', col1, tableTop + rowHeight * 2);
-        doc.text(`${bill.currentReading} m³`, col2, tableTop + rowHeight * 2);
+        // ── Customer Information ──────────────────────────────────────────────
+        doc.fill('#0a3d62').fontSize(11).font('Helvetica-Bold').text('BILL TO', colA, y);
+        y += 18;
+        doc.fill('#1a1a1a').fontSize(10).font('Helvetica-Bold').text(bill.resident?.fullName || 'N/A', colA, y);
+        y += 14;
+        doc.fill('#444444').fontSize(9).font('Helvetica');
+        doc.text(`Account: ${bill.resident?.accountNumber || 'N/A'}`, colA, y); y += 13;
+        doc.text(`House: ${bill.houseNumber || 'N/A'}  |  Meter: ${(bill as any).meter?.meterNumber || 'N/A'}`, colA, y); y += 13;
+        doc.text(`Phone: ${bill.resident?.phone || 'N/A'}`, colA, y); y += 13;
+        doc.text(`Email: ${bill.resident?.email || 'N/A'}`, colA, y);
 
-        // Table Row 3: Units Consumed
-        doc.text('Units Consumed', col1, tableTop + rowHeight * 3);
-        doc.text(`${bill.unitsConsumed} m³`, col2, tableTop + rowHeight * 3);
-        doc.text(`KES ${bill.unitRate}`, col3, tableTop + rowHeight * 3);
-        doc.text(`KES ${(bill.unitsConsumed * bill.unitRate).toFixed(2)}`, col4, tableTop + rowHeight * 3);
+        y += 28;
+        doc.moveTo(marginL, y).lineTo(pageW - marginR, y).lineWidth(0.5).stroke('#dddddd');
+        y += 14;
 
-        doc.moveDown(3);
+        // ── Billing Details Table ─────────────────────────────────────────────
+        doc.fill('#0a3d62').fontSize(11).font('Helvetica-Bold').text('BILLING DETAILS', colA, y);
+        y += 18;
 
-        // Summary Section
-        const summaryTop = doc.y;
-        doc.fontSize(10).font('Helvetica-Bold');
-        doc.text('SUMMARY', 50, summaryTop);
+        // Table header row
+        const tCols = [colA, colA + 200, colA + 320, colA + 420];
+        doc.rect(marginL, y, contentW, 22).fill('#0a3d62');
+        doc.fill('#ffffff').fontSize(9).font('Helvetica-Bold');
+        doc.text('Description', tCols[0] + 4, y + 6);
+        doc.text('Reading (m³)', tCols[1], y + 6);
+        doc.text('Rate (KES)', tCols[2], y + 6);
+        doc.text('Amount (KES)', tCols[3], y + 6);
+        y += 22;
 
-        doc.fontSize(9).font('Helvetica');
-        doc.text(`Subtotal: KES ${bill.totalAmount.toFixed(2)}`, 300);
-        doc.text(`Service Charges: KES 0.00`, 300);
-        doc.moveDown(0.2);
-        doc.fontSize(10).font('Helvetica-Bold');
-        doc.text(`Total Amount Due: KES ${bill.totalAmount.toFixed(2)}`, 300);
-        doc.fontSize(9).font('Helvetica');
-        doc.text(`Amount Paid: KES ${bill.amountPaid.toFixed(2)}`, 300);
-        doc.text(`Balance: KES ${bill.balance.toFixed(2)}`, 300);
-        doc.moveDown(0.5);
+        // Table rows
+        const tableRow = (desc: string, reading: string, rate: string, amount: string, shade: boolean, cy: number) => {
+          if (shade) doc.rect(marginL, cy, contentW, 20).fill('#f0f4f8');
+          doc.fill('#1a1a1a').fontSize(9).font('Helvetica');
+          doc.text(desc, tCols[0] + 4, cy + 5);
+          doc.text(reading, tCols[1], cy + 5);
+          doc.text(rate, tCols[2], cy + 5);
+          doc.text(amount, tCols[3], cy + 5);
+          return cy + 20;
+        };
 
-        // Status
-        doc.fontSize(10).font('Helvetica-Bold');
-        const statusColor = bill.status === 'PAID' ? '#22c55e' : bill.status === 'OVERDUE' ? '#ef4444' : '#f59e0b';
-        doc.text(`Status: ${bill.status}`, 300);
+        y = tableRow('Previous Reading', `${bill.previousReading}`, '—', '—', false, y);
+        y = tableRow('Current Reading', `${bill.currentReading}`, '—', '—', true, y);
+        y = tableRow('Units Consumed', `${bill.unitsConsumed}`, `${bill.unitRate.toFixed(2)}`, `${(bill.unitsConsumed * bill.unitRate).toFixed(2)}`, false, y);
 
-        doc.moveDown(1);
+        // Bottom border of table
+        doc.moveTo(marginL, y).lineTo(pageW - marginR, y).lineWidth(1).stroke('#0a3d62');
+        y += 16;
 
-        // Payment Instructions
-        doc.fontSize(9).font('Helvetica-Bold').text('PAYMENT INSTRUCTIONS');
-        doc.fontSize(8).font('Helvetica');
-        doc.text('Please make payment via M-Pesa or bank transfer using your account number.');
-        doc.text('For inquiries, contact support@legacyhomes.co.ke');
+        // ── Summary box ───────────────────────────────────────────────────────
+        const sumX = colA + contentW / 2;
+        const sumW = contentW / 2;
+        doc.rect(sumX, y, sumW, 80).fill('#f8fafc').stroke('#dddddd');
+        doc.fill('#444444').fontSize(9).font('Helvetica');
+        doc.text('Water Charges:', sumX + 10, y + 10);
+        doc.text(`KES ${bill.totalAmount.toFixed(2)}`, sumX + sumW - 10, y + 10, { align: 'right', width: sumW - 20 });
+        doc.text('Service Charges:', sumX + 10, y + 26);
+        doc.text('KES 0.00', sumX + sumW - 10, y + 26, { align: 'right', width: sumW - 20 });
+        doc.moveTo(sumX + 10, y + 44).lineTo(sumX + sumW - 10, y + 44).lineWidth(0.5).stroke('#aaaaaa');
+        doc.fill('#0a3d62').fontSize(11).font('Helvetica-Bold');
+        doc.text('Total Due:', sumX + 10, y + 50);
+        doc.text(`KES ${bill.totalAmount.toFixed(2)}`, sumX + sumW - 10, y + 50, { align: 'right', width: sumW - 20 });
+        doc.fill('#444444').fontSize(9).font('Helvetica');
+        doc.text(`Amount Paid: KES ${bill.amountPaid.toFixed(2)}`, sumX + 10, y + 66);
+        doc.text(`Balance: KES ${bill.balance.toFixed(2)}`, sumX + sumW - 10, y + 66, { align: 'right', width: sumW - 20 });
+        y += 96;
 
-        doc.moveDown(1);
+        // ── Payment Instructions ──────────────────────────────────────────────
+        doc.rect(marginL, y, contentW, 54).fill('#fffbeb').stroke('#fde68a');
+        doc.fill('#92400e').fontSize(10).font('Helvetica-Bold').text('PAYMENT INSTRUCTIONS', marginL + 10, y + 8);
+        doc.fill('#78350f').fontSize(8.5).font('Helvetica');
+        doc.text('Pay via M-Pesa Paybill or bank transfer using your Account Number as the reference.', marginL + 10, y + 22, { width: contentW - 20 });
+        doc.text('For inquiries: support@legacyhomes.co.ke  |  Tel: +254 700 000 000', marginL + 10, y + 36, { width: contentW - 20 });
+        y += 66;
 
-        // Footer
-        doc.fontSize(8).font('Helvetica');
-        doc.text('This is an electronically generated invoice and is valid without a signature.', { align: 'center' });
-        doc.text(`Generated on ${new Date().toLocaleString('en-KE')}`, { align: 'center' });
+        // ── Footer ────────────────────────────────────────────────────────────
+        doc.rect(marginL, y, contentW, 30).fill('#0a3d62');
+        doc.fill('#a8d8ea').fontSize(7.5).font('Helvetica')
+          .text(
+            `This is an electronically generated invoice and is valid without a signature.  Generated on ${new Date().toLocaleString('en-KE')}`,
+            marginL + 10, y + 10, { width: contentW - 20, align: 'center' }
+          );
 
         doc.end();
       } catch (error) {
@@ -692,82 +723,129 @@ export class BillingService {
         },
       },
     });
-
     if (!payment) throw new AppError('Payment not found', 404);
+
+    // Fetch house number for the resident
+    const house = payment.bill.resident?.houseId
+      ? await prisma.house.findUnique({ where: { id: payment.bill.resident.houseId }, select: { houseNumber: true } })
+      : null;
 
     return new Promise((resolve, reject) => {
       try {
-        const doc = new PDFDocument({
-          size: 'A4',
-          margin: 40,
-        });
-
+        const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
         const chunks: Buffer[] = [];
         doc.on('data', (chunk) => chunks.push(chunk));
-        doc.on('end', () => {
-          const pdfBuffer = Buffer.concat(chunks);
-          resolve({
-            pdfBuffer,
-            filename: `receipt-${payment.paymentId}.pdf`,
-          });
-        });
+        doc.on('end', () => resolve({ pdfBuffer: Buffer.concat(chunks), filename: `receipt-${payment.paymentId}.pdf` }));
         doc.on('error', reject);
 
-        // Company Header
-        doc.fontSize(20).font('Helvetica-Bold').text('LEGACY HOMES', { align: 'center' });
-        doc.fontSize(10).font('Helvetica').text('Water Billing System', { align: 'center' });
-        doc.fontSize(9).text('Nairobi, Kenya', { align: 'center' });
-        doc.moveDown(0.5);
+        const pageW = doc.page.width;
+        const marginL = 50;
+        const marginR = 50;
+        const contentW = pageW - marginL - marginR;
 
-        // Receipt Title
-        doc.fontSize(16).font('Helvetica-Bold').text('PAYMENT RECEIPT', { align: 'center' });
-        doc.moveDown(0.5);
+        // ── Header band ──────────────────────────────────────────────────────
+        doc.rect(marginL, 40, contentW, 70).fill('#0a3d62');
+        doc.fill('#ffffff').fontSize(22).font('Helvetica-Bold')
+          .text('LEGACY HOMES', marginL + 16, 52, { width: contentW - 32 });
+        doc.fill('#a8d8ea').fontSize(10).font('Helvetica')
+          .text('Water Billing System  •  Nairobi, Kenya  •  support@legacyhomes.co.ke', marginL + 16, 78, { width: contentW - 32 });
 
-        // Receipt Details
-        doc.fontSize(10).font('Helvetica');
-        doc.text(`Receipt Number: ${payment.paymentId}`, 50);
-        doc.text(`Invoice Number: ${payment.bill.billNumber}`);
-        doc.text(`Payment Date: ${new Date(payment.createdAt).toLocaleDateString('en-KE')}`);
-        doc.text(`Payment Time: ${new Date(payment.createdAt).toLocaleTimeString('en-KE')}`);
-        doc.moveDown(0.5);
+        // ── PAYMENT RECEIPT label + PAID badge ───────────────────────────────
+        doc.fill('#0a3d62').fontSize(18).font('Helvetica-Bold').text('PAYMENT RECEIPT', marginL, 128);
+        const badgeX = pageW - marginR - 90;
+        doc.rect(badgeX, 124, 90, 24).fill('#22c55e');
+        doc.fill('#ffffff').fontSize(10).font('Helvetica-Bold')
+          .text('PAID', badgeX, 130, { width: 90, align: 'center' });
 
-        // Customer Information
-        doc.fontSize(10).font('Helvetica-Bold').text('CUSTOMER INFORMATION');
-        doc.fontSize(9).font('Helvetica');
-        doc.text(`Name: ${payment.bill.resident?.fullName || 'N/A'}`);
-        doc.text(`Account Number: ${payment.bill.resident?.accountNumber || 'N/A'}`);
-        doc.text(`House Number: ${payment.bill.resident?.houseId || 'N/A'}`);
-        doc.text(`Phone: ${payment.bill.resident?.phone || 'N/A'}`);
-        doc.moveDown(0.5);
+        doc.moveTo(marginL, 158).lineTo(pageW - marginR, 158).lineWidth(1).stroke('#cccccc');
 
-        // Payment Details
-        doc.fontSize(10).font('Helvetica-Bold').text('PAYMENT DETAILS');
-        doc.fontSize(9).font('Helvetica');
-        doc.text(`Amount Paid: KES ${payment.amount.toFixed(2)}`);
-        doc.text(`Payment Method: ${payment.mpesaReceiptCode ? 'M-Pesa' : 'Bank Transfer'}`);
+        // ── Two-column meta block ─────────────────────────────────────────────
+        const colA = marginL;
+        const colB = marginL + contentW / 2 + 10;
+        let y = 168;
+
+        const labelVal = (label: string, value: string, x: number, cy: number) => {
+          doc.fill('#888888').fontSize(8).font('Helvetica').text(label.toUpperCase(), x, cy);
+          doc.fill('#1a1a1a').fontSize(10).font('Helvetica-Bold').text(value, x, cy + 12);
+        };
+
+        labelVal('Receipt Number', payment.paymentId, colA, y);
+        labelVal('Invoice Number', payment.bill.billNumber, colB, y);
+        y += 38;
+        labelVal('Payment Date', new Date(payment.createdAt).toLocaleDateString('en-KE'), colA, y);
+        labelVal('Payment Time', new Date(payment.createdAt).toLocaleTimeString('en-KE'), colB, y);
+
+        doc.moveTo(marginL, y + 36).lineTo(pageW - marginR, y + 36).lineWidth(0.5).stroke('#dddddd');
+        y += 48;
+
+        // ── Customer Information ──────────────────────────────────────────────
+        doc.fill('#0a3d62').fontSize(11).font('Helvetica-Bold').text('CUSTOMER', colA, y);
+        y += 18;
+        doc.fill('#1a1a1a').fontSize(10).font('Helvetica-Bold').text(payment.bill.resident?.fullName || 'N/A', colA, y);
+        y += 14;
+        doc.fill('#444444').fontSize(9).font('Helvetica');
+        doc.text(`Account: ${payment.bill.resident?.accountNumber || 'N/A'}`, colA, y); y += 13;
+        doc.text(`House: ${house?.houseNumber || 'N/A'}  |  Phone: ${payment.bill.resident?.phone || 'N/A'}`, colA, y);
+
+        y += 28;
+        doc.moveTo(marginL, y).lineTo(pageW - marginR, y).lineWidth(0.5).stroke('#dddddd');
+        y += 14;
+
+        // ── Payment Details Table ─────────────────────────────────────────────
+        doc.fill('#0a3d62').fontSize(11).font('Helvetica-Bold').text('PAYMENT DETAILS', colA, y);
+        y += 18;
+
+        const tCols = [colA, colA + 320];
+        doc.rect(marginL, y, contentW, 22).fill('#0a3d62');
+        doc.fill('#ffffff').fontSize(9).font('Helvetica-Bold');
+        doc.text('Description', tCols[0] + 4, y + 6);
+        doc.text('Value', tCols[1], y + 6);
+        y += 22;
+
+        const detailRow = (label: string, value: string, shade: boolean, cy: number) => {
+          if (shade) doc.rect(marginL, cy, contentW, 20).fill('#f0f4f8');
+          doc.fill('#444444').fontSize(9).font('Helvetica').text(label, tCols[0] + 4, cy + 5);
+          doc.fill('#1a1a1a').fontSize(9).font('Helvetica-Bold').text(value, tCols[1], cy + 5);
+          return cy + 20;
+        };
+
+        y = detailRow('Amount Paid', `KES ${payment.amount.toFixed(2)}`, false, y);
+        y = detailRow('Payment Method', payment.mpesaReceiptCode ? 'M-Pesa' : 'Bank Transfer', true, y);
         if (payment.mpesaReceiptCode) {
-          doc.text(`M-Pesa Transaction Code: ${payment.mpesaReceiptCode}`);
+          y = detailRow('M-Pesa Transaction Code', payment.mpesaReceiptCode, false, y);
         }
-        doc.text(`Payment Status: ${payment.status}`);
-        doc.moveDown(0.5);
+        y = detailRow('Payment Status', payment.status, payment.mpesaReceiptCode ? true : false, y);
+        doc.moveTo(marginL, y).lineTo(pageW - marginR, y).lineWidth(1).stroke('#0a3d62');
+        y += 16;
 
-        // Bill Summary
-        doc.fontSize(10).font('Helvetica-Bold').text('BILL SUMMARY');
-        doc.fontSize(9).font('Helvetica');
-        doc.text(`Total Bill Amount: KES ${payment.bill.totalAmount.toFixed(2)}`);
-        doc.text(`Amount Paid: KES ${payment.amount.toFixed(2)}`);
-        doc.text(`Remaining Balance: KES ${payment.bill.balance.toFixed(2)}`);
-        doc.moveDown(1);
+        // ── Bill Summary box ──────────────────────────────────────────────────
+        const sumX = colA + contentW / 2;
+        const sumW = contentW / 2;
+        doc.rect(sumX, y, sumW, 80).fill('#f0fdf4').stroke('#86efac');
+        doc.fill('#444444').fontSize(9).font('Helvetica');
+        doc.text('Total Bill Amount:', sumX + 10, y + 10);
+        doc.text(`KES ${payment.bill.totalAmount.toFixed(2)}`, sumX + sumW - 10, y + 10, { align: 'right', width: sumW - 20 });
+        doc.text('Amount Paid:', sumX + 10, y + 26);
+        doc.text(`KES ${payment.amount.toFixed(2)}`, sumX + sumW - 10, y + 26, { align: 'right', width: sumW - 20 });
+        doc.moveTo(sumX + 10, y + 44).lineTo(sumX + sumW - 10, y + 44).lineWidth(0.5).stroke('#aaaaaa');
+        doc.fill('#15803d').fontSize(11).font('Helvetica-Bold');
+        doc.text('Remaining Balance:', sumX + 10, y + 50);
+        doc.text(`KES ${payment.bill.balance.toFixed(2)}`, sumX + sumW - 10, y + 50, { align: 'right', width: sumW - 20 });
+        doc.fill('#16a34a').fontSize(9).font('Helvetica-Bold')
+          .text('Thank you for your payment!', sumX + 10, y + 66, { width: sumW - 20, align: 'center' });
+        y += 96;
 
-        // Footer
-        doc.fontSize(8).font('Helvetica');
-        doc.text('Thank you for your payment!', { align: 'center' });
-        doc.text('This is an electronically generated receipt and is valid without a signature.', { align: 'center' });
-        doc.text(`Generated on ${new Date().toLocaleString('en-KE')}`, { align: 'center' });
+        // ── Footer ────────────────────────────────────────────────────────────
+        doc.rect(marginL, y, contentW, 30).fill('#0a3d62');
+        doc.fill('#a8d8ea').fontSize(7.5).font('Helvetica')
+          .text(
+            `This is an electronically generated receipt and is valid without a signature.  Generated on ${new Date().toLocaleString('en-KE')}`,
+            marginL + 10, y + 10, { width: contentW - 20, align: 'center' }
+          );
 
         doc.end();
       } catch (error) {
-                reject(error);
+        reject(error);
       }
     });
   }
