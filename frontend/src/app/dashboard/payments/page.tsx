@@ -427,6 +427,76 @@ export default function PaymentsPage() {
           )}
         </div>
       </div>
+
+      {/* Recent Payments */}
+      <div className="card">
+        <div style={{ marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)', marginBottom: '4px' }}>
+            Recent Payments
+          </h2>
+          <p style={{ fontSize: '12px', color: 'var(--t2)' }}>
+            Your last 10 payment transactions
+          </p>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--bd)' }}>
+                <th style={{ textAlign: 'left', padding: '12px 0', fontSize: '12px', fontWeight: 600, color: 'var(--t2)' }}>Date</th>
+                <th style={{ textAlign: 'left', padding: '12px 0', fontSize: '12px', fontWeight: 600, color: 'var(--t2)' }}>Bill #</th>
+                <th style={{ textAlign: 'right', padding: '12px 0', fontSize: '12px', fontWeight: 600, color: 'var(--t2)' }}>Amount</th>
+                <th style={{ textAlign: 'left', padding: '12px 0', fontSize: '12px', fontWeight: 600, color: 'var(--t2)' }}>Status</th>
+                <th style={{ textAlign: 'left', padding: '12px 0', fontSize: '12px', fontWeight: 600, color: 'var(--t2)' }}>Receipt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {billsData?.bills && billsData.bills.length > 0 ? (
+                billsData.bills.slice(0, 10).map((bill: any) => (
+                  <tr key={bill.id} style={{ borderBottom: '1px solid var(--bd)' }}>
+                    <td style={{ padding: '12px 0', fontSize: '12px', color: 'var(--t1)' }}>
+                      {new Date(bill.createdAt).toLocaleDateString('en-KE')}
+                    </td>
+                    <td style={{ padding: '12px 0', fontSize: '12px', color: 'var(--t1)' }}>
+                      {bill.billNumber}
+                    </td>
+                    <td style={{ padding: '12px 0', fontSize: '12px', color: 'var(--t1)', textAlign: 'right' }}>
+                      KES {bill.amountPaid.toLocaleString()}
+                    </td>
+                    <td style={{ padding: '12px 0', fontSize: '12px' }}>
+                      <span style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        background: bill.status === 'PAID' ? 'rgba(16, 185, 129, 0.14)' : bill.status === 'PARTIAL' ? 'rgba(245, 158, 11, 0.14)' : 'rgba(124, 154, 184, 0.14)',
+                        color: bill.status === 'PAID' ? '#10b981' : bill.status === 'PARTIAL' ? '#f59e0b' : '#7c9ab8',
+                      }}>
+                        {bill.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 0', fontSize: '12px', color: 'var(--ac)', cursor: 'pointer' }}>
+                      {bill.mpesaReceiptCode ? (
+                        <a href={`/dashboard/billing?billId=${bill.id}`} style={{ textDecoration: 'none', color: 'var(--ac)' }}>
+                          View
+                        </a>
+                      ) : (
+                        <span style={{ color: 'var(--t3)' }}>-</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} style={{ padding: '32px 0', textAlign: 'center', color: 'var(--t2)', fontSize: '12px' }}>
+                    No payment history yet
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
