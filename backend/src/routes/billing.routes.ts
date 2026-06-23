@@ -16,5 +16,6 @@ router.post('/mark-overdue', authenticate, authorize('SUPER_ADMIN'), billingCont
 router.get('/statement/:residentId', authenticate, authorize('SUPER_ADMIN'), billingController.getStatement.bind(billingController));
 router.get('/:id', authenticate, billingController.getById.bind(billingController));
 router.get('/:id/invoice', authenticate, billingController.downloadInvoice.bind(billingController));
+router.get('/receipt/:paymentId', authenticate, billingController.downloadReceipt.bind(billingController));
 
 export default router;

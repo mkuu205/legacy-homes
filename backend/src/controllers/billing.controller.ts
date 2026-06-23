@@ -57,11 +57,22 @@ export class BillingController {
   async downloadInvoice(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { pdfBuffer, filename } = await billingService.generateInvoicePDF(id);
+      const result = await billingService.generateInvoicePDF(id) as any;
       
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-      res.send(pdfBuffer);
+      res.setHeader('Content-Disposition', `attachment; filename=${result.filename}`);
+      res.send(result.pdfBuffer);
+    } catch (error) { next(error); }
+  }
+
+  async downloadReceipt(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { paymentId } = req.params;
+      const result = await billingService.generateReceiptPDF(paymentId) as any;
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=${result.filename}`);
+      res.send(result.pdfBuffer);
     } catch (error) { next(error); }
   }
 }

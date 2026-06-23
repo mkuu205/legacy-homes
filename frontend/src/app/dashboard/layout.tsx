@@ -102,9 +102,14 @@ export default function DashboardLayout({
           {/* Logo */}
           <div className="sb-logo">
             <div className="sb-logo-icon">
-              <Droplets
-                size={18}
-                style={{ color: 'var(--ac)' }}
+              <img
+                src="https://i.ibb.co/5hvy5zXd/Chat-GPT-Image-Jun-23-2026-01-17-11-AM.png"
+                alt="Legacy Homes Logo"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain'
+                }}
               />
             </div>
 

@@ -2,6 +2,8 @@ import prisma from '../config/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { sendBillNotificationEmail } from '../utils/email';
 import logger from '../utils/logger';
+import PDFDocument from 'pdfkit';
+import axios from 'axios';
 
 const UNIT_RATE = 250; // KES per unit
 
@@ -547,28 +549,221 @@ export class BillingService {
     const bill = await this.getBillById(billId);
     if (!bill) throw new AppError('Bill not found', 404);
 
-    // In a real implementation, you would use a library like pdfkit or puppeteer
-    // For now, we'll return a placeholder text as a Buffer to simulate a PDF
-    const content = `
-      LEGACY HOMES WATER BILL
-      -----------------------
-      Bill Number: ${bill.billNumber}
-      Resident: ${bill.resident?.fullName}
-      Account: ${bill.resident?.accountNumber}
-      House: ${bill.houseNumber}
-      Month: ${bill.billingMonth}
-      Units: ${bill.unitsConsumed}
-      Rate: KES ${bill.unitRate}
-      Total: KES ${bill.totalAmount}
-      Balance: KES ${bill.balance}
-      Due Date: ${new Date(bill.dueDate).toLocaleDateString()}
-      Status: ${bill.status}
-    `;
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({
+          size: 'A4',
+          margin: 40,
+        });
 
-    return {
-      pdfBuffer: Buffer.from(content),
-      filename: `invoice-${bill.billNumber}.pdf`,
-    };
+        const chunks: Buffer[] = [];
+        doc.on('data', (chunk) => chunks.push(chunk));
+        doc.on('end', () => {
+          const pdfBuffer = Buffer.concat(chunks);
+          resolve({
+            pdfBuffer,
+            filename: `invoice-${bill.billNumber}.pdf`,
+          });
+        });
+        doc.on('error', reject);
+
+        // Company Header
+        doc.fontSize(20).font('Helvetica-Bold').text('LEGACY HOMES', { align: 'center' });
+        doc.fontSize(10).font('Helvetica').text('Water Billing System', { align: 'center' });
+        doc.fontSize(9).text('Nairobi, Kenya', { align: 'center' });
+        doc.moveDown(0.5);
+
+        // Invoice Title
+        doc.fontSize(16).font('Helvetica-Bold').text('INVOICE', { align: 'center' });
+        doc.moveDown(0.5);
+
+        // Invoice Details
+        doc.fontSize(10).font('Helvetica');
+        doc.text(`Invoice Number: ${bill.billNumber}`, 50);
+        doc.text(`Billing Period: ${bill.billingMonth}`);
+        doc.text(`Date Issued: ${new Date(bill.createdAt).toLocaleDateString('en-KE')}`);
+        doc.text(`Due Date: ${new Date(bill.dueDate).toLocaleDateString('en-KE')}`);
+        doc.moveDown(0.5);
+
+        // Customer Information
+        doc.fontSize(10).font('Helvetica-Bold').text('CUSTOMER INFORMATION');
+        doc.fontSize(9).font('Helvetica');
+        doc.text(`Name: ${bill.resident?.fullName || 'N/A'}`);
+        doc.text(`Account Number: ${bill.resident?.accountNumber || 'N/A'}`);
+        doc.text(`House Number: ${bill.houseNumber || 'N/A'}`);
+        doc.text(`Meter Number: ${bill.meter?.meterNumber || 'N/A'}`);
+        doc.text(`Phone: ${bill.resident?.phone || 'N/A'}`);
+        doc.text(`Email: ${bill.resident?.email || 'N/A'}`);
+        doc.moveDown(0.5);
+
+        // Billing Details Table
+        doc.fontSize(10).font('Helvetica-Bold').text('BILLING DETAILS');
+        doc.moveDown(0.3);
+
+        const tableTop = doc.y;
+        const col1 = 50;
+        const col2 = 200;
+        const col3 = 350;
+        const col4 = 480;
+        const rowHeight = 25;
+
+        // Table Header
+        doc.fontSize(9).font('Helvetica-Bold');
+        doc.text('Description', col1, tableTop);
+        doc.text('Quantity', col2, tableTop);
+        doc.text('Unit Price', col3, tableTop);
+        doc.text('Amount', col4, tableTop);
+
+        // Table Row 1: Previous Reading
+        doc.fontSize(9).font('Helvetica');
+        doc.text('Previous Reading', col1, tableTop + rowHeight);
+        doc.text(`${bill.previousReading} m³`, col2, tableTop + rowHeight);
+
+        // Table Row 2: Current Reading
+        doc.text('Current Reading', col1, tableTop + rowHeight * 2);
+        doc.text(`${bill.currentReading} m³`, col2, tableTop + rowHeight * 2);
+
+        // Table Row 3: Units Consumed
+        doc.text('Units Consumed', col1, tableTop + rowHeight * 3);
+        doc.text(`${bill.unitsConsumed} m³`, col2, tableTop + rowHeight * 3);
+        doc.text(`KES ${bill.unitRate}`, col3, tableTop + rowHeight * 3);
+        doc.text(`KES ${(bill.unitsConsumed * bill.unitRate).toFixed(2)}`, col4, tableTop + rowHeight * 3);
+
+        doc.moveDown(3);
+
+        // Summary Section
+        const summaryTop = doc.y;
+        doc.fontSize(10).font('Helvetica-Bold');
+        doc.text('SUMMARY', 50, summaryTop);
+
+        doc.fontSize(9).font('Helvetica');
+        doc.text(`Subtotal: KES ${bill.totalAmount.toFixed(2)}`, 300);
+        doc.text(`Service Charges: KES 0.00`, 300);
+        doc.moveDown(0.2);
+        doc.fontSize(10).font('Helvetica-Bold');
+        doc.text(`Total Amount Due: KES ${bill.totalAmount.toFixed(2)}`, 300);
+        doc.fontSize(9).font('Helvetica');
+        doc.text(`Amount Paid: KES ${bill.amountPaid.toFixed(2)}`, 300);
+        doc.text(`Balance: KES ${bill.balance.toFixed(2)}`, 300);
+        doc.moveDown(0.5);
+
+        // Status
+        doc.fontSize(10).font('Helvetica-Bold');
+        const statusColor = bill.status === 'PAID' ? '#22c55e' : bill.status === 'OVERDUE' ? '#ef4444' : '#f59e0b';
+        doc.text(`Status: ${bill.status}`, 300);
+
+        doc.moveDown(1);
+
+        // Payment Instructions
+        doc.fontSize(9).font('Helvetica-Bold').text('PAYMENT INSTRUCTIONS');
+        doc.fontSize(8).font('Helvetica');
+        doc.text('Please make payment via M-Pesa or bank transfer using your account number.');
+        doc.text('For inquiries, contact support@legacyhomes.co.ke');
+
+        doc.moveDown(1);
+
+        // Footer
+        doc.fontSize(8).font('Helvetica');
+        doc.text('This is an electronically generated invoice and is valid without a signature.', { align: 'center' });
+        doc.text(`Generated on ${new Date().toLocaleString('en-KE')}`, { align: 'center' });
+
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  async generateReceiptPDF(paymentId: string) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        bill: {
+          include: {
+            resident: true,
+            meter: true,
+          },
+        },
+      },
+    });
+
+    if (!payment) throw new AppError('Payment not found', 404);
+
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({
+          size: 'A4',
+          margin: 40,
+        });
+
+        const chunks: Buffer[] = [];
+        doc.on('data', (chunk) => chunks.push(chunk));
+        doc.on('end', () => {
+          const pdfBuffer = Buffer.concat(chunks);
+          resolve({
+            pdfBuffer,
+            filename: `receipt-${payment.paymentId}.pdf`,
+          });
+        });
+        doc.on('error', reject);
+
+        // Company Header
+        doc.fontSize(20).font('Helvetica-Bold').text('LEGACY HOMES', { align: 'center' });
+        doc.fontSize(10).font('Helvetica').text('Water Billing System', { align: 'center' });
+        doc.fontSize(9).text('Nairobi, Kenya', { align: 'center' });
+        doc.moveDown(0.5);
+
+        // Receipt Title
+        doc.fontSize(16).font('Helvetica-Bold').text('PAYMENT RECEIPT', { align: 'center' });
+        doc.moveDown(0.5);
+
+        // Receipt Details
+        doc.fontSize(10).font('Helvetica');
+        doc.text(`Receipt Number: ${payment.paymentId}`, 50);
+        doc.text(`Invoice Number: ${payment.bill.billNumber}`);
+        doc.text(`Payment Date: ${new Date(payment.createdAt).toLocaleDateString('en-KE')}`);
+        doc.text(`Payment Time: ${new Date(payment.createdAt).toLocaleTimeString('en-KE')}`);
+        doc.moveDown(0.5);
+
+        // Customer Information
+        doc.fontSize(10).font('Helvetica-Bold').text('CUSTOMER INFORMATION');
+        doc.fontSize(9).font('Helvetica');
+        doc.text(`Name: ${payment.bill.resident?.fullName || 'N/A'}`);
+        doc.text(`Account Number: ${payment.bill.resident?.accountNumber || 'N/A'}`);
+        doc.text(`House Number: ${payment.bill.resident?.houseId || 'N/A'}`);
+        doc.text(`Phone: ${payment.bill.resident?.phone || 'N/A'}`);
+        doc.moveDown(0.5);
+
+        // Payment Details
+        doc.fontSize(10).font('Helvetica-Bold').text('PAYMENT DETAILS');
+        doc.fontSize(9).font('Helvetica');
+        doc.text(`Amount Paid: KES ${payment.amount.toFixed(2)}`);
+        doc.text(`Payment Method: ${payment.mpesaReceiptCode ? 'M-Pesa' : 'Bank Transfer'}`);
+        if (payment.mpesaReceiptCode) {
+          doc.text(`M-Pesa Transaction Code: ${payment.mpesaReceiptCode}`);
+        }
+        doc.text(`Payment Status: ${payment.status}`);
+        doc.moveDown(0.5);
+
+        // Bill Summary
+        doc.fontSize(10).font('Helvetica-Bold').text('BILL SUMMARY');
+        doc.fontSize(9).font('Helvetica');
+        doc.text(`Total Bill Amount: KES ${payment.bill.totalAmount.toFixed(2)}`);
+        doc.text(`Amount Paid: KES ${payment.amount.toFixed(2)}`);
+        doc.text(`Remaining Balance: KES ${payment.bill.balance.toFixed(2)}`);
+        doc.moveDown(1);
+
+        // Footer
+        doc.fontSize(8).font('Helvetica');
+        doc.text('Thank you for your payment!', { align: 'center' });
+        doc.text('This is an electronically generated receipt and is valid without a signature.', { align: 'center' });
+        doc.text(`Generated on ${new Date().toLocaleString('en-KE')}`, { align: 'center' });
+
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 }
 

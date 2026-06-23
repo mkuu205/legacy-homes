@@ -3,8 +3,11 @@ import { sendEmail } from '../utils/email';
 import { io } from '../server';
 import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
+import axios from 'axios';
 
 let AT: any = null;
+let TALKSASA_API_KEY = process.env.TALKSASA_API_KEY || '';
+let TALKSASA_SENDER_ID = 'TALK-SASA';
 
 try {
   const AfricasTalking = require('africastalking');
@@ -15,6 +18,45 @@ try {
   });
 } catch {
   logger.warn("Africa's Talking not initialized");
+}
+
+// Helper function to send SMS via TalkSasa
+async function sendTalkSasaSMS(phoneNumber: string, message: string): Promise<void> {
+  if (!TALKSASA_API_KEY) {
+    logger.warn('TalkSasa API key not configured');
+    return;
+  }
+
+  try {
+    const axios = require('axios');
+    let phone = phoneNumber;
+    
+    if (phone.startsWith('0')) {
+      phone = '254' + phone.slice(1);
+    }
+    
+    if (phone.startsWith('+')) {
+      phone = phone.slice(1);
+    }
+    
+    if (!phone.startsWith('254')) {
+      phone = '254' + phone;
+    }
+
+    await axios.post('https://api.talksasa.com/v1/send', {
+      phone_number: phone,
+      message,
+      sender_id: TALKSASA_SENDER_ID,
+    }, {
+      headers: {
+        'Authorization': `Bearer ${TALKSASA_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (error) {
+    logger.error('Failed to send TalkSasa SMS:', error);
+    throw error;
+  }
 }
 
 const VALID_NOTIFICATION_TYPES = [
@@ -29,6 +71,16 @@ const VALID_NOTIFICATION_TYPES = [
 ];
 
 const VALID_CHANNELS = ['IN_APP', 'EMAIL', 'SMS'];
+
+// Extend NotificationService interface
+declare global {
+  namespace Express {
+    interface NotificationService {
+      sendBillGeneratedNotification(residentId: string, billNumber: string, totalAmount: number): Promise<void>;
+      sendPaymentSuccessNotification(residentId: string, paymentAmount: number, mpesaCode?: string): Promise<void>;
+    }
+  }
+}
 
 export class NotificationService {
   async sendBroadcast(data: {
@@ -218,35 +270,48 @@ export class NotificationService {
         });
       }
 
-      if (channel === 'SMS' && AT) {
-        const sms = AT.SMS;
-        let phone = resident.phone;
+      if (channel === 'SMS') {
+        try {
+          // Try TalkSasa first
+          if (TALKSASA_API_KEY) {
+            await sendTalkSasaSMS(resident.phone, `${title}: ${message}`);
+          } else if (AT) {
+            // Fallback to Africa's Talking
+            const sms = AT.SMS;
+            let phone = resident.phone;
 
-        if (phone.startsWith('0')) {
-          phone = '+254' + phone.slice(1);
+            if (phone.startsWith('0')) {
+              phone = '+254' + phone.slice(1);
+            }
+
+            if (!phone.startsWith('+')) {
+              phone = '+' + phone;
+            }
+
+            await sms.send({
+              to: [phone],
+              message: `${title}: ${message}`,
+              from: process.env.AT_SENDER_ID,
+            });
+          } else {
+            throw new Error('No SMS provider configured');
+          }
+
+          await prisma.userNotification.updateMany({
+            where: {
+              notificationId,
+              userId: resident.id,
+              channel: 'SMS',
+            },
+            data: {
+              status: 'DELIVERED',
+              deliveredAt: new Date(),
+            },
+          });
+        } catch (error) {
+          logger.error('Failed to send SMS:', error);
+          throw error;
         }
-
-        if (!phone.startsWith('+')) {
-          phone = '+' + phone;
-        }
-
-        await sms.send({
-          to: [phone],
-          message: `${title}: ${message}`,
-          from: process.env.AT_SENDER_ID,
-        });
-
-        await prisma.userNotification.updateMany({
-          where: {
-            notificationId,
-            userId: resident.id,
-            channel: 'SMS',
-          },
-          data: {
-            status: 'DELIVERED',
-            deliveredAt: new Date(),
-          },
-        });
       }
     } catch (error) {
       logger.error(
@@ -420,6 +485,113 @@ export class NotificationService {
     return {
       message: 'All sent notifications deleted successfully',
     };
+  }
+
+  async sendBillGeneratedNotification(
+    residentId: string,
+    billNumber: string,
+    totalAmount: number
+  ) {
+    const resident = await prisma.user.findUnique({
+    where: { id: residentId },
+    select: { id: true, fullName: true, email: true, phone: true },
+  });
+
+    if (!resident) throw new AppError('Resident not found', 404);
+
+    // Send SMS
+    if (TALKSASA_API_KEY) {
+      try {
+        await sendTalkSasaSMS(
+          resident.phone,
+          `Legacy Homes: Your water bill has been generated. Please log in to view and pay.`
+        );
+      } catch (error) {
+        logger.error('Failed to send bill notification SMS:', error);
+      }
+    }
+
+    // Send Email
+    try {
+      await sendEmail({
+        to: resident.email,
+        subject: 'Your Water Bill - Legacy Homes',
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+            <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+              <h2 style="color:#fff;margin:0;">💧 Legacy Homes</h2>
+            </div>
+            <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
+              <h3 style="color:#1e293b;">Your Water Bill is Ready</h3>
+              <p style="color:#64748b;line-height:1.6;">Dear ${resident.fullName},</p>
+              <p style="color:#64748b;line-height:1.6;">Your water bill for this month has been generated and is ready for payment.</p>
+              <div style="background:#f1f5f9;padding:16px;border-radius:8px;margin:16px 0;">
+                <p style="margin:0;color:#1e293b;"><strong>Bill Number:</strong> ${billNumber}</p>
+                <p style="margin:8px 0 0 0;color:#1e293b;"><strong>Amount Due:</strong> KES ${totalAmount.toFixed(2)}</p>
+              </div>
+              <p style="color:#64748b;line-height:1.6;">Please log in to your account to view the full bill details and make payment.</p>
+              <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Legacy Homes Water Billing System</p>
+            </div>
+          </div>
+        `,
+      });
+    } catch (error) {
+      logger.error('Failed to send bill notification email:', error);
+    }
+  }
+
+  async sendPaymentSuccessNotification(
+    residentId: string,
+    paymentAmount: number,
+    mpesaCode?: string
+  ) {
+    const resident = await prisma.user.findUnique({
+    where: { id: residentId },
+    select: { id: true, fullName: true, email: true, phone: true },
+  });
+
+    if (!resident) throw new AppError('Resident not found', 404);
+
+    // Send SMS
+    if (TALKSASA_API_KEY) {
+      try {
+        await sendTalkSasaSMS(
+          resident.phone,
+          `Legacy Homes: Your payment has been received successfully. Thank you.`
+        );
+      } catch (error) {
+        logger.error('Failed to send payment success SMS:', error);
+      }
+    }
+
+    // Send Email
+    try {
+      await sendEmail({
+        to: resident.email,
+        subject: 'Payment Received - Legacy Homes',
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+            <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
+              <h2 style="color:#fff;margin:0;">💧 Legacy Homes</h2>
+            </div>
+            <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
+              <h3 style="color:#1e293b;">✓ Payment Received</h3>
+              <p style="color:#64748b;line-height:1.6;">Dear ${resident.fullName},</p>
+              <p style="color:#64748b;line-height:1.6;">Thank you for your payment. Your transaction has been processed successfully.</p>
+              <div style="background:#f1f5f9;padding:16px;border-radius:8px;margin:16px 0;">
+                <p style="margin:0;color:#1e293b;"><strong>Amount Paid:</strong> KES ${paymentAmount.toFixed(2)}</p>
+                ${mpesaCode ? `<p style="margin:8px 0 0 0;color:#1e293b;"><strong>M-Pesa Code:</strong> ${mpesaCode}</p>` : ''}
+                <p style="margin:8px 0 0 0;color:#1e293b;"><strong>Date:</strong> ${new Date().toLocaleDateString('en-KE')}</p>
+              </div>
+              <p style="color:#64748b;line-height:1.6;">Your receipt has been generated and is available in your account.</p>
+              <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Legacy Homes Water Billing System</p>
+            </div>
+          </div>
+        `,
+      });
+        } catch (error) {
+      logger.error('Failed to send payment success email:', error);
+    }
   }
 }
 

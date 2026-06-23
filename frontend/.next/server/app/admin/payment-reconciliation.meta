@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/admin/layout,_N_T_/admin/payment-reconciliation/layout,_N_T_/admin/payment-reconciliation/page,_N_T_/admin/payment-reconciliation"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/admin/payment-reconciliation/__PAGE__",
+    "/admin/payment-reconciliation",
+    "/admin",
+    "/_index",
+    "/_head"
+  ]
+}
