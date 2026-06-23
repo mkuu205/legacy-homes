@@ -589,19 +589,51 @@ export class NotificationService {
 
     if (!resident) throw new AppError('Resident not found', 404);
 
-    // Send SMS
+    const title = 'Payment Received';
+    const message = `Payment of KES ${paymentAmount.toFixed(2)} received successfully. Ref: ${mpesaCode || 'N/A'}. Thank you.`;
+
+    // 1. Create In-App Notification Record
+    try {
+      const notification = await prisma.notification.create({
+        data: {
+          title,
+          message,
+          type: 'PAYMENT_CONFIRMATION',
+          channels: ['IN_APP', 'EMAIL', 'SMS'],
+          sentBy: 'SYSTEM',
+        },
+      });
+
+      await prisma.userNotification.create({
+        data: {
+          notificationId: notification.id,
+          userId: resident.id,
+          channel: 'IN_APP',
+          status: 'DELIVERED',
+          deliveredAt: new Date(),
+        },
+      });
+
+      // Emit via Socket.io
+      io.to(`user_${resident.id}`).emit('notification', {
+        title,
+        message,
+        notificationId: notification.id,
+      });
+    } catch (error) {
+      logger.error('Failed to create in-app notification for payment success:', error);
+    }
+
+    // 2. Send SMS
     if (TALKSASA_API_TOKEN) {
       try {
-        await sendTalkSasaSMS(
-          resident.phone,
-          `Legacy Homes: Payment of KES ${paymentAmount.toFixed(2)} received successfully. Ref: ${mpesaCode || 'N/A'}. Thank you.`
-        );
+        await sendTalkSasaSMS(resident.phone, `Legacy Homes: ${message}`);
       } catch (error) {
         logger.error('Failed to send payment success SMS:', error);
       }
     }
 
-    // Send Email
+    // 3. Send Email
     try {
       await sendEmail({
         to: resident.email,

@@ -58,6 +58,11 @@ export const io = new SocketIOServer(httpServer, {
 io.on('connection', (socket) => {
   logger.info(`Socket connected: ${socket.id}`);
 
+  socket.on('join', (roomName: string) => {
+    socket.join(roomName);
+    logger.info(`Socket ${socket.id} joined room: ${roomName}`);
+  });
+
   socket.on('join_room', (userId: string) => {
     socket.join(`user_${userId}`);
     logger.info(`User ${userId} joined their room`);

@@ -48,6 +48,10 @@ export const useAuthStore = create<AuthState>()(
         sessionStorage.setItem('accessToken', accessToken);
         sessionStorage.setItem('refreshToken', refreshToken);
         sessionStorage.setItem('sessionId', sessionId);
+        
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+        localStorage.setItem('sessionId', sessionId);
 
         set({
           user,
@@ -69,6 +73,10 @@ export const useAuthStore = create<AuthState>()(
         sessionStorage.removeItem('accessToken');
         sessionStorage.removeItem('refreshToken');
         sessionStorage.removeItem('sessionId');
+        
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('sessionId');
 
         set({
           user: null,
@@ -80,6 +88,10 @@ export const useAuthStore = create<AuthState>()(
         sessionStorage.removeItem('accessToken');
         sessionStorage.removeItem('refreshToken');
         sessionStorage.removeItem('sessionId');
+        
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('sessionId');
 
         set({
           user: null,

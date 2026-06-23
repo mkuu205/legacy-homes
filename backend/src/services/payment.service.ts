@@ -182,7 +182,7 @@ export class PaymentService {
   }
 
   async handleCallback(payload: any) {
-    logger.info('Tuma callback received:', JSON.stringify(payload));
+    logger.info('Tuma callback received with payload:', JSON.stringify(payload));
 
     const {
       checkout_request_id,
@@ -196,6 +196,8 @@ export class PaymentService {
       timestamp
     } = payload;
 
+    logger.info(`Callback Data Extraction - MerchantID: ${merchant_request_id}, CheckoutID: ${checkout_request_id}, Status: ${status}, Receipt: ${mpesa_receipt_number}, Amount: ${amount}`);
+
     const payment = await prisma.payment.findFirst({
       where: {
         OR: [
@@ -206,22 +208,28 @@ export class PaymentService {
     });
 
     if (!payment) {
-      logger.warn(`Callback received for unknown payment: ${checkout_request_id || merchant_request_id}`);
-      return { success: true, message: 'Callback received' };
+      logger.warn(`Callback received for unknown payment: ${checkout_request_id || merchant_request_id}. SILENTLY IGNORING TO PREVENT WEBHOOK RETRIES.`);
+      return { success: true, message: 'Callback received but payment not found' };
     }
 
     if (payment.status === 'SUCCESSFUL') {
-      logger.info(`Callback for already successful payment: ${payment.paymentId}`);
-      return { success: true, message: 'Callback received' };
+      logger.info(`Callback for already successful payment: ${payment.paymentId}. Skipping reconciliation.`);
+      return { success: true, message: 'Callback received for successful payment' };
     }
 
     const verificationTimestamp = timestamp ? new Date(timestamp) : new Date();
 
     if (status === 'completed' || result_code === 0 || result_code === "0") {
-      logger.info(`Payment ${payment.paymentId} SUCCESSFUL. Reconciling...`);
-      await this.reconcilePayment(payment.id, mpesa_receipt_number, Number(amount || payment.amount), payload, verificationTimestamp);
+      logger.info(`Payment ${payment.paymentId} marked as SUCCESSFUL in Tuma callback. Starting reconciliation...`);
+      try {
+        await this.reconcilePayment(payment.id, mpesa_receipt_number, Number(amount || payment.amount), payload, verificationTimestamp);
+        logger.info(`Reconciliation completed for payment ${payment.paymentId}`);
+      } catch (error: any) {
+        logger.error(`CRITICAL: Reconciliation failed for payment ${payment.paymentId}:`, error.message);
+        throw error; // Let the controller handle and potentially retry or log
+      }
     } else {
-      logger.info(`Payment ${payment.paymentId} FAILED/CANCELLED: ${result_desc || failure_reason}`);
+      logger.info(`Payment ${payment.paymentId} marked as FAILED/CANCELLED in callback: ${result_desc || failure_reason}`);
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
@@ -233,7 +241,7 @@ export class PaymentService {
       });
     }
 
-    return { success: true, message: 'Callback received' };
+    return { success: true, message: 'Callback processed successfully' };
   }
 
   private async reconcilePayment(
@@ -243,51 +251,92 @@ export class PaymentService {
     payload: any,
     verificationTimestamp: Date
   ) {
-    const payment = await prisma.payment.findUnique({
-      where: { id: paymentId },
-      include: { bill: true },
-    });
+    // Use a transaction to ensure all updates succeed or fail together
+    await prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.findUnique({
+        where: { id: paymentId },
+        include: { bill: true },
+      });
 
-    if (!payment || payment.status === 'SUCCESSFUL') return;
+      if (!payment) {
+        throw new Error(`Payment ${paymentId} not found during reconciliation`);
+      }
 
-    await prisma.payment.update({
-      where: { id: paymentId },
-      data: {
-        status: 'SUCCESSFUL',
-        mpesaReceiptCode,
-        callbackPayload: payload,
-        verificationTimestamp,
-        failureReason: null,
-      },
-    });
+      if (payment.status === 'SUCCESSFUL') {
+        logger.info(`Payment ${paymentId} already reconciled.`);
+        return;
+      }
 
-    const newAmountPaid = payment.bill.amountPaid + amount;
-    const newBalance = Math.max(0, payment.bill.totalAmount - newAmountPaid);
+      // 1. Update Payment Record
+      logger.info(`Updating payment ${payment.paymentId} to SUCCESSFUL`);
+      await tx.payment.update({
+        where: { id: paymentId },
+        data: {
+          status: 'SUCCESSFUL',
+          mpesaReceiptCode,
+          callbackPayload: payload,
+          verificationTimestamp,
+          failureReason: null,
+        },
+      });
 
-    await prisma.bill.update({
-      where: { id: payment.billId },
-      data: {
-        amountPaid: newAmountPaid,
-        balance: newBalance,
-        status: newBalance <= 0 ? 'PAID' : 'PARTIAL',
-      },
-    });
+      // 2. Update Bill Record
+      const newAmountPaid = payment.bill.amountPaid + amount;
+      const newBalance = Math.max(0, payment.bill.totalAmount - newAmountPaid);
+      const newStatus = newBalance <= 0 ? 'PAID' : 'PARTIAL';
 
-    io.to(`user_${payment.residentId}`).emit('payment_success', {
-      paymentId: payment.paymentId,
-      amount,
-      mpesaReceiptCode,
-    });
+      logger.info(`Updating bill ${payment.bill.billNumber}: PaidAmount=${newAmountPaid}, Balance=${newBalance}, Status=${newStatus}`);
+      await tx.bill.update({
+        where: { id: payment.billId },
+        data: {
+          amountPaid: newAmountPaid,
+          balance: newBalance,
+          status: newStatus,
+          updatedAt: new Date(),
+        },
+      });
 
-    try {
-      await notificationService.sendPaymentSuccessNotification(
-        payment.residentId,
+      // 3. Emit Socket.IO events for real-time dashboard updates
+      logger.info(`Emitting real-time updates for resident ${payment.residentId}`);
+      
+      // Emit to resident specifically
+      io.to(`user_${payment.residentId}`).emit('payment_completed', {
+        paymentId: payment.paymentId,
         amount,
-        mpesaReceiptCode
-      );
-    } catch (err) {
-      logger.error('Failed to send notifications:', err);
-    }
+        mpesaReceiptCode,
+        billId: payment.billId,
+        newBalance,
+        newStatus
+      });
+
+      io.to(`user_${payment.residentId}`).emit('bill_updated', {
+        billId: payment.billId,
+        newBalance,
+        newStatus
+      });
+
+      io.to(`user_${payment.residentId}`).emit('dashboard_updated', {
+        residentId: payment.residentId
+      });
+
+      // 4. Create and send notifications
+      try {
+        logger.info(`Creating notification for payment ${payment.paymentId}`);
+        await notificationService.sendPaymentSuccessNotification(
+          payment.residentId,
+          amount,
+          mpesaReceiptCode
+        );
+        
+        io.to(`user_${payment.residentId}`).emit('notification_created', {
+          type: 'PAYMENT_CONFIRMATION',
+          message: `Payment of KES ${amount} received. Receipt: ${mpesaReceiptCode}`
+        });
+      } catch (err) {
+        logger.error('Failed to send notifications during reconciliation:', err);
+        // We don't roll back the transaction if notifications fail
+      }
+    });
   }
 
   async checkPaymentStatus(paymentId: string, userId: string) {

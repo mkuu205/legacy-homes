@@ -12,6 +12,7 @@ export const api: AxiosInstance = axios.create({
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
+    // Try to get token from storage
     const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
     const sessionId = sessionStorage.getItem('sessionId') || localStorage.getItem('sessionId');
 
@@ -21,6 +22,11 @@ api.interceptors.request.use((config) => {
 
     if (sessionId) {
       config.headers['X-Session-ID'] = sessionId;
+    }
+    
+    // Log for debugging (production logs showed missing tokens)
+    if (!token && !config.url?.includes('/auth/')) {
+      console.warn(`Request to ${config.url} is missing Authorization token`);
     }
   }
 
@@ -73,9 +79,11 @@ api.interceptors.response.use(
         }
 
         sessionStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('accessToken', accessToken);
 
         if (newRefreshToken) {
           sessionStorage.setItem('refreshToken', newRefreshToken);
+          localStorage.setItem('refreshToken', newRefreshToken);
         }
 
         // Update the original request with the new token
