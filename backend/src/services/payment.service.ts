@@ -1,5 +1,4 @@
 import axios from 'axios';
-import crypto from 'crypto';
 import prisma from '../config/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
@@ -36,7 +35,7 @@ const normalizePhoneNumber = (phoneNumber: string): string => {
     phone = `254${phone}`;
   }
 
-  if (!/^2547\d{8}$/.test(phone)) {
+  if (!/^254\d{9}$/.test(phone)) {
     throw new AppError(
       'Invalid phone number format. Use 07XXXXXXXX or 2547XXXXXXXX',
       400
@@ -47,7 +46,36 @@ const normalizePhoneNumber = (phoneNumber: string): string => {
 };
 
 export class PaymentService {
-  private payHeroBaseUrl = 'https://backend.payhero.co.ke/api/v2';
+  private tumaApiUrl = process.env.TUMA_API_URL || 'https://api.tuma.co.ke';
+  private tumaAuthUrl = process.env.TUMA_AUTH_URL || 'https://api.tuma.co.ke/auth/token';
+  private cachedToken: string | null = null;
+  private tokenExpiry: number | null = null;
+
+  private async getAuthToken(): Promise<string> {
+    if (this.cachedToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
+      return this.cachedToken;
+    }
+
+    try {
+      logger.info('Requesting new Tuma auth token');
+      const response = await axios.post(this.tumaAuthUrl, {
+        email: process.env.TUMA_BUSINESS_EMAIL,
+        api_key: process.env.TUMA_API_KEY,
+      });
+
+      if (response.data.success && response.data.data.token) {
+        this.cachedToken = response.data.data.token;
+        // Assume token is valid for 1 hour if not specified, or parse from JWT if needed
+        // For simplicity, we'll refresh every 50 minutes
+        this.tokenExpiry = Date.now() + 50 * 60 * 1000;
+        return this.cachedToken!;
+      }
+      throw new Error(response.data.message || 'Authentication failed');
+    } catch (error: any) {
+      logger.error('Tuma authentication error:', error.response?.data || error.message);
+      throw new AppError('Failed to authenticate with payment provider', 500);
+    }
+  }
 
   async initiateSTKPush(data: {
     billId: string;
@@ -85,42 +113,8 @@ export class PaymentService {
       );
     }
 
-    const existingPendingPayment = await prisma.payment.findFirst({
-      where: {
-        billId: data.billId,
-        residentId: data.residentId,
-        status: 'PENDING',
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-
-    if (existingPendingPayment) {
-      const pendingAge =
-        Date.now() - new Date(existingPendingPayment.createdAt).getTime();
-
-      const timeoutMs = 60 * 1000;
-
-      if (pendingAge < timeoutMs) {
-        throw new AppError(
-          `A payment request is already pending. Please wait ${Math.ceil(
-            (timeoutMs - pendingAge) / 1000
-          )} seconds.`,
-          400
-        );
-      }
-
-      await prisma.payment.update({
-        where: { id: existingPendingPayment.id },
-        data: {
-          status: 'FAILED',
-          failureReason: 'Timed out / abandoned by user',
-        },
-      });
-    }
-
     const paymentId = generatePaymentId();
+    const token = await this.getAuthToken();
 
     const payment = await prisma.payment.create({
       data: {
@@ -130,338 +124,225 @@ export class PaymentService {
         amount: data.amount,
         phoneNumber: phone,
         status: 'PENDING',
+        provider: 'TUMA',
       },
     });
 
     try {
+      logger.info(`Initiating Tuma STK Push for payment ${paymentId}`);
       const response = await axios.post(
-        `${this.payHeroBaseUrl}/payments`,
+        `${this.tumaApiUrl}/payment/stk-push`,
         {
           amount: data.amount,
-          phone_number: phone,
-          channel_id: process.env.PAYHERO_CHANNEL_ID,
-          provider: 'm-pesa',
-          external_reference: paymentId,
-          callback_url: process.env.PAYHERO_CALLBACK_URL,
-          customer_name: bill.resident?.fullName || 'Customer',
-          account_reference: bill.billNumber,
+          phone: phone,
           description: `Water Bill Payment - ${bill.billNumber}`,
+          callback_url: process.env.TUMA_CALLBACK_URL,
         },
         {
           headers: {
-            Authorization: process.env.PAYHERO_AUTH,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
-            Accept: 'application/json',
           },
           timeout: 30000,
         }
       );
 
-      const checkoutRequestId =
-        response.data?.CheckoutRequestID ||
-        response.data?.checkout_request_id ||
-        response.data?.reference ||
-        null;
+      if (response.data.success) {
+        const { merchant_request_id, checkout_request_id } = response.data.data;
 
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          checkoutRequestId,
-          payHeroReference: response.data?.reference || null,
-        },
-      });
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            merchantRequestId: merchant_request_id,
+            checkoutRequestId: checkout_request_id,
+          },
+        });
 
-      return {
-        success: true,
-        paymentId,
-        checkoutRequestId,
-        message: 'STK Push sent successfully.',
-      };
+        return {
+          success: true,
+          paymentId,
+          merchantRequestId: merchant_request_id,
+          checkoutRequestId: checkout_request_id,
+          message: response.data.message || 'STK Push sent successfully.',
+        };
+      }
+      throw new Error(response.data.message || 'STK Push failed');
     } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || 'Unknown payment error';
+      logger.error('Tuma STK Push error:', error.response?.data || error.message);
+
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
           status: 'FAILED',
-          failureReason:
-            error?.response?.data?.message ||
-            error?.message ||
-            'Unknown payment error',
+          failureReason: errorMessage,
         },
       });
 
-      throw new AppError(
-        error?.response?.data?.message || 'Failed to initiate payment.',
-        500
-      );
+      throw new AppError(errorMessage, 500);
     }
   }
 
-  async handleCallback(payload: any, signature: string) {
-    const webhookSecret = process.env.PAYHERO_WEBHOOK_SECRET;
+  async handleCallback(payload: any) {
+    logger.info('Tuma callback received:', JSON.stringify(payload));
 
-    logger.info('Processing PayHero callback payload:', JSON.stringify(payload));
-
-    if (webhookSecret && signature) {
-      const expectedSig = crypto
-        .createHmac('sha256', webhookSecret)
-        .update(JSON.stringify(payload))
-        .digest('hex');
-
-      if (signature !== expectedSig) {
-        logger.error('Invalid webhook signature detected');
-        throw new AppError('Invalid webhook signature', 401);
-      }
-      logger.info('Webhook signature verified successfully');
-    }
-
-    const paymentId =
-      payload?.external_reference ||
-      payload?.reference ||
-      payload?.payment_reference ||
-      payload?.CheckoutRequestID;
-
-    const status = payload?.status || payload?.Status;
-    const mpesaReceiptCode =
-      payload?.MpesaReceiptNumber || 
-      payload?.mpesa_receipt || 
-      payload?.transaction_id ||
-      payload?.TransactionID ||
-      null;
-
-    const amount = Number(payload?.Amount || payload?.amount || 0);
-
-    logger.info(`Extracted Callback Data - PaymentID: ${paymentId}, Status: ${status}, Receipt: ${mpesaReceiptCode}, Amount: ${amount}`);
-
-    if (!paymentId) {
-      logger.warn('Callback received without a valid payment reference');
-      return { received: true };
-    }
+    const {
+      checkout_request_id,
+      merchant_request_id,
+      status,
+      mpesa_receipt_number,
+      amount,
+      result_code,
+      result_desc,
+      failure_reason,
+      timestamp
+    } = payload;
 
     const payment = await prisma.payment.findFirst({
       where: {
         OR: [
-          { paymentId: paymentId },
-          { checkoutRequestId: paymentId },
-          { payHeroReference: paymentId }
+          { checkoutRequestId: checkout_request_id },
+          { merchantRequestId: merchant_request_id }
         ]
       },
     });
 
     if (!payment) {
-      logger.warn(`Callback received for unknown payment reference: ${paymentId}`);
-      return { received: true };
+      logger.warn(`Callback received for unknown payment: ${checkout_request_id || merchant_request_id}`);
+      return { success: true, message: 'Callback received' };
     }
 
-    logger.info(`Matched Payment Found: ${payment.id} (Current Status: ${payment.status})`);
-
-    // If payment is already successful, don't re-process but log it
     if (payment.status === 'SUCCESSFUL') {
-      logger.info(`Callback received for already successful payment: ${payment.paymentId}`);
-      return { received: true };
+      logger.info(`Callback for already successful payment: ${payment.paymentId}`);
+      return { success: true, message: 'Callback received' };
     }
 
-    const isSuccessful = 
-      status === 'SUCCESS' || 
-      status === 'COMPLETED' || 
-      status === 'Successful' ||
-      payload?.ResultCode === 0 ||
-      payload?.ResultCode === "0";
+    const verificationTimestamp = timestamp ? new Date(timestamp) : new Date();
 
-    if (isSuccessful) {
-      logger.info(`Payment ${payment.paymentId} confirmed SUCCESSFUL. Reconciling...`);
-      await this.reconcilePayment(payment.id, mpesaReceiptCode, amount);
-      logger.info(`Payment ${payment.paymentId} reconciliation complete.`);
+    if (status === 'completed' || result_code === 0 || result_code === "0") {
+      logger.info(`Payment ${payment.paymentId} SUCCESSFUL. Reconciling...`);
+      await this.reconcilePayment(payment.id, mpesa_receipt_number, Number(amount || payment.amount), payload, verificationTimestamp);
     } else {
-      logger.info(`Payment ${payment.paymentId} marked as FAILED in callback.`);
+      logger.info(`Payment ${payment.paymentId} FAILED/CANCELLED: ${result_desc || failure_reason}`);
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
-          status: 'FAILED',
-          failureReason:
-            payload?.ResultDesc ||
-            payload?.message ||
-            payload?.StatusDescription ||
-            'Payment failed',
-          mpesaReceiptCode: mpesaReceiptCode || payment.mpesaReceiptCode,
+          status: status === 'cancelled' ? 'FAILED' : 'FAILED', // You can add CANCELLED to enum if needed
+          failureReason: failure_reason || result_desc || 'Payment failed',
+          callbackPayload: payload,
+          verificationTimestamp,
         },
       });
     }
 
-    return { received: true };
+    return { success: true, message: 'Callback received' };
   }
 
   private async reconcilePayment(
     paymentId: string,
     mpesaReceiptCode: string,
-    amount: number
+    amount: number,
+    payload: any,
+    verificationTimestamp: Date
   ) {
-    logger.info(`Starting reconciliation for payment ID: ${paymentId}`);
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
       include: { bill: true },
     });
 
-    if (!payment) {
-      logger.error(`Reconciliation failed: Payment ${paymentId} not found`);
-      return;
-    }
-    
-    if (payment.status === 'SUCCESSFUL') {
-      logger.info(`Reconciliation skipped: Payment ${paymentId} is already SUCCESSFUL`);
-      return;
-    }
+    if (!payment || payment.status === 'SUCCESSFUL') return;
 
-    logger.info(`Updating payment ${payment.paymentId} status to SUCCESSFUL`);
     await prisma.payment.update({
       where: { id: paymentId },
       data: {
         status: 'SUCCESSFUL',
         mpesaReceiptCode,
-        failureReason: null, // Clear any previous failure reason
+        callbackPayload: payload,
+        verificationTimestamp,
+        failureReason: null,
       },
     });
 
     const newAmountPaid = payment.bill.amountPaid + amount;
-    const newBalance = payment.bill.totalAmount - newAmountPaid;
+    const newBalance = Math.max(0, payment.bill.totalAmount - newAmountPaid);
 
-    logger.info(`Updating bill ${payment.bill.billNumber}: New Amount Paid = ${newAmountPaid}, New Balance = ${newBalance}`);
     await prisma.bill.update({
       where: { id: payment.billId },
       data: {
         amountPaid: newAmountPaid,
-        balance: Math.max(0, newBalance),
+        balance: newBalance,
         status: newBalance <= 0 ? 'PAID' : 'PARTIAL',
       },
     });
 
-    // Notify the user via Socket.io
-    logger.info(`Emitting payment_success event to user_${payment.residentId}`);
+    // Notify user
     io.to(`user_${payment.residentId}`).emit('payment_success', {
       paymentId: payment.paymentId,
       amount,
       mpesaReceiptCode,
     });
 
-    // Trigger SMS and Email notifications
     try {
-      logger.info(`Sending success notifications to resident ${payment.residentId}`);
       await notificationService.sendPaymentSuccessNotification(
         payment.residentId,
         amount,
         mpesaReceiptCode
       );
     } catch (err) {
-      logger.error('Failed to send payment success notifications:', err);
+      logger.error('Failed to send notifications:', err);
     }
   }
 
   async checkPaymentStatus(paymentId: string, userId: string) {
     const payment = await prisma.payment.findUnique({
       where: { paymentId },
-      include: {
-        bill: {
-          select: {
-            billNumber: true,
-            status: true,
-            balance: true,
-          },
-        },
-      },
+      include: { bill: true },
     });
 
-    if (!payment) {
-      throw new AppError('Payment not found', 404);
-    }
-
-    if (payment.residentId !== userId) {
-      throw new AppError('Unauthorized', 403);
-    }
-
-    const pendingAge = Date.now() - new Date(payment.createdAt).getTime();
-
-    // If payment is PENDING and more than 10 minutes have passed, we mark it as FAILED locally
-    // but the callback can still override this if it eventually arrives (e.g., Fuliza)
-    if (payment.status === 'PENDING' && pendingAge > 10 * 60 * 1000) {
-      logger.info(`Payment ${paymentId} timed out after 10 minutes. Marking as FAILED.`);
-      const updatedPayment = await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: 'FAILED',
-          failureReason: 'Payment timed out. If you have been charged, please wait a few minutes for it to reflect.',
-        },
-        include: {
-          bill: {
-            select: {
-              billNumber: true,
-              status: true,
-              balance: true,
-            },
-          },
-        },
-      });
-
-      return updatedPayment;
-    }
+    if (!payment) throw new AppError('Payment not found', 404);
+    if (payment.residentId !== userId) throw new AppError('Unauthorized', 403);
 
     return payment;
   }
 
   async getResidentPayments(residentId: string, query: any) {
-    const pageNum = Number.parseInt(String(query?.page || 1), 10);
-    const limitNum = Number.parseInt(String(query?.limit || 20), 10);
+    const page = Number(query.page || 1);
+    const limit = Number(query.limit || 20);
 
     const where: any = { residentId };
+    if (query.status) where.status = query.status;
+    if (query.billId) where.billId = query.billId;
 
-    if (query.status) {
-      where.status = query.status;
-    }
-
-    // Allow filtering by billId so resident can find the payment for a specific bill
-    if (query.billId) {
-      where.billId = query.billId;
-    }
-
-    const payments = await prisma.payment.findMany({
-      where,
-      skip: (pageNum - 1) * limitNum,
-      take: limitNum,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        bill: true,
-      },
-    });
-
-    const total = await prisma.payment.count({ where });
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: { bill: true },
+      }),
+      prisma.payment.count({ where }),
+    ]);
 
     return {
       payments,
       pagination: {
-        page: pageNum,
-        limit: limitNum,
+        page,
+        limit,
         total,
-        pages: Math.ceil(total / limitNum),
+        pages: Math.ceil(total / limit),
       },
     };
   }
 
   async getAllPayments(query: any) {
-    const pageNum = Number.parseInt(String(query?.page || 1), 10);
-    const limitNum = Number.parseInt(String(query?.limit || 20), 10);
+    const page = Number(query.page || 1);
+    const limit = Number(query.limit || 20);
 
     const where: any = {};
-
-    // Filter by status
-    if (query?.status) {
-      where.status = query.status;
-    }
-
-    // Filter by residentId (used by admin resident history modal)
-    if (query?.residentId) {
-      where.residentId = query.residentId;
-    }
-
-    // Search by mpesa receipt, payment ID, or resident name/account number
-    if (query?.search) {
+    if (query.status) where.status = query.status;
+    if (query.residentId) where.residentId = query.residentId;
+    if (query.search) {
       where.OR = [
         { mpesaReceiptCode: { contains: query.search, mode: 'insensitive' } },
         { paymentId: { contains: query.search, mode: 'insensitive' } },
@@ -474,16 +355,12 @@ export class PaymentService {
     const [payments, total] = await Promise.all([
       prisma.payment.findMany({
         where,
-        skip: (pageNum - 1) * limitNum,
-        take: limitNum,
+        skip: (page - 1) * limit,
+        take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          resident: {
-            select: { id: true, fullName: true, accountNumber: true, email: true, phone: true },
-          },
-          bill: {
-            select: { id: true, billNumber: true, billingMonth: true, totalAmount: true, status: true },
-          },
+          resident: { select: { id: true, fullName: true, accountNumber: true, email: true, phone: true } },
+          bill: { select: { id: true, billNumber: true, billingMonth: true, totalAmount: true, status: true } },
         },
       }),
       prisma.payment.count({ where }),
@@ -491,33 +368,22 @@ export class PaymentService {
 
     return {
       payments,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum),
-      },
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     };
   }
 
   async getPaymentStats() {
-    const total = await prisma.payment.count();
-    const successful = await prisma.payment.count({
-      where: { status: 'SUCCESSFUL' },
-    });
-    const pending = await prisma.payment.count({
-      where: { status: 'PENDING' },
-    });
-    const failed = await prisma.payment.count({
-      where: { status: 'FAILED' },
-    });
+    const [total, successful, pending, failed] = await Promise.all([
+      prisma.payment.count(),
+      prisma.payment.count({ where: { status: 'SUCCESSFUL' } }),
+      prisma.payment.count({ where: { status: 'PENDING' } }),
+      prisma.payment.count({ where: { status: 'FAILED' } }),
+    ]);
 
     return { total, successful, pending, failed };
   }
 
   async deletePayment(id: string) {
-    const payment = await prisma.payment.findUnique({ where: { id } });
-    if (!payment) throw new AppError('Payment not found', 404);
     await prisma.payment.delete({ where: { id } });
     return { message: 'Payment deleted successfully' };
   }
@@ -530,47 +396,6 @@ export class PaymentService {
   async clearResidentPaymentHistory(residentId: string) {
     const result = await prisma.payment.deleteMany({ where: { residentId } });
     return { deleted: result.count, message: 'Payment history cleared successfully' };
-  }
-
-  async retryPaymentVerification(paymentId: string) {
-    const payment = await prisma.payment.findFirst({ where: { paymentId } });
-    if (!payment) throw new AppError('Payment not found', 404);
-    if (payment.status === 'SUCCESSFUL') throw new AppError('Payment already successful', 400);
-    try {
-      const response = await axios.get(
-        `${this.payHeroBaseUrl}/transaction-status?reference=${payment.paymentId}`,
-        {
-          headers: { Authorization: process.env.PAYHERO_AUTH },
-          timeout: 15000,
-        }
-      );
-      const data = response.data;
-      if (data?.status === 'SUCCESS' || data?.status === 'COMPLETED') {
-        const mpesaCode = data?.MpesaReceiptNumber || data?.mpesa_receipt || null;
-        const amount = Number(data?.Amount || data?.amount || payment.amount);
-        await this.reconcilePayment(payment.id, mpesaCode, amount);
-        return { message: 'Payment verified successfully', status: 'SUCCESSFUL' };
-      }
-      return { message: 'Payment still pending or failed', status: payment.status };
-    } catch (err) {
-      return { message: 'Could not verify payment at this time', status: payment.status };
-    }
-  }
-
-  async exportPaymentsCSV(query: any): Promise<string> {
-    const { payments } = await this.getAllPayments({ ...query, limit: 10000 });
-    const headers = ['Payment ID', 'Resident', 'Account', 'Amount', 'M-Pesa Code', 'Bill Number', 'Status', 'Date'];
-    const rows = (payments as any[]).map((p) => [
-      p.paymentId || p.id,
-      p.resident?.fullName || '',
-      p.resident?.accountNumber || '',
-      p.amount,
-      p.mpesaReceiptCode || '',
-      p.bill?.billNumber || '',
-      p.status,
-      new Date(p.createdAt).toLocaleDateString('en-KE'),
-    ]);
-    return [headers, ...rows].map((r) => r.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
   }
 }
 

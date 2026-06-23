@@ -297,8 +297,12 @@ model Payment {
   amount            Float
   phoneNumber       String
   mpesaReceiptCode  String?
-  payHeroReference  String?
+  payHeroReference  String? // Deprecated after PayHero removal
+  merchantRequestId String?
   checkoutRequestId String?
+  provider          String                    @default("TUMA")
+  callbackPayload   Json?
+  verificationTimestamp DateTime?
   status            PaymentStatus             @default(PENDING)
   reconciliationStatus PaymentReconciliationStatus @default(PENDING)
   failureReason     String?

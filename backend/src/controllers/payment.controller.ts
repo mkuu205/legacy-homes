@@ -17,13 +17,12 @@ export class PaymentController {
 
   async handleCallback(req: Request, res: Response, next: NextFunction) {
     try {
-      const signature = req.headers['x-payhero-signature'] as string || '';
-      logger.info('PayHero callback received:', JSON.stringify(req.body));
-      const result = await paymentService.handleCallback(req.body, signature);
+      logger.info('Tuma callback received:', JSON.stringify(req.body));
+      const result = await paymentService.handleCallback(req.body);
       res.json(result);
     } catch (error) {
       logger.error('Callback error:', error);
-      res.status(200).json({ received: true });
+      res.status(200).json({ success: true, message: 'Callback received' });
     }
   }
 

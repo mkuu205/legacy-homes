@@ -10,7 +10,7 @@ router.get('/my-payments', authenticate, paymentController.getMyPayments.bind(pa
 router.get('/status/:paymentId', authenticate, paymentController.checkStatus.bind(paymentController));
 router.delete('/my-history', authenticate, paymentController.clearMyPaymentHistory.bind(paymentController));
 
-// PayHero webhook (no auth - verified by signature)
+// Tuma Payments webhook
 router.post('/callback', paymentController.handleCallback.bind(paymentController));
 
 // Admin routes
