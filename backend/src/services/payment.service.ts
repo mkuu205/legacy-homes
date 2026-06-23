@@ -65,8 +65,6 @@ export class PaymentService {
 
       if (response.data.success && response.data.data.token) {
         this.cachedToken = response.data.data.token;
-        // Assume token is valid for 1 hour if not specified, or parse from JWT if needed
-        // For simplicity, we'll refresh every 50 minutes
         this.tokenExpiry = Date.now() + 50 * 60 * 1000;
         return this.cachedToken!;
       }
@@ -227,7 +225,7 @@ export class PaymentService {
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
-          status: status === 'cancelled' ? 'FAILED' : 'FAILED', // You can add CANCELLED to enum if needed
+          status: 'FAILED',
           failureReason: failure_reason || result_desc || 'Payment failed',
           callbackPayload: payload,
           verificationTimestamp,
@@ -275,7 +273,6 @@ export class PaymentService {
       },
     });
 
-    // Notify user
     io.to(`user_${payment.residentId}`).emit('payment_success', {
       paymentId: payment.paymentId,
       amount,
@@ -396,6 +393,34 @@ export class PaymentService {
   async clearResidentPaymentHistory(residentId: string) {
     const result = await prisma.payment.deleteMany({ where: { residentId } });
     return { deleted: result.count, message: 'Payment history cleared successfully' };
+  }
+
+  async retryPaymentVerification(paymentId: string) {
+    const payment = await prisma.payment.findFirst({ where: { paymentId } });
+    if (!payment) throw new AppError('Payment not found', 404);
+    if (payment.status === 'SUCCESSFUL') throw new AppError('Payment already successful', 400);
+    return payment;
+  }
+
+  async exportPaymentsCSV(query: any) {
+    const where: any = {};
+    if (query.status) where.status = query.status;
+    
+    const payments = await prisma.payment.findMany({
+      where,
+      include: {
+        resident: { select: { fullName: true, accountNumber: true } },
+        bill: { select: { billNumber: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const header = 'Date,Payment ID,Resident,Account,Bill,Amount,M-Pesa Receipt,Status\n';
+    const rows = payments.map(p => {
+      return `${p.createdAt.toISOString()},${p.paymentId},${p.resident.fullName},${p.resident.accountNumber},${p.bill.billNumber},${p.amount},${p.mpesaReceiptCode || ''},${p.status}`;
+    }).join('\n');
+
+    return header + rows;
   }
 }
 
