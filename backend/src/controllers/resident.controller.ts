@@ -1,6 +1,9 @@
 import { Response, NextFunction } from 'express';
 import { residentService } from '../services/resident.service';
 import { AuthRequest } from '../middleware/auth';
+import { auditService } from '../services/audit.service';
+import { sendAccountSuspendedEmail, sendAccountActivatedEmail } from '../utils/email';
+import prisma from '../config/prisma';
 
 export class ResidentController {
   async getAll(req: AuthRequest, res: Response, next: NextFunction) {
@@ -54,13 +57,58 @@ export class ResidentController {
     try {
       const { status } = req.body;
       const resident = await residentService.updateAccountStatus(req.params.id as string, status);
+
+      // Send email notification based on new status
+      if (status === 'SUSPENDED') {
+        sendAccountSuspendedEmail(resident.email, resident.fullName).catch(() => {});
+      } else if (status === 'ACTIVE') {
+        sendAccountActivatedEmail(resident.email, resident.fullName).catch(() => {});
+      }
+
+      // Create in-app notification for the resident
+      const message = status === 'SUSPENDED'
+        ? 'Your account has been suspended. Please contact support.'
+        : status === 'ACTIVE'
+        ? 'Your account has been activated. You can now access all features.'
+        : `Your account status has been updated to ${status}.`;
+
+      await prisma.userNotification.create({
+        data: {
+          userId: resident.id,
+          title: status === 'SUSPENDED' ? 'Account Suspended' : status === 'ACTIVE' ? 'Account Activated' : 'Account Status Updated',
+          message,
+          type: status === 'SUSPENDED' ? 'ACCOUNT_SUSPENDED' : 'ACCOUNT_ACTIVATED',
+          status: 'UNREAD',
+        },
+      }).catch(() => {});
+
+      // Audit log
+      await auditService.logAction({
+        userId: req.user!.userId,
+        action: status === 'SUSPENDED' ? 'SUSPEND_RESIDENT' : status === 'ACTIVE' ? 'ACTIVATE_RESIDENT' : 'UPDATE_RESIDENT_STATUS',
+        resource: 'User',
+        resourceId: req.params.id,
+        details: { status, affectedUser: resident.email },
+        ipAddress: req.ip,
+      }).catch(() => {});
+
       res.json({ success: true, data: resident });
     } catch (error) { next(error); }
   }
 
   async delete(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      // Get resident info before deletion for audit log
+      const resident = await prisma.user.findUnique({ where: { id: req.params.id }, select: { email: true, fullName: true } });
       const result = await residentService.deleteResident(req.params.id as string);
+      await auditService.logAction({
+        userId: req.user!.userId,
+        action: 'DELETE_RESIDENT',
+        resource: 'User',
+        resourceId: req.params.id,
+        details: { affectedUser: resident?.email, fullName: resident?.fullName },
+        ipAddress: req.ip,
+      }).catch(() => {});
       res.json({ success: true, ...result });
     } catch (error) { next(error); }
   }
@@ -68,6 +116,13 @@ export class ResidentController {
   async adminResetPassword(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const result = await residentService.adminResetPassword(req.params.id as string, req.body.newPassword);
+      await auditService.logAction({
+        userId: req.user!.userId,
+        action: 'RESET_RESIDENT_PASSWORD',
+        resource: 'User',
+        resourceId: req.params.id,
+        ipAddress: req.ip,
+      }).catch(() => {});
       res.json({ success: true, ...result });
     } catch (error) { next(error); }
   }

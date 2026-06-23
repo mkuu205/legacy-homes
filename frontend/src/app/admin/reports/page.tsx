@@ -17,65 +17,26 @@ export default function AdminReportsPage() {
   const exportToCSV = async () => {
     setIsExporting(true);
     try {
-      let data: any[] = [];
+      let endpoint = '';
       let filename = 'report.csv';
-
       if (activeTab === 'revenue') {
-        data = (revenueData?.payments || []).map((p: any) => ({
-          Date: new Date(p.createdAt).toLocaleDateString(),
-          'Resident Name': p.resident?.fullName,
-          'House Number': p.resident?.houseNumber,
-          Amount: p.amount,
-          'Payment ID': p.paymentId,
-        }));
+        endpoint = `/reports/export/revenue?year=${year}`;
         filename = `revenue-report-${year}.csv`;
       } else if (activeTab === 'overdue') {
-        data = (overdueData?.bills || []).map((bill: any) => ({
-          'Bill Number': bill.billNumber,
-          'Resident Name': bill.resident?.fullName,
-          'Account Number': bill.resident?.accountNumber,
-          'House Number': bill.houseNumber,
-          'Balance Due': bill.balance,
-          'Due Date': new Date(bill.dueDate).toLocaleDateString(),
-        }));
+        endpoint = '/reports/export/overdue';
         filename = 'overdue-report.csv';
-      } else if (activeTab === 'consumption') {
-        data = (consumptionData?.readings || []).map((item: any) => ({
-          'Billing Month': item.billingMonth,
-          'Resident Name': item.resident?.fullName,
-          'Account Number': item.resident?.accountNumber,
-          'Meter Number': item.meter?.meterNumber,
-          'Units Consumed': item.unitsConsumed,
-          'Amount': item.unitsConsumed * 250,
-        }));
-        filename = 'consumption-report.csv';
-      }
-
-      if (data.length === 0) {
-        toast({ type: 'error', title: 'No data to export' });
+      } else if (activeTab === 'billing') {
+        endpoint = '/reports/export/billing';
+        filename = 'billing-report.csv';
+      } else {
+        toast({ type: 'error', title: 'Export not available for this tab' });
         setIsExporting(false);
         return;
       }
-
-      // Convert to CSV
-      const headers = Object.keys(data[0]);
-      const csvContent = [
-        headers.join(','),
-        ...data.map(row => headers.map(header => {
-          const value = row[header];
-          return typeof value === 'string' && value.includes(',') ? `"${value}"` : value;
-        }).join(','))
-      ].join('\n');
-
-      // Download
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      link.click();
-      window.URL.revokeObjectURL(url);
-
+      const res = await api.get(endpoint, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
       toast({ type: 'success', title: 'Report exported successfully!' });
     } catch (error) {
       toast({ type: 'error', title: 'Failed to export report' });

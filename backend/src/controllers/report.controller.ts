@@ -40,3 +40,4 @@ export class ReportController {
 }
 
 export const reportController = new ReportController();
+// Note: Export methods are handled directly in routes via service calls

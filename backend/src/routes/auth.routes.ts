@@ -26,5 +26,6 @@ router.post('/logout', authController.logout.bind(authController));
 router.post('/forgot-password', authLimiter, authController.forgotPassword.bind(authController));
 router.post('/reset-password', authLimiter, authController.resetPassword.bind(authController));
 router.get('/me', authenticate, authController.getMe.bind(authController));
+router.delete('/delete-account', authenticate, authController.deleteAccount.bind(authController));
 
 export default router;

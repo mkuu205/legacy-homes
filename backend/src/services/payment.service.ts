@@ -412,12 +412,65 @@ export class PaymentService {
       where: { status: 'FAILED' },
     });
 
-    return {
-      total,
-      successful,
-      pending,
-      failed,
-    };
+    return { total, successful, pending, failed };
+  }
+
+  async deletePayment(id: string) {
+    const payment = await prisma.payment.findUnique({ where: { id } });
+    if (!payment) throw new AppError('Payment not found', 404);
+    await prisma.payment.delete({ where: { id } });
+    return { message: 'Payment deleted successfully' };
+  }
+
+  async bulkDeletePayments(ids: string[]) {
+    const result = await prisma.payment.deleteMany({ where: { id: { in: ids } } });
+    return { deleted: result.count };
+  }
+
+  async clearResidentPaymentHistory(residentId: string) {
+    const result = await prisma.payment.deleteMany({ where: { residentId } });
+    return { deleted: result.count, message: 'Payment history cleared successfully' };
+  }
+
+  async retryPaymentVerification(paymentId: string) {
+    const payment = await prisma.payment.findFirst({ where: { paymentId } });
+    if (!payment) throw new AppError('Payment not found', 404);
+    if (payment.status === 'SUCCESSFUL') throw new AppError('Payment already successful', 400);
+    try {
+      const response = await axios.get(
+        `${this.payHeroBaseUrl}/transaction-status?reference=${payment.paymentId}`,
+        {
+          headers: { Authorization: process.env.PAYHERO_AUTH },
+          timeout: 15000,
+        }
+      );
+      const data = response.data;
+      if (data?.status === 'SUCCESS' || data?.status === 'COMPLETED') {
+        const mpesaCode = data?.MpesaReceiptNumber || data?.mpesa_receipt || null;
+        const amount = Number(data?.Amount || data?.amount || payment.amount);
+        await this.reconcilePayment(payment.id, mpesaCode, amount);
+        return { message: 'Payment verified successfully', status: 'SUCCESSFUL' };
+      }
+      return { message: 'Payment still pending or failed', status: payment.status };
+    } catch (err) {
+      return { message: 'Could not verify payment at this time', status: payment.status };
+    }
+  }
+
+  async exportPaymentsCSV(query: any): Promise<string> {
+    const { payments } = await this.getAllPayments({ ...query, limit: 10000 });
+    const headers = ['Payment ID', 'Resident', 'Account', 'Amount', 'M-Pesa Code', 'Bill Number', 'Status', 'Date'];
+    const rows = (payments as any[]).map((p) => [
+      p.paymentId || p.id,
+      p.resident?.fullName || '',
+      p.resident?.accountNumber || '',
+      p.amount,
+      p.mpesaReceiptCode || '',
+      p.bill?.billNumber || '',
+      p.status,
+      new Date(p.createdAt).toLocaleDateString('en-KE'),
+    ]);
+    return [headers, ...rows].map((r) => r.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
   }
 }
 

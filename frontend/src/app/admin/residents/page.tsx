@@ -1,10 +1,9 @@
 'use client';
-
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getErrorMessage } from '@/lib/api';
 import { toast } from '@/components/ui/toaster';
-import { Users, Plus, Search, Filter, Eye, Edit, MoreVertical, Loader2, X } from 'lucide-react';
+import { Users, Plus, Search, Eye, Edit, Loader2, X, Trash2, AlertTriangle, Key, UserX, UserCheck, ChevronLeft, ChevronRight, CreditCard, FileText } from 'lucide-react';
 
 export default function AdminResidentsPage() {
   const queryClient = useQueryClient();
@@ -12,9 +11,15 @@ export default function AdminResidentsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newResident, setNewResident] = useState({
-    fullName: '', email: '', phone: '', houseNumber: '', password: 'Resident@2024!', nationalId: '',
-  });
+  const [newResident, setNewResident] = useState({ fullName: '', email: '', phone: '', houseNumber: '', password: 'Resident@2024!', nationalId: '' });
+  const [selectedResident, setSelectedResident] = useState<any>(null);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editData, setEditData] = useState<any>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState<any>(null);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [showHistoryModal, setShowHistoryModal] = useState<{ type: 'bills' | 'payments'; resident: any } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-residents', search, statusFilter, page],
@@ -25,6 +30,25 @@ export default function AdminResidentsPage() {
       const res = await api.get(`/residents?${params}`);
       return res.data.data;
     },
+  });
+
+  const residents = data?.residents || [];
+  const pagination = data?.pagination;
+
+  const historyQuery = useQuery({
+    queryKey: ['resident-history', showHistoryModal?.type, showHistoryModal?.resident?.id],
+    queryFn: async () => {
+      if (!showHistoryModal) return null;
+      const { type, resident } = showHistoryModal;
+      if (type === 'bills') {
+        const res = await api.get(`/billing/statement/${resident.id}`);
+        return res.data.data;
+      } else {
+        const res = await api.get(`/payments?residentId=${resident.id}&limit=50`);
+        return res.data.data;
+      }
+    },
+    enabled: !!showHistoryModal,
   });
 
   const addMutation = useMutation({
@@ -41,10 +65,54 @@ export default function AdminResidentsPage() {
     onError: (error) => toast({ type: 'error', title: 'Failed to add resident', description: getErrorMessage(error) }),
   });
 
-  const [selectedResident, setSelectedResident] = useState<any>(null);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editData, setEditData] = useState<any>(null);
+  const editMutation = useMutation({
+    mutationFn: async (data: any) => {
+      await api.put(`/residents/${data.id}`, { fullName: data.fullName, phone: data.phone });
+      const res = await api.patch(`/residents/${data.id}/status`, { status: data.accountStatus });
+      return res.data.data;
+    },
+    onSuccess: () => {
+      toast({ type: 'success', title: 'Resident updated!' });
+      setShowEditModal(false);
+      queryClient.invalidateQueries({ queryKey: ['admin-residents'] });
+    },
+    onError: (error) => toast({ type: 'error', title: 'Update failed', description: getErrorMessage(error) }),
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await api.patch(`/residents/${id}/status`, { status });
+      return res.data.data;
+    },
+    onSuccess: (_, vars) => {
+      toast({ type: 'success', title: `Resident ${vars.status === 'SUSPENDED' ? 'suspended' : 'activated'} successfully` });
+      queryClient.invalidateQueries({ queryKey: ['admin-residents'] });
+    },
+    onError: (err) => toast({ type: 'error', title: 'Failed', description: getErrorMessage(err) }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { await api.delete(`/residents/${id}`); },
+    onSuccess: () => {
+      toast({ type: 'success', title: 'Resident deleted' });
+      setShowDeleteModal(null);
+      queryClient.invalidateQueries({ queryKey: ['admin-residents'] });
+    },
+    onError: (err) => toast({ type: 'error', title: 'Delete failed', description: getErrorMessage(err) }),
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ id, newPassword }: { id: string; newPassword: string }) => {
+      const res = await api.post(`/residents/${id}/reset-password`, { newPassword });
+      return res.data;
+    },
+    onSuccess: () => {
+      toast({ type: 'success', title: 'Password reset successfully' });
+      setShowResetPasswordModal(null);
+      setNewPassword('');
+    },
+    onError: (err) => toast({ type: 'error', title: 'Reset failed', description: getErrorMessage(err) }),
+  });
 
   const statusColors: Record<string, { bg: string; color: string }> = {
     ACTIVE: { bg: 'rgba(16, 185, 129, 0.14)', color: '#34d399' },
@@ -52,78 +120,26 @@ export default function AdminResidentsPage() {
     INACTIVE: { bg: 'rgba(124, 154, 184, 0.14)', color: 'var(--t2)' },
   };
 
-  const handleViewResident = (resident: any) => {
-    setSelectedResident(resident);
-    setShowViewModal(true);
-  };
-
-  const handleEditResident = (resident: any) => {
-    setSelectedResident(resident);
-    setEditData({ ...resident });
-    setShowEditModal(true);
-  };
-
-  const editMutation = useMutation({
-    mutationFn: async (data: any) => {
-      // Update basic info
-      await api.put(`/residents/${data.id}`, {
-        fullName: data.fullName,
-        phone: data.phone,
-      });
-      
-      // Update status separately as per backend implementation
-      const res = await api.patch(`/residents/${data.id}/status`, {
-        status: data.accountStatus,
-      });
-      
-      return res.data.data;
-    },
-    onSuccess: () => {
-      toast({ type: 'success', title: 'Resident updated successfully!' });
-      setShowEditModal(false);
-      setEditData(null);
-      queryClient.invalidateQueries({ queryKey: ['admin-residents'] });
-    },
-    onError: (error) => toast({ type: 'error', title: 'Failed to update resident', description: getErrorMessage(error) }),
-  });
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} className="fu">
       {/* Header */}
-      <div className="s-hd">
+      <div className="s-hd" style={{ flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 className="pg-h">Residents</h1>
-          <p className="pg-sh">
-            {data?.pagination?.total || 0} total residents
-          </p>
+          <p className="pg-sh">{pagination?.total || 0} total residents</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="btn bp btn-sm"
-        >
-          <Plus size={14} />
-          Add Resident
+        <button onClick={() => setShowAddModal(true)} className="btn bp btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Plus size={14} /> Add Resident
         </button>
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} className="sm:flex-row">
-        <div style={{ position: 'relative', flex: 1 }}>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
           <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--t2)' }} />
-          <input
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search by name, email, account number..."
-            className="inp"
-            style={{ paddingLeft: '40px' }}
-          />
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search residents..." className="inp" style={{ paddingLeft: '40px' }} />
         </div>
-        <select
-          value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-          className="sel"
-          style={{ minWidth: '160px' }}
-        >
+        <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} className="sel" style={{ minWidth: '140px' }}>
           <option value="">All Status</option>
           <option value="ACTIVE">Active</option>
           <option value="SUSPENDED">Suspended</option>
@@ -133,232 +149,130 @@ export default function AdminResidentsPage() {
 
       {/* Table */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--bd)', background: 'var(--c2)' }}>
-                {['Resident', 'Account No.', 'House', 'Phone', 'Status', 'Joined', 'Actions'].map(h => (
-                  <th
-                    key={h}
-                    style={{
-                      padding: '12px 16px',
-                      textAlign: 'left',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      color: 'var(--t2)',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em',
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                [...Array(8)].map((_, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid var(--bd)' }}>
-                    {[...Array(7)].map((_, j) => (
-                      <td key={j} style={{ padding: '12px 16px' }}>
-                        <div className="skeleton" style={{ height: '16px', borderRadius: '4px' }} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : data?.residents?.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center' }}>
-                    <Users size={40} style={{ color: 'var(--t2)', margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
-                    <p style={{ fontSize: '12px', color: 'var(--t2)' }}>No residents found</p>
-                  </td>
+        {isLoading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
+            <Loader2 size={24} style={{ animation: 'spin 1s linear infinite', color: 'var(--ac)' }} />
+          </div>
+        ) : residents.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px', color: 'var(--t2)' }}>
+            <Users size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+            <p style={{ fontWeight: 600 }}>No residents found</p>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--bd)' }}>
+                  {['Resident', 'Account #', 'House', 'Phone', 'Status', 'Joined', 'Actions'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
                 </tr>
-              ) : (
-                data?.residents?.map((r: any) => {
-                  const s = statusColors[r.accountStatus] || statusColors.INACTIVE;
+              </thead>
+              <tbody>
+                {residents.map((resident: any) => {
+                  const sc = statusColors[resident.accountStatus] || statusColors.INACTIVE;
                   return (
-                    <tr
-                      key={r.id}
-                      style={{
-                        borderBottom: '1px solid var(--bd)',
-                        transition: 'background-color 0.15s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 198, 167, 0.03)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                    >
+                    <tr key={resident.id} style={{ borderBottom: '1px solid var(--bd)' }} onMouseEnter={e => (e.currentTarget.style.background = 'var(--c2)')} onMouseLeave={e => (e.currentTarget.style.background = '')}>
                       <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div
-                            style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '8px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                              background: 'var(--gl)',
-                              border: '1px solid rgba(0, 198, 167, 0.25)',
-                              fontSize: '12px',
-                              fontWeight: 700,
-                              color: 'var(--ac)',
-                              fontFamily: 'var(--f1)',
-                            }}
-                          >
-                            {r.fullName.charAt(0).toUpperCase()}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'var(--gl)', border: '1px solid rgba(0,198,167,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: 'var(--ac)', flexShrink: 0 }}>
+                            {resident.profilePicture ? <img src={resident.profilePicture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '7px' }} /> : resident.fullName?.charAt(0).toUpperCase()}
                           </div>
-                          <div style={{ minWidth: 0 }}>
-                            <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t1)' }}>
-                              {r.fullName}
-                            </p>
-                            <p style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {r.email}
-                            </p>
+                          <div>
+                            <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>{resident.fullName}</p>
+                            <p style={{ fontSize: '11px', color: 'var(--t2)' }}>{resident.email}</p>
                           </div>
                         </div>
                       </td>
-                      <td style={{ padding: '12px 16px', fontSize: '12px', fontFamily: 'monospace', color: 'var(--t1)' }}>
-                        {r.accountNumber}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--t1)' }}>
-                        {r.houseNumber || '—'}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--t1)' }}>
-                        {r.phone}
-                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--ac)', fontFamily: 'monospace' }}>{resident.accountNumber}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--t2)' }}>{resident.houseNumber || '—'}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--t2)' }}>{resident.phone || '—'}</td>
                       <td style={{ padding: '12px 16px' }}>
-                        <div className="badge" style={{ background: s.bg, color: s.color, fontSize: '10px' }}>
-                          {r.accountStatus}
-                        </div>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, color: sc.color, background: sc.bg }}>
+                          {resident.accountStatus}
+                        </span>
                       </td>
-                      <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--t2)' }}>
-                        {new Date(r.createdAt).toLocaleDateString('en-KE')}
-                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--t2)', whiteSpace: 'nowrap' }}>{new Date(resident.createdAt).toLocaleDateString('en-KE')}</td>
                       <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <button 
-                            onClick={() => handleViewResident(r)}
-                            className="btn-icon bg" 
-                            title="View"
-                          >
-                            <Eye size={14} />
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          <button onClick={() => { setSelectedResident(resident); setShowViewModal(true); }} title="View" style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--t2)' }}>
+                            <Eye size={12} />
                           </button>
-                          <button 
-                            onClick={() => handleEditResident(r)}
-                            className="btn-icon bg" 
-                            title="Edit"
-                          >
-                            <Edit size={14} />
+                          <button onClick={() => { setSelectedResident(resident); setEditData({ ...resident }); setShowEditModal(true); }} title="Edit" style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(0,198,167,0.3)', background: 'rgba(0,198,167,0.08)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--ac)' }}>
+                            <Edit size={12} />
+                          </button>
+                          <button onClick={() => { setShowHistoryModal({ type: 'bills', resident }); }} title="View Bills" style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--t2)' }}>
+                            <FileText size={12} />
+                          </button>
+                          <button onClick={() => { setShowHistoryModal({ type: 'payments', resident }); }} title="View Payments" style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--t2)' }}>
+                            <CreditCard size={12} />
+                          </button>
+                          <button onClick={() => { setShowResetPasswordModal(resident); }} title="Reset Password" style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(251,191,36,0.3)', background: 'rgba(251,191,36,0.08)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#fbbf24' }}>
+                            <Key size={12} />
+                          </button>
+                          {resident.accountStatus === 'ACTIVE' ? (
+                            <button onClick={() => statusMutation.mutate({ id: resident.id, status: 'SUSPENDED' })} title="Suspend" style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#ef4444' }}>
+                              <UserX size={12} />
+                            </button>
+                          ) : (
+                            <button onClick={() => statusMutation.mutate({ id: resident.id, status: 'ACTIVE' })} title="Activate" style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.08)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#34d399' }}>
+                              <UserCheck size={12} />
+                            </button>
+                          )}
+                          <button onClick={() => setShowDeleteModal(resident)} title="Delete" style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#ef4444' }}>
+                            <Trash2 size={12} />
                           </button>
                         </div>
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {data?.pagination && data.pagination.pages > 1 && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 16px',
-              borderTop: '1px solid var(--bd)',
-            }}
-          >
-            <p style={{ fontSize: '12px', color: 'var(--t2)' }}>
-              Page {data.pagination.page} of {data.pagination.pages}
-            </p>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="btn bg btn-sm"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setPage(p => Math.min(data.pagination.pages, p + 1))}
-                disabled={page === data.pagination.pages}
-                className="btn bg btn-sm"
-              >
-                Next
-              </button>
-            </div>
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
+      {/* Pagination */}
+      {pagination && pagination.pages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '12px', color: 'var(--t2)' }}>Page {pagination.page} of {pagination.pages} ({pagination.total} total)</span>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn bs btn-sm"><ChevronLeft size={14} /></button>
+            <button onClick={() => setPage(p => Math.min(pagination.pages, p + 1))} disabled={page === pagination.pages} className="btn bs btn-sm"><ChevronRight size={14} /></button>
+          </div>
+        </div>
+      )}
+
       {/* Add Resident Modal */}
       {showAddModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px',
-            background: 'rgba(0, 0, 0, 0.5)',
-          }}
-        >
-          <div className="card" style={{ width: '100%', maxWidth: '512px' }}>
-            <div className="s-hd" style={{ marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)', marginBottom: 0, fontFamily: 'var(--f1)' }}>
-                Add New Resident
-              </h2>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="btn-icon bg"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <X size={16} />
-              </button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div className="card" style={{ maxWidth: '480px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)' }}>Add New Resident</h3>
+              <button onClick={() => setShowAddModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t2)' }}><X size={18} /></button>
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {[
-                { key: 'fullName', label: 'Full Name', placeholder: 'John Kamau' },
-                { key: 'email', label: 'Email', placeholder: 'john@example.com', type: 'email' },
-                { key: 'phone', label: 'Phone', placeholder: '0712345678' },
-                { key: 'houseNumber', label: 'House Number', placeholder: 'A1' },
-                { key: 'nationalId', label: 'National ID (optional)', placeholder: '12345678' },
-                { key: 'password', label: 'Temporary Password', placeholder: 'Resident@2024!' },
-              ].map(({ key, label, placeholder, type }) => (
+                { label: 'Full Name', key: 'fullName', type: 'text' },
+                { label: 'Email', key: 'email', type: 'email' },
+                { label: 'Phone', key: 'phone', type: 'tel' },
+                { label: 'House Number', key: 'houseNumber', type: 'text' },
+                { label: 'National ID', key: 'nationalId', type: 'text' },
+                { label: 'Initial Password', key: 'password', type: 'text' },
+              ].map(({ label, key, type }) => (
                 <div key={key} className="fg">
                   <label className="lbl">{label}</label>
-                  <input
-                    type={type || 'text'}
-                    value={(newResident as any)[key]}
-                    onChange={e => setNewResident(d => ({ ...d, [key]: e.target.value }))}
-                    placeholder={placeholder}
-                    className="inp"
-                  />
+                  <input type={type} value={(newResident as any)[key]} onChange={e => setNewResident(d => ({ ...d, [key]: e.target.value }))} className="inp" />
                 </div>
               ))}
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => addMutation.mutate(newResident)}
-                disabled={addMutation.isPending || !newResident.fullName || !newResident.email || !newResident.phone || !newResident.houseNumber}
-                className="btn bp"
-              >
-                {addMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : null}
-                Add Resident
-              </button>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="btn bg"
-              >
-                Cancel
-              </button>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                <button onClick={() => setShowAddModal(false)} className="btn bs" style={{ flex: 1 }}>Cancel</button>
+                <button onClick={() => addMutation.mutate(newResident)} disabled={addMutation.isPending} className="btn bp" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                  {addMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={14} />}
+                  Add Resident
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -366,79 +280,36 @@ export default function AdminResidentsPage() {
 
       {/* View Resident Modal */}
       {showViewModal && selectedResident && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px',
-            background: 'rgba(0, 0, 0, 0.5)',
-          }}
-        >
-          <div className="card" style={{ width: '100%', maxWidth: '512px' }}>
-            <div className="s-hd" style={{ marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)', marginBottom: 0, fontFamily: 'var(--f1)' }}>
-                Resident Details
-              </h2>
-              <button
-                onClick={() => setShowViewModal(false)}
-                className="btn-icon bg"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <X size={16} />
-              </button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div className="card" style={{ maxWidth: '480px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)' }}>Resident Details</h3>
+              <button onClick={() => setShowViewModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t2)' }}><X size={18} /></button>
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>Full Name</p>
-                <p style={{ fontSize: '13px', color: 'var(--t1)', marginTop: '4px' }}>{selectedResident.fullName}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>Email</p>
-                <p style={{ fontSize: '13px', color: 'var(--t1)', marginTop: '4px' }}>{selectedResident.email}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>Phone</p>
-                <p style={{ fontSize: '13px', color: 'var(--t1)', marginTop: '4px' }}>{selectedResident.phone}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>Account Number</p>
-                <p style={{ fontSize: '13px', color: 'var(--t1)', marginTop: '4px', fontFamily: 'monospace' }}>{selectedResident.accountNumber}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>House Number</p>
-                <p style={{ fontSize: '13px', color: 'var(--t1)', marginTop: '4px' }}>{selectedResident.houseNumber}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>Status</p>
-                <div style={{ marginTop: '4px' }}>
-                  <div className="badge" style={{ background: statusColors[selectedResident.accountStatus]?.bg, color: statusColors[selectedResident.accountStatus]?.color, fontSize: '10px' }}>
-                    {selectedResident.accountStatus}
-                  </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[
+                ['Full Name', selectedResident.fullName],
+                ['Email', selectedResident.email],
+                ['Phone', selectedResident.phone || '—'],
+                ['Account Number', selectedResident.accountNumber],
+                ['House Number', selectedResident.houseNumber || '—'],
+                ['National ID', selectedResident.nationalId || '—'],
+                ['Status', selectedResident.accountStatus],
+                ['Email Verified', selectedResident.emailVerified ? 'Yes' : 'No'],
+                ['Joined', new Date(selectedResident.createdAt).toLocaleDateString('en-KE')],
+              ].map(([label, value]) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--bd)' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--t2)' }}>{label}</span>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t1)' }}>{value}</span>
                 </div>
-              </div>
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', fontWeight: 700 }}>Joined</p>
-                <p style={{ fontSize: '13px', color: 'var(--t1)', marginTop: '4px' }}>{new Date(selectedResident.createdAt).toLocaleDateString('en-KE')}</p>
-              </div>
+              ))}
             </div>
-
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => handleEditResident(selectedResident)}
-                className="btn bp"
-              >
-                Edit Resident
+            <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+              <button onClick={() => { setShowViewModal(false); setShowHistoryModal({ type: 'bills', resident: selectedResident }); }} className="btn bs btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <FileText size={12} /> View Bills
               </button>
-              <button
-                onClick={() => setShowViewModal(false)}
-                className="btn bg"
-              >
-                Close
+              <button onClick={() => { setShowViewModal(false); setShowHistoryModal({ type: 'payments', resident: selectedResident }); }} className="btn bs btn-sm" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <CreditCard size={12} /> View Payments
               </button>
             </div>
           </div>
@@ -447,80 +318,139 @@ export default function AdminResidentsPage() {
 
       {/* Edit Resident Modal */}
       {showEditModal && editData && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px',
-            background: 'rgba(0, 0, 0, 0.5)',
-          }}
-        >
-          <div className="card" style={{ width: '100%', maxWidth: '512px' }}>
-            <div className="s-hd" style={{ marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)', marginBottom: 0, fontFamily: 'var(--f1)' }}>
-                Edit Resident
-              </h2>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="btn-icon bg"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <X size={16} />
-              </button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div className="card" style={{ maxWidth: '480px', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)' }}>Edit Resident</h3>
+              <button onClick={() => setShowEditModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t2)' }}><X size={18} /></button>
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div className="fg">
                 <label className="lbl">Full Name</label>
-                <input
-                  type="text"
-                  value={editData.fullName}
-                  onChange={e => setEditData({ ...editData, fullName: e.target.value })}
-                  className="inp"
-                />
+                <input value={editData.fullName} onChange={e => setEditData((d: any) => ({ ...d, fullName: e.target.value }))} className="inp" />
               </div>
               <div className="fg">
                 <label className="lbl">Phone</label>
-                <input
-                  type="text"
-                  value={editData.phone}
-                  onChange={e => setEditData({ ...editData, phone: e.target.value })}
-                  className="inp"
-                />
+                <input value={editData.phone || ''} onChange={e => setEditData((d: any) => ({ ...d, phone: e.target.value }))} className="inp" />
               </div>
               <div className="fg">
                 <label className="lbl">Account Status</label>
-                <select
-                  value={editData.accountStatus}
-                  onChange={e => setEditData({ ...editData, accountStatus: e.target.value })}
-                  className="sel"
-                >
+                <select value={editData.accountStatus} onChange={e => setEditData((d: any) => ({ ...d, accountStatus: e.target.value }))} className="sel">
                   <option value="ACTIVE">Active</option>
-                  <option value="INACTIVE">Inactive</option>
                   <option value="SUSPENDED">Suspended</option>
+                  <option value="INACTIVE">Inactive</option>
                 </select>
               </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={() => setShowEditModal(false)} className="btn bs" style={{ flex: 1 }}>Cancel</button>
+                <button onClick={() => editMutation.mutate(editData)} disabled={editMutation.isPending} className="btn bp" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                  {editMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+                  Save Changes
+                </button>
+              </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => editMutation.mutate(editData)}
-                disabled={editMutation.isPending}
-                className="btn bp"
-              >
-                {editMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : null}
-                Save Changes
+      {/* Reset Password Modal */}
+      {showResetPasswordModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div className="card" style={{ maxWidth: '380px', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)' }}>Reset Password</h3>
+              <button onClick={() => { setShowResetPasswordModal(null); setNewPassword(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t2)' }}><X size={18} /></button>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: '12px' }}>
+              Reset password for <strong style={{ color: 'var(--t1)' }}>{showResetPasswordModal.fullName}</strong>
+            </p>
+            <div className="fg" style={{ marginBottom: '16px' }}>
+              <label className="lbl">New Password</label>
+              <input type="text" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="inp" placeholder="Enter new password" />
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => { setShowResetPasswordModal(null); setNewPassword(''); }} className="btn bs" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={() => resetPasswordMutation.mutate({ id: showResetPasswordModal.id, newPassword })} disabled={!newPassword || resetPasswordMutation.isPending} className="btn bp" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                {resetPasswordMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Key size={14} />}
+                Reset Password
               </button>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="btn bg"
-              >
-                Cancel
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Resident Modal */}
+      {showDeleteModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div className="card" style={{ maxWidth: '380px', width: '100%', border: '1px solid rgba(239,68,68,0.3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <AlertTriangle size={20} style={{ color: '#ef4444' }} />
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)' }}>Delete Resident</h3>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: '16px' }}>
+              Are you sure you want to permanently delete <strong style={{ color: 'var(--t1)' }}>{showDeleteModal.fullName}</strong>? All their bills, payments, and notifications will be removed.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setShowDeleteModal(null)} className="btn bs" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={() => deleteMutation.mutate(showDeleteModal.id)} disabled={deleteMutation.isPending} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px 16px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                {deleteMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={14} />}
+                Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {showHistoryModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div className="card" style={{ maxWidth: '640px', width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexShrink: 0 }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)' }}>
+                {showHistoryModal.type === 'bills' ? 'Bill History' : 'Payment History'} — {showHistoryModal.resident.fullName}
+              </h3>
+              <button onClick={() => setShowHistoryModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t2)' }}><X size={18} /></button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {historyQuery.isLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '32px' }}>
+                  <Loader2 size={24} style={{ animation: 'spin 1s linear infinite', color: 'var(--ac)' }} />
+                </div>
+              ) : showHistoryModal.type === 'bills' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {(historyQuery.data?.bills || []).map((bill: any) => (
+                    <div key={bill.id} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ac)' }}>{bill.billNumber}</span>
+                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: bill.status === 'PAID' ? 'rgba(16,185,129,0.14)' : 'rgba(248,113,113,0.14)', color: bill.status === 'PAID' ? '#34d399' : '#f87171', fontWeight: 600 }}>{bill.status}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '16px', marginTop: '4px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--t2)' }}>{bill.billingMonth}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 600 }}>KES {Number(bill.totalAmount).toLocaleString()}</span>
+                        <span style={{ fontSize: '12px', color: bill.balance > 0 ? '#f87171' : 'var(--t2)' }}>Balance: KES {Number(bill.balance).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {(historyQuery.data?.bills || []).length === 0 && <p style={{ textAlign: 'center', color: 'var(--t2)', padding: '24px' }}>No bills found</p>}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {(historyQuery.data?.payments || []).map((payment: any) => (
+                    <div key={payment.id} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--ac)' }}>{payment.paymentId}</span>
+                        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: payment.status === 'SUCCESSFUL' ? 'rgba(16,185,129,0.14)' : 'rgba(248,113,113,0.14)', color: payment.status === 'SUCCESSFUL' ? '#34d399' : '#f87171', fontWeight: 600 }}>{payment.status}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '16px', marginTop: '4px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#34d399' }}>KES {Number(payment.amount).toLocaleString()}</span>
+                        {payment.mpesaReceiptCode && <span style={{ fontSize: '12px', color: 'var(--t2)', fontFamily: 'monospace' }}>{payment.mpesaReceiptCode}</span>}
+                        <span style={{ fontSize: '12px', color: 'var(--t2)' }}>{new Date(payment.createdAt).toLocaleDateString('en-KE')}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {(historyQuery.data?.payments || []).length === 0 && <p style={{ textAlign: 'center', color: 'var(--t2)', padding: '24px' }}>No payments found</p>}
+                </div>
+              )}
             </div>
           </div>
         </div>

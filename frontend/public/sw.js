@@ -93,3 +93,39 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+// Handle push notifications
+self.addEventListener('push', (event) => {
+  let data = { title: 'Legacy Homes', body: 'You have a new notification', icon: '/icons/icon-192x192.png', badge: '/icons/icon-72x72.png' };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {}
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon || '/icons/icon-192x192.png',
+      badge: data.badge || '/icons/icon-72x72.png',
+      tag: data.tag || 'legacy-homes-notification',
+      data: data.url ? { url: data.url } : {},
+      requireInteraction: false,
+    })
+  );
+});
+
+// Handle notification click
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data && event.notification.data.url ? event.notification.data.url : '/dashboard/notifications';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+      for (var i = 0; i < clientList.length; i++) {
+        var client = clientList[i];
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
+  );
+});

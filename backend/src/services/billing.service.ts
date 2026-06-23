@@ -15,7 +15,13 @@ const generateBillNumber = (): string => {
 };
 
 export class BillingService {
-  async generateMonthlyBills(billingMonth: string) {
+  async generateMonthlyBills(billingMonth: string, force = false) {
+    // Duplicate prevention: check if bills already exist for this month
+    const existingCount = await prisma.bill.count({ where: { billingMonth } });
+    if (existingCount > 0 && !force) {
+      throw new AppError(`DUPLICATE:Bills for ${billingMonth} already exist (${existingCount} bills). Use force=true to regenerate.`, 409);
+    }
+
     const readings = await prisma.meterReading.findMany({
       where: { billingMonth, billId: null },
       select: {
@@ -761,10 +767,60 @@ export class BillingService {
 
         doc.end();
       } catch (error) {
-        reject(error);
+                reject(error);
       }
     });
   }
-}
 
+  // ─── Delete single bill ───────────────────────────────────────────────────
+  async deleteBill(id: string) {
+    const bill = await prisma.bill.findUnique({ where: { id } });
+    if (!bill) throw new AppError('Bill not found', 404);
+    await prisma.payment.deleteMany({ where: { billId: id } });
+    await prisma.bill.delete({ where: { id } });
+    return { message: 'Bill deleted successfully' };
+  }
+
+  // ─── Delete multiple bills ────────────────────────────────────────────────
+  async deleteBills(ids: string[]) {
+    await prisma.payment.deleteMany({ where: { billId: { in: ids } } });
+    const result = await prisma.bill.deleteMany({ where: { id: { in: ids } } });
+    return { deleted: result.count };
+  }
+
+  // ─── Delete bills by month ────────────────────────────────────────────────
+  async deleteBillsByMonth(billingMonth: string) {
+    const bills = await prisma.bill.findMany({ where: { billingMonth }, select: { id: true } });
+    const ids = bills.map((b) => b.id);
+    await prisma.payment.deleteMany({ where: { billId: { in: ids } } });
+    const result = await prisma.bill.deleteMany({ where: { billingMonth } });
+    return { deleted: result.count };
+  }
+
+  // ─── Delete all unpaid bills ──────────────────────────────────────────────
+  async deleteAllUnpaidBills() {
+    const bills = await prisma.bill.findMany({
+      where: { status: { in: ['UNPAID', 'OVERDUE'] } },
+      select: { id: true },
+    });
+    const ids = bills.map((b) => b.id);
+    await prisma.payment.deleteMany({ where: { billId: { in: ids } } });
+    const result = await prisma.bill.deleteMany({ where: { status: { in: ['UNPAID', 'OVERDUE'] } } });
+    return { deleted: result.count };
+  }
+
+  // ─── Export bills as CSV ──────────────────────────────────────────────────
+  async exportBillsCSV(query: any): Promise<string> {
+    const { bills } = await this.getAllBills({ ...query, limit: 10000 });
+    const headers = ['Bill Number', 'Resident', 'Account', 'House', 'Billing Month', 'Units', 'Unit Rate', 'Total', 'Paid', 'Balance', 'Status', 'Due Date', 'Created'];
+    const rows = bills.map((b: any) => [
+      b.billNumber, b.resident?.fullName || '', b.resident?.accountNumber || '',
+      b.houseNumber || '', b.billingMonth, b.unitsConsumed || '', b.unitRate || '',
+      b.totalAmount, b.amountPaid, b.balance, b.status,
+      new Date(b.dueDate).toLocaleDateString('en-KE'),
+      new Date(b.createdAt).toLocaleDateString('en-KE'),
+    ]);
+    return [headers, ...rows].map((r) => r.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  }
+}
 export const billingService = new BillingService();

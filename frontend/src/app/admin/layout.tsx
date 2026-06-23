@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth.store';
+import { api } from '@/lib/api';
 import {
   Droplets,
   LayoutDashboard,
@@ -49,6 +50,21 @@ export default function AdminLayout({
   } = useAuthStore();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const res = await api.get('/notifications/all?limit=1');
+      setUnreadCount(res.data.data?.unreadCount || 0);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return;
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [hydrated, isAuthenticated, fetchUnreadCount]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -308,6 +324,17 @@ export default function AdminLayout({
                 Admin
               </p>
             </div>
+
+            <Link
+              href="/admin/notifications"
+              className="notif-wrap"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', borderRadius: '9px', cursor: 'pointer', position: 'relative' }}
+            >
+              <Bell size={18} style={{ color: 'var(--t2)' }} />
+              {unreadCount > 0 && (
+                <div className="notif-dot" />
+              )}
+            </Link>
           </div>
 
           <div className="pg">{children}</div>

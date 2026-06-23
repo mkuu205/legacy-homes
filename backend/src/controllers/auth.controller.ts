@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/auth.service';
 import { AuthRequest } from '../middleware/auth';
 import prisma from '../config/prisma';
+import bcrypt from 'bcryptjs';
+import { sendAccountDeletedEmail } from '../utils/email';
+import { auditService } from '../services/audit.service';
 
 export class AuthController {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -168,6 +171,45 @@ export class AuthController {
           houseNumber: house?.houseNumber, // Return houseNumber for frontend
         },
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteAccount(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { password } = req.body;
+      if (!password) {
+        res.status(400).json({ success: false, message: 'Password is required to delete your account' });
+        return;
+      }
+      const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+      if (!user) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+      }
+      // Verify password
+      const isValid = await bcrypt.compare(password, user.passwordHash);
+      if (!isValid) {
+        res.status(400).json({ success: false, message: 'Incorrect password. Please try again.' });
+        return;
+      }
+      // Invalidate all sessions
+      await prisma.refreshToken.deleteMany({ where: { userId: user.id } }).catch(() => {});
+      // Audit log before deletion
+      await auditService.logAction({
+        userId: user.id,
+        action: 'DELETE_ACCOUNT',
+        resource: 'User',
+        resourceId: user.id,
+        details: { email: user.email, fullName: user.fullName },
+        ipAddress: req.ip,
+      }).catch(() => {});
+      // Send deletion email
+      sendAccountDeletedEmail(user.email, user.fullName).catch(() => {});
+      // Delete the user (cascade deletes notifications, etc.)
+      await prisma.user.delete({ where: { id: user.id } });
+      res.json({ success: true, message: 'Your account has been permanently deleted.' });
     } catch (error) {
       next(error);
     }

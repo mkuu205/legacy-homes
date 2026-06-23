@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth.store';
+import { api } from '@/lib/api';
 import {
   Droplets,
   LayoutDashboard,
@@ -45,6 +46,20 @@ export default function DashboardLayout({
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const res = await api.get('/notifications/my?limit=1');
+      setUnreadCount(res.data.data?.unreadCount || 0);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return;
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [hydrated, isAuthenticated, fetchUnreadCount]);
 
   useEffect(() => {
     if (!hydrated) return;

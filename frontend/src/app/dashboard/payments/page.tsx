@@ -13,6 +13,8 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 
 export default function PaymentsPage() {
@@ -26,6 +28,7 @@ export default function PaymentsPage() {
   const [amount, setAmount] = useState('');
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
   const [paymentStartedAt, setPaymentStartedAt] = useState<number | null>(null);
+  const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
 
   const { data: billsData } = useQuery({
     queryKey: ['unpaid-bills'],
@@ -35,12 +38,22 @@ export default function PaymentsPage() {
     },
   });
 
-  useQuery({
+  const { data: myPaymentsData } = useQuery({
     queryKey: ['my-payments'],
     queryFn: async () => {
       const res = await api.get('/payments/my-payments');
       return res.data.data;
     },
+  });
+
+  const clearHistoryMutation = useMutation({
+    mutationFn: async () => { await api.delete('/payments/my-history'); },
+    onSuccess: () => {
+      toast({ type: 'success', title: 'Payment history cleared' });
+      setShowClearHistoryModal(false);
+      queryClient.invalidateQueries({ queryKey: ['my-payments'] });
+    },
+    onError: (error) => toast({ type: 'error', title: 'Failed to clear history', description: getErrorMessage(error) }),
   });
 
   const { data: statusData } = useQuery({
@@ -430,13 +443,23 @@ export default function PaymentsPage() {
 
       {/* Recent Payments */}
       <div className="card">
-        <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)', marginBottom: '4px' }}>
-            Recent Payments
-          </h2>
-          <p style={{ fontSize: '12px', color: 'var(--t2)' }}>
-            Your last 10 payment transactions
-          </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+          <div>
+            <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)', marginBottom: '4px' }}>
+              Recent Payments
+            </h2>
+            <p style={{ fontSize: '12px', color: 'var(--t2)' }}>
+              Your payment transaction history
+            </p>
+          </div>
+          {(myPaymentsData?.payments?.length > 0) && (
+            <button
+              onClick={() => setShowClearHistoryModal(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+            >
+              <Trash2 size={12} /> Clear History
+            </button>
+          )}
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -497,6 +520,30 @@ export default function PaymentsPage() {
           </table>
         </div>
       </div>
+
+      {/* Clear History Modal */}
+      {showClearHistoryModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div className="card" style={{ maxWidth: '380px', width: '100%', border: '1px solid rgba(239,68,68,0.3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <AlertTriangle size={20} style={{ color: '#ef4444' }} />
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)' }}>Clear Payment History</h3>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: '16px' }}>This will permanently delete all your payment records. This action cannot be undone.</p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setShowClearHistoryModal(false)} className="btn bs" style={{ flex: 1 }}>Cancel</button>
+              <button
+                onClick={() => clearHistoryMutation.mutate()}
+                disabled={clearHistoryMutation.isPending}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px 16px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {clearHistoryMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={14} />}
+                Clear History
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
