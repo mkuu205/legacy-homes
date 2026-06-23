@@ -23,7 +23,6 @@
     "@getbrevo/brevo": "^2.0.0",
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.9.0",
-    "africastalking": "^0.7.9",
     "axios": "^1.16.1",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.10.0",

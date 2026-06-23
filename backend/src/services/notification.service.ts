@@ -5,25 +5,13 @@ import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import axios from 'axios';
 
-let AT: any = null;
-let TALKSASA_API_KEY = process.env.TALKSASA_API_KEY || '';
-let TALKSASA_SENDER_ID = 'TALK-SASA';
-let TALKSASA_BASE_URL = 'https://bulksms.talksasa.com/api/v3/';
-
-try {
-  const AfricasTalking = require('africastalking');
-
-  AT = AfricasTalking({
-    apiKey: process.env.AT_API_KEY,
-    username: process.env.AT_USERNAME,
-  });
-} catch {
-  logger.warn("Africa's Talking not initialized");
-}
+const TALKSASA_API_TOKEN = process.env.TALKSASA_API_TOKEN || '';
+const TALKSASA_SENDER_ID = process.env.TALKSASA_SENDER_ID || 'TALK-SASA';
+const TALKSASA_API_URL = process.env.TALKSASA_API_URL || 'https://bulksms.talksasa.com/api/v3/';
 
 // Helper function to send SMS via TalkSasa
 async function sendTalkSasaSMS(phoneNumber: string, message: string): Promise<void> {
-  if (!TALKSASA_API_KEY) {
+  if (!TALKSASA_API_TOKEN) {
     logger.warn('TalkSasa API key not configured');
     return;
   }
@@ -44,14 +32,14 @@ async function sendTalkSasaSMS(phoneNumber: string, message: string): Promise<vo
       phone = '254' + phone;
     }
 
-    const response = await axios.post(`${TALKSASA_BASE_URL}sms/send`, {
+    const response = await axios.post(`${TALKSASA_API_URL}sms/send`, {
       recipient: phone,
       sender_id: TALKSASA_SENDER_ID,
       type: 'plain',
       message: message,
     }, {
       headers: {
-        'Authorization': `Bearer ${TALKSASA_API_KEY}`,
+        'Authorization': `Bearer ${TALKSASA_API_TOKEN}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
@@ -333,29 +321,10 @@ export class NotificationService {
 
       if (channel === 'SMS') {
         try {
-          // Try TalkSasa first
-          if (TALKSASA_API_KEY) {
+          if (TALKSASA_API_TOKEN) {
             await sendTalkSasaSMS(resident.phone, `${title}: ${message}`);
-          } else if (AT) {
-            // Fallback to Africa's Talking
-            const sms = AT.SMS;
-            let phone = resident.phone;
-
-            if (phone.startsWith('0')) {
-              phone = '+254' + phone.slice(1);
-            }
-
-            if (!phone.startsWith('+')) {
-              phone = '+' + phone;
-            }
-
-            await sms.send({
-              to: [phone],
-              message: `${title}: ${message}`,
-              from: process.env.AT_SENDER_ID,
-            });
           } else {
-            throw new Error('No SMS provider configured');
+            throw new Error('TalkSasa API key not configured');
           }
 
           await prisma.userNotification.updateMany({
@@ -567,7 +536,7 @@ export class NotificationService {
     if (!resident) throw new AppError('Resident not found', 404);
 
     // Send SMS
-    if (TALKSASA_API_KEY) {
+    if (TALKSASA_API_TOKEN) {
       try {
         await sendTalkSasaSMS(
           resident.phone,
@@ -621,7 +590,7 @@ export class NotificationService {
     if (!resident) throw new AppError('Resident not found', 404);
 
     // Send SMS
-    if (TALKSASA_API_KEY) {
+    if (TALKSASA_API_TOKEN) {
       try {
         await sendTalkSasaSMS(
           resident.phone,
