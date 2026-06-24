@@ -37,7 +37,7 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
 const LOGO_URL = 'https://i.ibb.co/5hvy5zXd/Chat-GPT-Image-Jun-23-2026-01-17-11-AM.png';
 const BRAND_TEAL = '#00c6a7';
 const BRAND_DARK = '#0b1525';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://legacy-homes-frontend.vercel.app';
 const YEAR = new Date().getFullYear();
 
 function emailWrapper(bodyHtml: string): string {
@@ -98,14 +98,14 @@ body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;background:#eef2f7;color:
   <div class="hdr">
     <img src="${LOGO_URL}" alt="Legacy Homes"/>
     <h1>Legacy Homes</h1>
-    <p>Water Billing System · Nairobi, Kenya</p>
+    <p>Water Billing System · Nakuru, Kenya</p>
   </div>
   <div class="body">${bodyHtml}</div>
   <div class="ftr">
-    <p>© ${YEAR} Legacy Homes Water Billing System · Nairobi, Kenya</p>
+    <p>© ${YEAR} Legacy Homes Water Billing System · Nakuru, Kenya</p>
     <p style="margin-top:8px;">
       <a href="mailto:support@legacyhomes.co.ke">support@legacyhomes.co.ke</a> &nbsp;·&nbsp;
-      <a href="tel:+254700000000">+254 700 000 000</a> &nbsp;·&nbsp;
+      <a href="tel:+254796307638">+254 796 307 638</a> &nbsp;·&nbsp;
       <a href="${FRONTEND_URL}">legacyhomes.co.ke</a>
     </p>
     <p style="margin-top:10px;font-size:11px;color:#cbd5e1;">This is an automated message. Please do not reply directly to this email.</p>
