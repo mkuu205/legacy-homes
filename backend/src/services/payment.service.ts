@@ -129,14 +129,17 @@ export class PaymentService {
     try {
       const callbackUrl = process.env.TUMA_CALLBACK_URL;
       logger.info(`Initiating Tuma STK Push for payment ${paymentId}. Callback URL: ${callbackUrl}`);
+      const stkPayload = {
+        amount: data.amount,
+        phone: phone,
+        description: `Water Bill Payment - ${bill.billNumber}`,
+        callback_url: callbackUrl,
+      };
+      logger.info(`Tuma STK Push Outgoing Payload for ${paymentId}:`, JSON.stringify(stkPayload));
+
       const response = await axios.post(
         `${this.tumaApiUrl}/payment/stk-push`,
-        {
-          amount: data.amount,
-          phone: phone,
-          description: `Water Bill Payment - ${bill.billNumber}`,
-          callback_url: callbackUrl,
-        },
+        stkPayload,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -167,16 +170,26 @@ export class PaymentService {
       }
       throw new Error(response.data.message || 'STK Push failed');
     } catch (error: any) {
+      const isTimeout = error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout');
       const errorMessage = error.response?.data?.message || error.message || 'Unknown payment error';
-      logger.error('Tuma STK Push error:', error.response?.data || error.message);
+      logger.error(`Tuma STK Push error for ${paymentId}:`, error.response?.data || error.message);
 
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
-          status: 'FAILED',
-          failureReason: errorMessage,
+          status: isTimeout ? 'PENDING' : 'FAILED',
+          failureReason: isTimeout ? 'Awaiting provider confirmation (Request Timeout)' : errorMessage,
         },
       });
+
+      if (isTimeout) {
+        return {
+          success: true,
+          paymentId,
+          message: 'Request timed out but payment may still be processed. Please wait for confirmation.',
+          status: 'PENDING'
+        };
+      }
 
       throw new AppError(errorMessage, 500);
     }
@@ -196,6 +209,14 @@ export class PaymentService {
       timestamp
     } = payload;
 
+    // 1. Audit every callback payload
+    const audit = await prisma.callbackAudit.create({
+      data: {
+        payload: payload,
+        provider: 'TUMA'
+      }
+    });
+
     // Specific trace for requested transaction
     if (mpesa_receipt_number === 'UFONJ92VQ4') {
       logger.info(`TRACE: Callback received for transaction UFONJ92VQ4. Payload: ${JSON.stringify(payload)}`);
@@ -209,6 +230,13 @@ export class PaymentService {
         ].filter(Boolean)
       },
     });
+
+    if (payment) {
+      await prisma.callbackAudit.update({
+        where: { id: audit.id },
+        data: { paymentId: payment.paymentId }
+      });
+    }
 
     if (!payment) {
       logger.warn(`Callback received for unknown payment. MerchantID: ${merchant_request_id}, CheckoutID: ${checkout_request_id}. SILENTLY IGNORING.`);
@@ -228,6 +256,11 @@ export class PaymentService {
       try {
         await this.reconcilePayment(payment.id, mpesa_receipt_number, Number(amount || payment.amount), payload, verificationTimestamp);
         logger.info(`Payment updated: ${payment.paymentId} status = SUCCESSFUL`);
+        
+        await prisma.callbackAudit.update({
+          where: { id: audit.id },
+          data: { processed: true }
+        });
       } catch (error: any) {
         logger.error(`CRITICAL: Reconciliation failed for payment ${payment.paymentId}:`, error.message);
         throw error;
@@ -246,6 +279,11 @@ export class PaymentService {
         },
       });
       logger.info(`Payment updated: ${payment.paymentId} status = FAILED`);
+      
+      await prisma.callbackAudit.update({
+        where: { id: audit.id },
+        data: { processed: true }
+      });
     }
 
     return { success: true, message: 'Callback processed successfully' };
@@ -491,3 +529,85 @@ export class PaymentService {
 }
 
 export const paymentService = new PaymentService();
+
+  async queryTumaStatus(checkoutRequestId: string) {
+    const token = await this.getAuthToken();
+    try {
+      logger.info(`Querying Tuma status for CheckoutID: ${checkoutRequestId}`);
+      const response = await axios.get(
+        `${this.tumaApiUrl}/payment/status/${checkoutRequestId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 20000
+        }
+      );
+      
+      logger.info(`Tuma Status Response for ${checkoutRequestId}:`, JSON.stringify(response.data));
+      return response.data;
+    } catch (error: any) {
+      logger.error(`Error querying Tuma status for ${checkoutRequestId}:`, error.response?.data || error.message);
+      return null;
+    }
+  }
+
+  async manualReconcile(paymentId: string) {
+    const payment = await prisma.payment.findFirst({
+      where: { paymentId },
+      include: { bill: true }
+    });
+
+    if (!payment) throw new AppError('Payment not found', 404);
+    if (payment.status === 'SUCCESSFUL') return { success: true, message: 'Payment already successful', data: payment };
+
+    if (!payment.checkoutRequestId) {
+      throw new AppError('No checkout request ID found for this payment. Cannot query status.', 400);
+    }
+
+    const tumaData = await this.queryTumaStatus(payment.checkoutRequestId);
+    
+    if (tumaData && tumaData.success && (tumaData.data.status === 'completed' || tumaData.data.result_code === 0)) {
+      const { mpesa_receipt_number, amount, timestamp } = tumaData.data;
+      
+      logger.info(`Manual reconciliation: Payment ${paymentId} found COMPLETED in Tuma.`);
+      await this.reconcilePayment(
+        payment.id, 
+        mpesa_receipt_number, 
+        Number(amount || payment.amount), 
+        tumaData.data, 
+        timestamp ? new Date(timestamp) : new Date()
+      );
+      
+      const updatedPayment = await prisma.payment.findUnique({ where: { id: payment.id } });
+      return { success: true, message: 'Payment reconciled successfully', data: updatedPayment };
+    } else {
+      logger.info(`Manual reconciliation: Payment ${paymentId} not yet completed in Tuma.`);
+      return { 
+        success: false, 
+        message: tumaData?.message || 'Payment still pending or failed at provider',
+        data: tumaData?.data
+      };
+    }
+  }
+
+  // Fallback verification for pending payments > 60s
+  async verifyPendingPayments() {
+    const sixtySecondsAgo = new Date(Date.now() - 60 * 1000);
+    const pendingPayments = await prisma.payment.findMany({
+      where: {
+        status: 'PENDING',
+        createdAt: { lt: sixtySecondsAgo },
+        checkoutRequestId: { not: null }
+      },
+      take: 10 // Process in small batches
+    });
+
+    logger.info(`Running fallback verification for ${pendingPayments.length} pending payments`);
+
+    for (const payment of pendingPayments) {
+      try {
+        await this.manualReconcile(payment.paymentId);
+      } catch (error: any) {
+        logger.error(`Fallback verification failed for ${payment.paymentId}:`, error.message);
+      }
+    }
+  }

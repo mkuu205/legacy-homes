@@ -422,3 +422,14 @@ model SystemSetting {
 
   @@map("system_settings")
 }
+
+model CallbackAudit {
+  id          String   @id @default(uuid())
+  payload     Json
+  receivedAt  DateTime @default(now())
+  processed   Boolean  @default(false)
+  paymentId   String?
+  provider    String   @default("TUMA")
+
+  @@map("callback_audits")
+}

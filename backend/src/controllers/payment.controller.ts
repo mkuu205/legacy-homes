@@ -99,8 +99,8 @@ export class PaymentController {
 
   async retryVerification(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const result = await paymentService.retryPaymentVerification(req.params.paymentId);
-      res.json({ success: true, data: result });
+      const result = await paymentService.manualReconcile(req.params.paymentId);
+      res.json(result);
     } catch (error) { next(error); }
   }
 
