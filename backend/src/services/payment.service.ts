@@ -322,7 +322,9 @@ export class PaymentService {
     payload: any,
     verificationTimestamp: Date
   ) {
-    // Use a transaction to ensure all updates succeed or fail together
+    let result: any = null;
+
+    // 1. DATABASE TRANSACTION - Only data persistence
     await prisma.$transaction(async (tx) => {
       const payment = await tx.payment.findUnique({
         where: { id: paymentId },
@@ -338,8 +340,7 @@ export class PaymentService {
         return;
       }
 
-      // 1. Update Payment Record
-      logger.info(`Updating payment ${payment.paymentId} to SUCCESSFUL`);
+      // Update Payment Record
       await tx.payment.update({
         where: { id: paymentId },
         data: {
@@ -350,14 +351,12 @@ export class PaymentService {
           failureReason: null,
         },
       });
-      logger.info(`Receipt saved: ${mpesaReceiptCode} for payment ${payment.paymentId}`);
 
-      // 2. Update Bill Record
+      // Update Bill Record
       const newAmountPaid = payment.bill.amountPaid + amount;
       const newBalance = Math.max(0, payment.bill.totalAmount - newAmountPaid);
       const newStatus = newBalance <= 0 ? 'PAID' : 'PARTIAL';
 
-      logger.info(`Updating bill ${payment.bill.billNumber}: PaidAmount=${newAmountPaid}, Balance=${newBalance}, Status=${newStatus}`);
       await tx.bill.update({
         where: { id: payment.billId },
         data: {
@@ -367,57 +366,68 @@ export class PaymentService {
           updatedAt: new Date(),
         },
       });
-      logger.info(`Bill updated: ${payment.bill.billNumber}`);
 
-      // 3. Update Resident Balance (Resident balance is tracked via their active bills)
-      // If there was a specific balance field on User, it would be updated here.
-      // Based on schema, we update the bill which reflects the resident's balance.
-      logger.info(`Resident balance updated via bill ${payment.bill.billNumber}`);
-
-      // 4. Create and send notifications
-      try {
-        logger.info(`Creating notification for payment ${payment.paymentId}`);
-        await notificationService.sendPaymentSuccessNotification(
-          payment.residentId,
-          amount,
-          mpesaReceiptCode
-        );
-        logger.info(`Notification created: Payment confirmation for ${payment.paymentId}`);
-      } catch (err) {
-        logger.error('Failed to send notifications during reconciliation:', err);
-      }
-
-      // 5. Emit Socket.IO events for real-time dashboard updates
-      logger.info(`Emitting real-time updates for resident ${payment.residentId}`);
-      
-      io.to(`user_${payment.residentId}`).emit('payment_completed', {
+      // Prepare data for post-transaction operations
+      result = {
+        residentId: payment.residentId,
         paymentId: payment.paymentId,
+        billId: payment.billId,
+        billNumber: payment.bill.billNumber,
+        newBalance,
+        newStatus
+      };
+    }, {
+      timeout: 20000 // Increase timeout to 20 seconds
+    });
+
+    if (!result) return;
+
+    // 2. POST-TRANSACTION OPERATIONS - External services (SMS, Email, Sockets)
+    logger.info(`Transaction committed for payment ${result.paymentId}. Starting external operations.`);
+
+    // Send Notifications (SMS/Email)
+    try {
+      await notificationService.sendPaymentSuccessNotification(
+        result.residentId,
+        amount,
+        mpesaReceiptCode
+      );
+      logger.info(`Notifications sent for payment ${result.paymentId}`);
+    } catch (err) {
+      logger.error(`Failed to send notifications for payment ${result.paymentId}:`, err);
+    }
+
+    // Emit Socket.IO events
+    try {
+      const room = `user_${result.residentId}`;
+      io.to(room).emit('payment_completed', {
+        paymentId: result.paymentId,
         amount,
         mpesaReceiptCode,
-        billId: payment.billId,
-        newBalance,
-        newStatus
+        billId: result.billId,
+        newBalance: result.newBalance,
+        newStatus: result.newStatus
       });
-      logger.info('Socket emitted: payment_completed');
 
-      io.to(`user_${payment.residentId}`).emit('bill_updated', {
-        billId: payment.billId,
-        newBalance,
-        newStatus
+      io.to(room).emit('bill_updated', {
+        billId: result.billId,
+        newBalance: result.newBalance,
+        newStatus: result.newStatus
       });
-      logger.info('Socket emitted: bill_updated');
 
-      io.to(`user_${payment.residentId}`).emit('dashboard_updated', {
-        residentId: payment.residentId
+      io.to(room).emit('dashboard_updated', {
+        residentId: result.residentId
       });
-      logger.info('Socket emitted: dashboard_updated');
 
-      io.to(`user_${payment.residentId}`).emit('notification_created', {
+      io.to(room).emit('notification_created', {
         type: 'PAYMENT_CONFIRMATION',
         message: `Payment of KES ${amount} received. Receipt: ${mpesaReceiptCode}`
       });
-      logger.info('Socket emitted: notification_created');
-    });
+      
+      logger.info(`Socket events emitted for resident ${result.residentId}`);
+    } catch (err) {
+      logger.error(`Failed to emit socket events for payment ${result.paymentId}:`, err);
+    }
   }
 
   async checkPaymentStatus(paymentId: string, userId: string) {
