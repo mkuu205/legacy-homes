@@ -126,6 +126,13 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString(), service: 'Legacy Homes API' });
 });
 
+app.get('/deployment-test', (_req, res) => {
+  res.json({
+    deployed: true,
+    timestamp: new Date().toISOString(),
+    commit: process.env.RENDER_GIT_COMMIT || 'unknown'
+  });
+});
 
 
 // Callback Debugging Middleware - MUST BE BEFORE ANY OTHER MIDDLEWARE FOR THIS ROUTE
