@@ -17,7 +17,10 @@ router.post('/callback', paymentController.handleCallback.bind(paymentController
 router.post('/callback-test', (req, res) => {
   logger.info('CALLBACK TEST RECEIVED');
   logger.info(JSON.stringify(req.body, null, 2));
-  return res.status(200).json({ success: true });
+
+  return res.status(200).json({
+    success: true
+  });
 });
 
 router.get('/callback-health', (_req, res) => {

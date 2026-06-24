@@ -212,18 +212,13 @@ export class PaymentService {
       timestamp
     } = payload;
 
-    // 1. Audit every callback payload
+    // Audit every callback payload
     const audit = await prisma.callbackAudit.create({
       data: {
         payload: payload,
         provider: 'TUMA'
       }
     });
-
-    // Specific trace for requested transaction
-    if (mpesa_receipt_number === 'UFONJ92VQ4') {
-      logger.info(`TRACE: Callback received for transaction UFONJ92VQ4. Payload: ${JSON.stringify(payload)}`);
-    }
 
     const payment = await prisma.payment.findFirst({
       where: {
