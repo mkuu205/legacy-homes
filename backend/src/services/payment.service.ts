@@ -197,6 +197,7 @@ export class PaymentService {
   }
 
   async handleCallback(payload: any, headers: any = {}) {
+    logger.info('🔥 TUMA CALLBACK HANDLER EXECUTED');
     logger.info('🔥 TUMA CALLBACK RECEIVED');
     logger.info('PAYLOAD: ' + JSON.stringify(payload, null, 2));
     logger.info('HEADERS: ' + JSON.stringify(headers, null, 2));

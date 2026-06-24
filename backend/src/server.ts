@@ -128,6 +128,14 @@ app.get('/health', (_req, res) => {
 
 
 
+// Callback Debugging Middleware
+app.use('/api/payments/callback', (req, res, next) => {
+  logger.info('🔥 CALLBACK REQUEST RECEIVED');
+  logger.info('HEADERS: ' + JSON.stringify(req.headers, null, 2));
+  logger.info('BODY: ' + JSON.stringify(req.body, null, 2));
+  next();
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/residents', residentRoutes);
