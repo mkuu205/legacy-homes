@@ -424,12 +424,15 @@ model SystemSetting {
 }
 
 model CallbackAudit {
-  id          String   @id @default(uuid())
-  payload     Json
-  receivedAt  DateTime @default(now())
-  processed   Boolean  @default(false)
-  paymentId   String?
-  provider    String   @default("TUMA")
+  id               String   @id @default(uuid())
+  headers          Json?
+  payload          Json
+  receivedAt       DateTime @default(now())
+  processed        Boolean  @default(false)
+  paymentId        String?
+  provider         String   @default("TUMA")
+  processingResult String?
+  errorMessage     String?
 
   @@map("callback_audits")
 }

@@ -197,95 +197,116 @@ export class PaymentService {
   }
 
   async handleCallback(payload: any, headers: any = {}) {
-    logger.info('🔥 TUMA CALLBACK HANDLER EXECUTED');
-    logger.info('🔥 TUMA CALLBACK RECEIVED');
-    logger.info('PAYLOAD: ' + JSON.stringify(payload, null, 2));
-    logger.info('HEADERS: ' + JSON.stringify(headers, null, 2));
+    logger.info("CALLBACK REACHED APPLICATION");
+    logger.info("HEADERS: " + JSON.stringify(headers));
+    logger.info("BODY: " + JSON.stringify(payload));
 
-    const {
-      checkout_request_id,
-      merchant_request_id,
-      status,
-      mpesa_receipt_number,
-      amount,
-      result_code,
-      result_desc,
-      timestamp
-    } = payload;
-
-    // Audit every callback payload
-    const audit = await prisma.callbackAudit.create({
-      data: {
-        payload: payload,
-        provider: 'TUMA'
-      }
-    });
-
-    const payment = await prisma.payment.findFirst({
-      where: {
-        OR: [
-          { checkoutRequestId: checkout_request_id },
-          { merchantRequestId: merchant_request_id }
-        ].filter(Boolean)
-      },
-    });
-
-    if (payment) {
-      await prisma.callbackAudit.update({
-        where: { id: audit.id },
-        data: { paymentId: payment.paymentId }
-      });
-    }
-
-    if (!payment) {
-      logger.warn(`Callback received for unknown payment. MerchantID: ${merchant_request_id}, CheckoutID: ${checkout_request_id}. SILENTLY IGNORING.`);
-      return { success: true, message: 'Callback received but payment not found' };
-    }
-
-    if (payment.status === 'SUCCESSFUL') {
-      logger.info(`Callback for already successful payment: ${payment.paymentId}. Skipping.`);
-      return { success: true, message: 'Callback already processed' };
-    }
-
-    const verificationTimestamp = timestamp ? new Date(timestamp) : new Date();
-
-    // Success processing: result_code === 0 OR status === "completed"
-    if (result_code === 0 || result_code === "0" || status === 'completed') {
-      logger.info(`Payment ${payment.paymentId} marked as SUCCESSFUL in Tuma callback.`);
-      try {
-        await this.reconcilePayment(payment.id, mpesa_receipt_number, Number(amount || payment.amount), payload, verificationTimestamp);
-        logger.info(`Payment updated: ${payment.paymentId} status = SUCCESSFUL`);
-        
-        await prisma.callbackAudit.update({
-          where: { id: audit.id },
-          data: { processed: true }
-        });
-      } catch (error: any) {
-        logger.error(`CRITICAL: Reconciliation failed for payment ${payment.paymentId}:`, error.message);
-        throw error;
-      }
-    } 
-    // Failure processing: result_code !== 0 OR status === "failed"
-    else if (result_code !== 0 || status === 'failed') {
-      logger.info(`Payment ${payment.paymentId} marked as FAILED in callback: ${result_desc}`);
-      await prisma.payment.update({
-        where: { id: payment.id },
+    let auditId: string | null = null;
+    try {
+      // 1. Audit every callback request immediately
+      const audit = await prisma.callbackAudit.create({
         data: {
-          status: 'FAILED',
-          failureReason: result_desc || 'Payment failed',
-          callbackPayload: payload,
-          verificationTimestamp,
+          headers: headers as any,
+          payload: payload as any,
+          provider: 'TUMA',
+          processed: false
+        }
+      });
+      auditId = audit.id;
+
+      const {
+        checkout_request_id,
+        merchant_request_id,
+        status,
+        mpesa_receipt_number,
+        amount,
+        result_code,
+        result_desc,
+        timestamp
+      } = payload;
+
+      // 2. Find the payment record
+      const payment = await prisma.payment.findFirst({
+        where: {
+          OR: [
+            { checkoutRequestId: checkout_request_id },
+            { merchantRequestId: merchant_request_id }
+          ].filter(Boolean)
         },
       });
-      logger.info(`Payment updated: ${payment.paymentId} status = FAILED`);
-      
-      await prisma.callbackAudit.update({
-        where: { id: audit.id },
-        data: { processed: true }
-      });
-    }
 
-    return { success: true, message: 'Callback processed successfully' };
+      if (payment) {
+        await prisma.callbackAudit.update({
+          where: { id: auditId },
+          data: { paymentId: payment.paymentId }
+        });
+
+        if (payment.status === 'SUCCESSFUL') {
+          logger.info(`Callback for already successful payment: ${payment.paymentId}. Skipping.`);
+          await prisma.callbackAudit.update({
+            where: { id: auditId },
+            data: { processed: true, processingResult: 'ALREADY_SUCCESSFUL' }
+          });
+          return { success: true, message: 'Callback already processed' };
+        }
+
+        const verificationTimestamp = timestamp ? new Date(timestamp) : new Date();
+
+        // 3. Success processing
+        if (result_code === 0 || result_code === "0" || status === 'completed') {
+          logger.info(`Payment ${payment.paymentId} marked as SUCCESSFUL in Tuma callback.`);
+          await this.reconcilePayment(payment.id, mpesa_receipt_number, Number(amount || payment.amount), payload, verificationTimestamp);
+          
+          await prisma.callbackAudit.update({
+            where: { id: auditId },
+            data: { processed: true, processingResult: 'SUCCESS' }
+          });
+          logger.info(`Payment updated: ${payment.paymentId} status = SUCCESSFUL`);
+        } 
+        // 4. Failure processing
+        else if (result_code !== 0 || status === 'failed') {
+          logger.info(`Payment ${payment.paymentId} marked as FAILED in callback: ${result_desc}`);
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: 'FAILED',
+              failureReason: result_desc || 'Payment failed',
+              callbackPayload: payload,
+              verificationTimestamp,
+            },
+          });
+          
+          await prisma.callbackAudit.update({
+            where: { id: auditId },
+            data: { processed: true, processingResult: 'FAILED_IN_PAYLOAD' }
+          });
+          logger.info(`Payment updated: ${payment.paymentId} status = FAILED`);
+        }
+      } else {
+        logger.warn(`Callback received for unknown payment. MerchantID: ${merchant_request_id}, CheckoutID: ${checkout_request_id}.`);
+        await prisma.callbackAudit.update({
+          where: { id: auditId },
+          data: { processingResult: 'PAYMENT_NOT_FOUND' }
+        });
+      }
+
+      return { success: true, message: 'Callback processed' };
+    } catch (error: any) {
+      logger.error("CALLBACK PROCESSING FAILED", error);
+      if (auditId) {
+        await prisma.callbackAudit.update({
+          where: { id: auditId },
+          data: { 
+            processed: false, 
+            processingResult: 'ERROR',
+            errorMessage: error.message 
+          }
+        }).catch(e => logger.error("Failed to update audit with error", e));
+      }
+      // Return 200 to Tuma to avoid retries if the error is on our side, 
+      // but log it extensively for debugging.
+      return { success: true, message: 'Callback received with internal error' };
+    }
   }
 
   private async reconcilePayment(
