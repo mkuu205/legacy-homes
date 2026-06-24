@@ -108,18 +108,7 @@ export default function HomePage() {
     whileTap: { scale: 0.95 }
   };
 
-  const floatAnimation = {
-    animate: {
-      y: [0, -10, 0],
-      transition: {
-        duration: 3,
-        repeat: Infinity,
-        ease: "easeInOut"
-      }
-    }
-  };
-
-  const pulseGlow = {
+  const orbAnimation = {
     animate: {
       scale: [1, 1.05, 1],
       opacity: [0.3, 0.5, 0.3],
@@ -397,12 +386,28 @@ export default function HomePage() {
           <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
             <motion.div 
               className="lh-orb lh-orb-1"
-              animate={pulseGlow.animate}
+              animate={{
+                scale: [1, 1.05, 1],
+                opacity: [0.3, 0.5, 0.3],
+              }}
+              transition={{
+                duration: 4,
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
             />
             <motion.div 
               className="lh-orb lh-orb-2"
-              animate={pulseGlow.animate}
-              transition={{ delay: 1 }}
+              animate={{
+                scale: [1, 1.08, 1],
+                opacity: [0.25, 0.45, 0.25],
+              }}
+              transition={{
+                duration: 5,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: 1
+              }}
             />
             <div className="lh-orb lh-orb-3" />
             <div className="lh-grid-overlay" />
@@ -444,12 +449,20 @@ export default function HomePage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.5 }}
             >
-              <motion.div {...scaleOnHover}>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ duration: 0.2 }}
+              >
                 <Link href="/register" className="lh-btn-xl solid">
                   Create Your Account <ArrowRight className="w-5 h-5" />
                 </Link>
               </motion.div>
-              <motion.div {...scaleOnHover}>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ duration: 0.2 }}
+              >
                 <Link href="/login" className="lh-btn-xl outline">
                   Sign In to Dashboard
                 </Link>
