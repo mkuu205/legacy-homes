@@ -246,9 +246,73 @@ export default function HomePage() {
         .lh-billing-formula strong { color: #38bdf8; }
 
         /* FOOTER */
-        .lh-footer { padding: 48px 40px; border-top: 1px solid rgba(255,255,255,.06); }
-        .lh-footer-inner { max-width: 960px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
-        .lh-footer-copy { font-size: 13px; color: rgba(255,255,255,.25); }
+        .lh-footer { 
+          padding: 48px 40px 32px; 
+          border-top: 1px solid rgba(255,255,255,.06);
+        }
+        .lh-footer-inner { 
+          max-width: 960px; 
+          margin: 0 auto; 
+          display: flex; 
+          flex-direction: column;
+          align-items: center;
+          gap: 24px;
+        }
+        .lh-footer-top {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 16px;
+        }
+        .lh-footer-copy { 
+          font-size: 13px; 
+          color: rgba(255,255,255,.25);
+        }
+        .lh-footer-powered {
+          width: 100%;
+          text-align: center;
+          padding-top: 20px;
+          border-top: 1px solid rgba(255,255,255,.06);
+          font-size: 13px;
+          color: rgba(255,255,255,.3);
+          letter-spacing: 0.3px;
+        }
+        .lh-footer-powered .powered-link {
+          color: #38bdf8;
+          text-decoration: none;
+          font-weight: 600;
+          transition: all 0.2s;
+        }
+        .lh-footer-powered .powered-link:hover {
+          color: #7eb3ff;
+          text-decoration: underline;
+        }
+        .lh-footer-powered .kish-text {
+          background: linear-gradient(135deg,#38bdf8,#0ea5e9);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          font-weight: 700;
+        }
+        .lh-footer-powered .phone-link {
+          color: rgba(255,255,255,.5);
+          text-decoration: none;
+          transition: all 0.2s;
+          font-weight: 500;
+        }
+        .lh-footer-powered .phone-link:hover {
+          color: #38bdf8;
+        }
+        .lh-footer-powered .zap-icon {
+          display: inline-block;
+          animation: lhZap 2s ease-in-out infinite;
+        }
+        @keyframes lhZap {
+          0%, 100% { transform: scale(1) rotate(0deg); }
+          50% { transform: scale(1.2) rotate(10deg); }
+        }
 
         /* Fade-up animation */
         @keyframes lhFadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -392,15 +456,24 @@ export default function HomePage() {
         {/* ── FOOTER ── */}
         <footer className="lh-footer">
           <div className="lh-footer-inner">
-            <Link href="/" className="lh-logo">
-              <div className="lh-logo-icon" style={{ width: 28, height: 28, borderRadius: 8 }}>
-                <Droplets className="w-3.5 h-3.5 text-white" />
-              </div>
-              <span className="lh-logo-text" style={{ fontSize: 15 }}>Legacy Homes</span>
-            </Link>
-            <p className="lh-footer-copy">
-              © {new Date().getFullYear()} Legacy Homes Water Billing System · Nairobi, Kenya
-            </p>
+            <div className="lh-footer-top">
+              <Link href="/" className="lh-logo">
+                <div className="lh-logo-icon" style={{ width: 28, height: 28, borderRadius: 8 }}>
+                  <Droplets className="w-3.5 h-3.5 text-white" />
+                </div>
+                <span className="lh-logo-text" style={{ fontSize: 15 }}>Legacy Homes</span>
+              </Link>
+              <p className="lh-footer-copy">
+                © {new Date().getFullYear()} · Nakuru, Kenya
+              </p>
+            </div>
+            
+            <div className="lh-footer-powered">
+              <span className="zap-icon">⚡</span> Powered by{' '}
+              <span className="kish-text">Kish Tech</span>
+              {' '}·{' '}
+              <a href="tel:+254796307638" className="phone-link">0796 307 638</a>
+            </div>
           </div>
         </footer>
 
