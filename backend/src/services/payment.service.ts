@@ -127,7 +127,13 @@ export class PaymentService {
     });
 
     try {
-      const callbackUrl = process.env.TUMA_CALLBACK_URL;
+      const callbackUrl = process.env.PAYMENT_CALLBACK_URL;
+      
+      if (!callbackUrl) {
+        logger.error('PAYMENT_CALLBACK_URL is not configured in environment variables');
+        throw new Error('PAYMENT_CALLBACK_URL is not configured');
+      }
+
       const stkPayload = {
         amount: data.amount,
         phone: phone,
@@ -135,8 +141,8 @@ export class PaymentService {
         callback_url: callbackUrl,
       };
       
+      logger.info(`Using callback URL: ${callbackUrl}`);
       logger.info(`[TUMA] STK Push Payload for ${paymentId}:`, JSON.stringify(stkPayload, null, 2));
-      logger.info(`[TUMA] Callback URL: ${callbackUrl}`);
 
       const response = await axios.post(
         `${this.tumaApiUrl}/payment/stk-push`,

@@ -165,8 +165,7 @@ httpServer.listen(PORT, () => {
   logger.info(`🚀 Legacy Homes API running on port ${PORT}`);
   logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
   logger.info(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
-
-
+  logger.info(`PAYMENT_CALLBACK_URL=${process.env.PAYMENT_CALLBACK_URL}`);
 });
 
 export default app;
