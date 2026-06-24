@@ -1,24 +1,49 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import Link from 'next/link';
 import { motion, Variants } from 'framer-motion';
+import CountUp from 'react-countup';
 import {
   Droplets, Shield, CreditCard, BarChart3,
   Bell, Headphones, ArrowRight, CheckCircle, Zap,
+  TrendingUp, Users, Activity, DollarSign, Calendar,
+  Clock, AlertCircle, ChevronRight, Menu, X
 } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
+  const [loading, setLoading] = useState(true);
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated && user) {
       router.push(user.role === 'RESIDENT' ? '/dashboard' : '/admin');
     }
   }, [isAuthenticated, user, router]);
+
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      setMouse({
+        x: e.clientX,
+        y: e.clientY
+      });
+    };
+
+    window.addEventListener("mousemove", move);
+    return () => window.removeEventListener("mousemove", move);
+  }, []);
 
   const features = [
     {
@@ -66,10 +91,10 @@ export default function HomePage() {
   ];
 
   const stats = [
-    { num: '250', unit: 'KES', label: 'Per unit consumed' },
-    { num: '0',   unit: '',    label: 'Hidden charges' },
-    { num: '24',  unit: '/7',  label: 'AI support & uptime' },
-    { num: '~30', unit: 's',   label: 'M-Pesa confirmation' },
+    { num: 250, unit: 'KES', label: 'Per unit consumed', prefix: '' },
+    { num: 0,   unit: '',    label: 'Hidden charges', prefix: '' },
+    { num: 24,  unit: '/7',  label: 'AI support & uptime', prefix: '' },
+    { num: 30, unit: 's',   label: 'M-Pesa confirmation', prefix: '~' },
   ];
 
   const trustItems = [
@@ -86,7 +111,7 @@ export default function HomePage() {
     'No hidden charges',
   ];
 
-  // Animation variants with correct Framer Motion types
+  // Animation variants
   const fadeInUp: Variants = {
     hidden: { opacity: 0, y: 60 },
     visible: { 
@@ -110,6 +135,98 @@ export default function HomePage() {
     }
   };
 
+  if (loading) {
+    return (
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        background: '#0a0f1e',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+      }}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+          .loader-container {
+            text-align: center;
+            font-family: 'DM Sans', sans-serif;
+          }
+          .loader-logo {
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #1a56db, #0ea5e9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            animation: loaderPulse 1.2s ease-in-out infinite;
+          }
+          .loader-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 28px;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: -1px;
+            opacity: 0;
+            animation: loaderFadeIn 0.8s ease forwards 0.3s;
+          }
+          .loader-sub {
+            font-size: 14px;
+            color: rgba(255,255,255,0.4);
+            margin-top: 8px;
+            opacity: 0;
+            animation: loaderFadeIn 0.8s ease forwards 0.6s;
+          }
+          .loader-water {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 24px;
+            opacity: 0;
+            animation: loaderFadeIn 0.8s ease forwards 0.9s;
+          }
+          .loader-water span {
+            display: inline-block;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #0ea5e9;
+            animation: loaderRipple 1.2s ease-in-out infinite;
+          }
+          .loader-water span:nth-child(2) { animation-delay: 0.2s; }
+          .loader-water span:nth-child(3) { animation-delay: 0.4s; }
+          .loader-water span:nth-child(4) { animation-delay: 0.6s; }
+          .loader-water span:nth-child(5) { animation-delay: 0.8s; }
+
+          @keyframes loaderPulse {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.05) rotate(5deg); }
+          }
+          @keyframes loaderFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes loaderRipple {
+            0%, 100% { transform: scale(0.5); opacity: 0.3; }
+            50% { transform: scale(1); opacity: 1; }
+          }
+        `}</style>
+        <div className="loader-container">
+          <div className="loader-logo">
+            <Droplets size={40} color="white" />
+          </div>
+          <div className="loader-title">Legacy Homes</div>
+          <div className="loader-sub">Smart Water. Smarter Billing.</div>
+          <div className="loader-water">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <style>{`
@@ -121,6 +238,18 @@ export default function HomePage() {
           color: #fff;
           overflow-x: hidden;
           -webkit-font-smoothing: antialiased;
+          position: relative;
+        }
+
+        .cursor-glow {
+          position: fixed;
+          width: 300px;
+          height: 300px;
+          background: radial-gradient(circle, rgba(14,165,233,0.12), transparent 70%);
+          pointer-events: none;
+          z-index: 0;
+          filter: blur(40px);
+          transform: translate(-50%, -50%);
         }
 
         /* NAV */
@@ -129,6 +258,7 @@ export default function HomePage() {
           display: flex; align-items: center; justify-content: space-between;
           padding: 18px 40px;
           backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
           background: rgba(10,15,30,0.75);
           border-bottom: 1px solid rgba(255,255,255,0.06);
         }
@@ -217,6 +347,132 @@ export default function HomePage() {
         .lh-trust-row { display: flex; align-items: center; justify-content: center; gap: 24px; margin-top: 48px; flex-wrap: wrap; }
         .lh-trust-item { display: flex; align-items: center; gap: 7px; font-size: 13px; color: rgba(255,255,255,.45); }
 
+        /* DASHBOARD MOCKUP */
+        .lh-dashboard-mockup {
+          max-width: 960px;
+          margin: 0 auto;
+          padding: 0 40px;
+          position: relative;
+          z-index: 1;
+        }
+        .mockup-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          background: rgba(255,255,255,0.06);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
+          border-radius: 24px;
+          padding: 24px;
+        }
+        .mockup-card {
+          background: rgba(255,255,255,0.04);
+          border-radius: 16px;
+          padding: 20px;
+          border: 1px solid rgba(255,255,255,0.06);
+        }
+        .mockup-card-full {
+          grid-column: 1 / -1;
+        }
+        .mockup-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 16px;
+        }
+        .mockup-card-title {
+          font-size: 12px;
+          font-weight: 600;
+          color: rgba(255,255,255,0.4);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .mockup-value {
+          font-family: 'Syne', sans-serif;
+          font-size: 28px;
+          font-weight: 800;
+          color: #fff;
+        }
+        .mockup-value small {
+          font-size: 14px;
+          font-weight: 400;
+          color: rgba(255,255,255,0.4);
+        }
+        .mockup-chart {
+          display: flex;
+          align-items: flex-end;
+          gap: 8px;
+          height: 80px;
+          margin-top: 12px;
+        }
+        .mockup-bar {
+          flex: 1;
+          border-radius: 4px 4px 0 0;
+          background: linear-gradient(180deg, #0ea5e9, #1a56db);
+          height: 60%;
+          opacity: 0.7;
+        }
+        .mockup-bar:nth-child(1) { height: 70%; }
+        .mockup-bar:nth-child(2) { height: 85%; }
+        .mockup-bar:nth-child(3) { height: 55%; }
+        .mockup-bar:nth-child(4) { height: 90%; }
+        .mockup-bar:nth-child(5) { height: 65%; }
+        .mockup-bar:nth-child(6) { height: 75%; }
+        .mockup-bar:nth-child(7) { height: 50%; }
+        .mockup-table {
+          width: 100%;
+          font-size: 13px;
+        }
+        .mockup-table th {
+          text-align: left;
+          color: rgba(255,255,255,0.3);
+          font-weight: 500;
+          padding-bottom: 8px;
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .mockup-table td {
+          padding: 8px 0;
+          color: rgba(255,255,255,0.7);
+          border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .mockup-table .status {
+          display: inline-block;
+          padding: 2px 10px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 600;
+        }
+        .status-paid { background: rgba(34,197,94,0.15); color: #22c55e; }
+        .status-pending { background: rgba(244,194,106,0.15); color: #f4c26a; }
+        .mockup-notification {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 0;
+          border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+        .mockup-notification:last-child { border-bottom: none; }
+        .mockup-notification-icon {
+          width: 32px;
+          height: 32px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .mockup-notification-text {
+          flex: 1;
+          font-size: 13px;
+          color: rgba(255,255,255,0.7);
+        }
+        .mockup-notification-time {
+          font-size: 11px;
+          color: rgba(255,255,255,0.3);
+        }
+
         /* STATS */
         .lh-stats-strip { padding: 48px 40px; position: relative; z-index: 1; }
         .lh-stats-inner {
@@ -225,20 +481,31 @@ export default function HomePage() {
           gap: 1px; background: rgba(255,255,255,.07);
           border-radius: 20px; overflow: hidden; border: 1px solid rgba(255,255,255,.07);
         }
-        .lh-stat-block { background: rgba(255,255,255,.03); padding: 32px 24px; text-align: center; }
+        .lh-stat-block {
+          background: rgba(255,255,255,0.06);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
+          padding: 32px 24px; text-align: center;
+        }
         .lh-stat-num { font-family: 'Syne', sans-serif; font-size: 42px; font-weight: 800; color: #fff; letter-spacing: -2px; line-height: 1; }
         .lh-stat-num span { font-size: 22px; font-weight: 600; color: #0ea5e9; }
         .lh-stat-label { font-size: 13px; color: rgba(255,255,255,.4); margin-top: 8px; }
 
         /* FEATURES */
-        .lh-section { padding: 80px 40px; }
+        .lh-section { padding: 80px 40px; position: relative; z-index: 1; }
         .lh-section-inner { max-width: 1080px; margin: 0 auto; }
         .lh-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #0ea5e9; margin-bottom: 14px; }
         .lh-section-title { font-family: 'Syne', sans-serif; font-size: clamp(30px,4vw,46px); font-weight: 800; letter-spacing: -1.5px; color: #fff; line-height: 1.1; margin-bottom: 16px; }
         .lh-section-sub { font-size: 17px; color: rgba(255,255,255,.45); font-weight: 300; max-width: 480px; }
         .lh-features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 56px; }
         .lh-feature-card {
-          background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+          background: rgba(255,255,255,0.06);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
           border-radius: 20px; padding: 28px;
           transition: all .3s; position: relative; overflow: hidden;
           cursor: default;
@@ -249,7 +516,7 @@ export default function HomePage() {
         .lh-feature-card p { font-size: 14px; color: rgba(255,255,255,.45); line-height: 1.65; font-weight: 300; }
 
         /* BILLING */
-        .lh-billing { padding: 80px 40px; }
+        .lh-billing { padding: 80px 40px; position: relative; z-index: 1; }
         .lh-billing-inner { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
         @media(max-width:700px){ .lh-billing-inner { grid-template-columns: 1fr; } }
         .lh-billing-left h2 { font-family: 'Syne', sans-serif; font-size: clamp(28px,3.5vw,40px); font-weight: 800; letter-spacing: -1.5px; color: #fff; line-height: 1.15; margin-bottom: 16px; }
@@ -257,8 +524,13 @@ export default function HomePage() {
         .lh-check-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
         .lh-check-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: rgba(255,255,255,.65); }
         .lh-billing-card {
-          background: linear-gradient(135deg,#0d1f42,#0a1530);
-          border: 1px solid rgba(26,86,219,.25); border-radius: 24px; padding: 40px; text-align: center;
+          background: rgba(255,255,255,0.06);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
+          background: linear-gradient(135deg,rgba(13,31,66,0.8),rgba(10,21,48,0.8));
+          border-radius: 24px; padding: 40px; text-align: center;
           position: relative; overflow: hidden;
         }
         .lh-billing-card::before { content: ''; position: absolute; top: -60px; right: -60px; width: 200px; height: 200px; background: radial-gradient(circle,rgba(14,165,233,.15),transparent); border-radius: 50%; }
@@ -274,6 +546,8 @@ export default function HomePage() {
         .lh-footer { 
           padding: 48px 40px 32px; 
           border-top: 1px solid rgba(255,255,255,.06);
+          position: relative;
+          z-index: 1;
         }
         .lh-footer-inner { 
           max-width: 960px; 
@@ -303,16 +577,6 @@ export default function HomePage() {
           font-size: 13px;
           color: rgba(255,255,255,.3);
           letter-spacing: 0.3px;
-        }
-        .lh-footer-powered .powered-link {
-          color: #38bdf8;
-          text-decoration: none;
-          font-weight: 600;
-          transition: all 0.2s;
-        }
-        .lh-footer-powered .powered-link:hover {
-          color: #7eb3ff;
-          text-decoration: underline;
         }
         .lh-footer-powered .kish-text {
           background: linear-gradient(135deg,#38bdf8,#0ea5e9);
@@ -347,9 +611,22 @@ export default function HomePage() {
         .lh-orb-1 { animation: lhPulse 8s ease-in-out infinite; }
         .lh-orb-2 { animation: lhPulse 8s ease-in-out infinite reverse; }
         .lh-orb-3 { animation: lhPulse 10s ease-in-out infinite; }
+
+        @media (max-width: 768px) {
+          .mockup-grid { grid-template-columns: 1fr; }
+          .lh-stats-inner { grid-template-columns: 1fr 1fr; }
+        }
       `}</style>
 
       <div className="lh-root">
+        {/* Cursor Glow */}
+        <div
+          className="cursor-glow"
+          style={{
+            left: mouse.x,
+            top: mouse.y,
+          }}
+        />
 
         {/* ── NAV ── */}
         <motion.nav 
@@ -481,6 +758,93 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* ── DASHBOARD MOCKUP ── */}
+        <motion.div 
+          className="lh-dashboard-mockup"
+          initial={{ opacity: 0, y: 50, scale: 0.95 }}
+          whileInView={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.8 }}
+          viewport={{ once: true, amount: 0.2 }}
+          animate={{
+            y: [0, -10, 0]
+          }}
+          transition={{
+            duration: 6,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        >
+          <div className="mockup-grid">
+            {/* Monthly Revenue */}
+            <div className="mockup-card">
+              <div className="mockup-card-header">
+                <span className="mockup-card-title">Monthly Revenue</span>
+                <DollarSign size={16} color="#22c55e" />
+              </div>
+              <div className="mockup-value">KES 284,500 <small>+12%</small></div>
+              <div className="mockup-chart">
+                <div className="mockup-bar" style={{ height: '60%' }} />
+                <div className="mockup-bar" style={{ height: '75%' }} />
+                <div className="mockup-bar" style={{ height: '50%' }} />
+                <div className="mockup-bar" style={{ height: '85%' }} />
+                <div className="mockup-bar" style={{ height: '65%' }} />
+                <div className="mockup-bar" style={{ height: '90%' }} />
+                <div className="mockup-bar" style={{ height: '70%' }} />
+              </div>
+            </div>
+
+            {/* Active Residents */}
+            <div className="mockup-card">
+              <div className="mockup-card-header">
+                <span className="mockup-card-title">Active Residents</span>
+                <Users size={16} color="#38bdf8" />
+              </div>
+              <div className="mockup-value">156 <small>residents</small></div>
+              <div style={{ marginTop: '12px', fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>
+                <span style={{ color: '#22c55e' }}>↑ 8</span> new this month
+              </div>
+            </div>
+
+            {/* Recent Payments */}
+            <div className="mockup-card mockup-card-full">
+              <div className="mockup-card-header">
+                <span className="mockup-card-title">Recent Payments</span>
+                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)' }}>View all →</span>
+              </div>
+              <table className="mockup-table">
+                <thead>
+                  <tr>
+                    <th>Resident</th>
+                    <th>Amount</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>John Mwangi</td>
+                    <td>KES 2,500</td>
+                    <td>Today</td>
+                    <td><span className="status status-paid">Paid</span></td>
+                  </tr>
+                  <tr>
+                    <td>Mary Wanjiku</td>
+                    <td>KES 1,800</td>
+                    <td>Yesterday</td>
+                    <td><span className="status status-paid">Paid</span></td>
+                  </tr>
+                  <tr>
+                    <td>Peter Ochieng</td>
+                    <td>KES 3,200</td>
+                    <td>2 days ago</td>
+                    <td><span className="status status-pending">Pending</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </motion.div>
+
         {/* ── STATS ── */}
         <motion.div 
           className="lh-stats-strip"
@@ -490,7 +854,7 @@ export default function HomePage() {
           transition={{ duration: 0.7 }}
         >
           <div className="lh-stats-inner">
-            {stats.map(({ num, unit, label }, index) => (
+            {stats.map(({ num, unit, label, prefix }, index) => (
               <motion.div 
                 key={label} 
                 className="lh-stat-block"
@@ -500,7 +864,14 @@ export default function HomePage() {
                 transition={{ duration: 0.5, delay: index * 0.1 }}
               >
                 <div className="lh-stat-num">
-                  {num}<span>{unit}</span>
+                  {prefix}
+                  <CountUp
+                    end={num}
+                    duration={2.5}
+                    enableScrollSpy
+                    scrollSpyDelay={0.2}
+                  />
+                  <span>{unit}</span>
                 </div>
                 <div className="lh-stat-label">{label}</div>
               </motion.div>
