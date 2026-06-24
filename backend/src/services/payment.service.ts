@@ -127,14 +127,15 @@ export class PaymentService {
     });
 
     try {
-      logger.info(`Initiating Tuma STK Push for payment ${paymentId}`);
+      const callbackUrl = process.env.TUMA_CALLBACK_URL;
+      logger.info(`Initiating Tuma STK Push for payment ${paymentId}. Callback URL: ${callbackUrl}`);
       const response = await axios.post(
         `${this.tumaApiUrl}/payment/stk-push`,
         {
           amount: data.amount,
           phone: phone,
           description: `Water Bill Payment - ${bill.billNumber}`,
-          callback_url: process.env.TUMA_CALLBACK_URL,
+          callback_url: callbackUrl,
         },
         {
           headers: {
@@ -182,7 +183,7 @@ export class PaymentService {
   }
 
   async handleCallback(payload: any) {
-    logger.info('Tuma callback received with payload:', JSON.stringify(payload));
+    logger.info('Tuma callback received', payload);
 
     const {
       checkout_request_id,
@@ -192,53 +193,59 @@ export class PaymentService {
       amount,
       result_code,
       result_desc,
-      failure_reason,
       timestamp
     } = payload;
 
-    logger.info(`Callback Data Extraction - MerchantID: ${merchant_request_id}, CheckoutID: ${checkout_request_id}, Status: ${status}, Receipt: ${mpesa_receipt_number}, Amount: ${amount}`);
+    // Specific trace for requested transaction
+    if (mpesa_receipt_number === 'UFONJ92VQ4') {
+      logger.info(`TRACE: Callback received for transaction UFONJ92VQ4. Payload: ${JSON.stringify(payload)}`);
+    }
 
     const payment = await prisma.payment.findFirst({
       where: {
         OR: [
           { checkoutRequestId: checkout_request_id },
           { merchantRequestId: merchant_request_id }
-        ]
+        ].filter(Boolean)
       },
     });
 
     if (!payment) {
-      logger.warn(`Callback received for unknown payment: ${checkout_request_id || merchant_request_id}. SILENTLY IGNORING TO PREVENT WEBHOOK RETRIES.`);
+      logger.warn(`Callback received for unknown payment. MerchantID: ${merchant_request_id}, CheckoutID: ${checkout_request_id}. SILENTLY IGNORING.`);
       return { success: true, message: 'Callback received but payment not found' };
     }
 
     if (payment.status === 'SUCCESSFUL') {
-      logger.info(`Callback for already successful payment: ${payment.paymentId}. Skipping reconciliation.`);
-      return { success: true, message: 'Callback received for successful payment' };
+      logger.info(`Callback for already successful payment: ${payment.paymentId}. Skipping.`);
+      return { success: true, message: 'Callback already processed' };
     }
 
     const verificationTimestamp = timestamp ? new Date(timestamp) : new Date();
 
-    if (status === 'completed' || result_code === 0 || result_code === "0") {
-      logger.info(`Payment ${payment.paymentId} marked as SUCCESSFUL in Tuma callback. Starting reconciliation...`);
+    // Success processing: result_code === 0 OR status === "completed"
+    if (result_code === 0 || result_code === "0" || status === 'completed') {
+      logger.info(`Payment ${payment.paymentId} marked as SUCCESSFUL in Tuma callback.`);
       try {
         await this.reconcilePayment(payment.id, mpesa_receipt_number, Number(amount || payment.amount), payload, verificationTimestamp);
-        logger.info(`Reconciliation completed for payment ${payment.paymentId}`);
+        logger.info(`Payment updated: ${payment.paymentId} status = SUCCESSFUL`);
       } catch (error: any) {
         logger.error(`CRITICAL: Reconciliation failed for payment ${payment.paymentId}:`, error.message);
-        throw error; // Let the controller handle and potentially retry or log
+        throw error;
       }
-    } else {
-      logger.info(`Payment ${payment.paymentId} marked as FAILED/CANCELLED in callback: ${result_desc || failure_reason}`);
+    } 
+    // Failure processing: result_code !== 0 OR status === "failed"
+    else if (result_code !== 0 || status === 'failed') {
+      logger.info(`Payment ${payment.paymentId} marked as FAILED in callback: ${result_desc}`);
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
           status: 'FAILED',
-          failureReason: failure_reason || result_desc || 'Payment failed',
+          failureReason: result_desc || 'Payment failed',
           callbackPayload: payload,
           verificationTimestamp,
         },
       });
+      logger.info(`Payment updated: ${payment.paymentId} status = FAILED`);
     }
 
     return { success: true, message: 'Callback processed successfully' };
@@ -279,6 +286,7 @@ export class PaymentService {
           failureReason: null,
         },
       });
+      logger.info(`Receipt saved: ${mpesaReceiptCode} for payment ${payment.paymentId}`);
 
       // 2. Update Bill Record
       const newAmountPaid = payment.bill.amountPaid + amount;
@@ -295,29 +303,12 @@ export class PaymentService {
           updatedAt: new Date(),
         },
       });
+      logger.info(`Bill updated: ${payment.bill.billNumber}`);
 
-      // 3. Emit Socket.IO events for real-time dashboard updates
-      logger.info(`Emitting real-time updates for resident ${payment.residentId}`);
-      
-      // Emit to resident specifically
-      io.to(`user_${payment.residentId}`).emit('payment_completed', {
-        paymentId: payment.paymentId,
-        amount,
-        mpesaReceiptCode,
-        billId: payment.billId,
-        newBalance,
-        newStatus
-      });
-
-      io.to(`user_${payment.residentId}`).emit('bill_updated', {
-        billId: payment.billId,
-        newBalance,
-        newStatus
-      });
-
-      io.to(`user_${payment.residentId}`).emit('dashboard_updated', {
-        residentId: payment.residentId
-      });
+      // 3. Update Resident Balance (Resident balance is tracked via their active bills)
+      // If there was a specific balance field on User, it would be updated here.
+      // Based on schema, we update the bill which reflects the resident's balance.
+      logger.info(`Resident balance updated via bill ${payment.bill.billNumber}`);
 
       // 4. Create and send notifications
       try {
@@ -327,15 +318,41 @@ export class PaymentService {
           amount,
           mpesaReceiptCode
         );
-        
-        io.to(`user_${payment.residentId}`).emit('notification_created', {
-          type: 'PAYMENT_CONFIRMATION',
-          message: `Payment of KES ${amount} received. Receipt: ${mpesaReceiptCode}`
-        });
+        logger.info(`Notification created: Payment confirmation for ${payment.paymentId}`);
       } catch (err) {
         logger.error('Failed to send notifications during reconciliation:', err);
-        // We don't roll back the transaction if notifications fail
       }
+
+      // 5. Emit Socket.IO events for real-time dashboard updates
+      logger.info(`Emitting real-time updates for resident ${payment.residentId}`);
+      
+      io.to(`user_${payment.residentId}`).emit('payment_completed', {
+        paymentId: payment.paymentId,
+        amount,
+        mpesaReceiptCode,
+        billId: payment.billId,
+        newBalance,
+        newStatus
+      });
+      logger.info('Socket emitted: payment_completed');
+
+      io.to(`user_${payment.residentId}`).emit('bill_updated', {
+        billId: payment.billId,
+        newBalance,
+        newStatus
+      });
+      logger.info('Socket emitted: bill_updated');
+
+      io.to(`user_${payment.residentId}`).emit('dashboard_updated', {
+        residentId: payment.residentId
+      });
+      logger.info('Socket emitted: dashboard_updated');
+
+      io.to(`user_${payment.residentId}`).emit('notification_created', {
+        type: 'PAYMENT_CONFIRMATION',
+        message: `Payment of KES ${amount} received. Receipt: ${mpesaReceiptCode}`
+      });
+      logger.info('Socket emitted: notification_created');
     });
   }
 

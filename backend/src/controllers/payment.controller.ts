@@ -17,7 +17,7 @@ export class PaymentController {
 
   async handleCallback(req: Request, res: Response, next: NextFunction) {
     try {
-      logger.info('Tuma callback received:', JSON.stringify(req.body));
+      logger.info('Tuma callback received', req.body);
       const result = await paymentService.handleCallback(req.body);
       res.json(result);
     } catch (error) {
