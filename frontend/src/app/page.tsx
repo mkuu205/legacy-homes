@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import {
   Droplets, Shield, CreditCard, BarChart3,
   Bell, Headphones, ArrowRight, CheckCircle, Zap,
@@ -85,6 +86,51 @@ export default function HomePage() {
     'No hidden charges',
   ];
 
+  // Animation variants
+  const fadeInUp = {
+    hidden: { opacity: 0, y: 60 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+  };
+
+  const staggerContainer = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+        delayChildren: 0.2,
+      }
+    }
+  };
+
+  const scaleOnHover = {
+    whileHover: { scale: 1.05, transition: { duration: 0.2 } },
+    whileTap: { scale: 0.95 }
+  };
+
+  const floatAnimation = {
+    animate: {
+      y: [0, -10, 0],
+      transition: {
+        duration: 3,
+        repeat: Infinity,
+        ease: "easeInOut"
+      }
+    }
+  };
+
+  const pulseGlow = {
+    animate: {
+      scale: [1, 1.05, 1],
+      opacity: [0.3, 0.5, 0.3],
+      transition: {
+        duration: 4,
+        repeat: Infinity,
+        ease: "easeInOut"
+      }
+    }
+  };
+
   return (
     <>
       <style>{`
@@ -138,12 +184,11 @@ export default function HomePage() {
         }
         .lh-orb {
           position: absolute; border-radius: 50%; filter: blur(80px);
-          opacity: 0.35; animation: lhPulse 8s ease-in-out infinite;
+          opacity: 0.35;
         }
-        .lh-orb-1 { width: 600px; height: 600px; background: radial-gradient(circle,#1a56db,transparent); top: -100px; right: -100px; animation-delay: 0s; }
-        .lh-orb-2 { width: 400px; height: 400px; background: radial-gradient(circle,#0ea5e9,transparent); bottom: 0; left: -80px; animation-delay: -4s; }
-        .lh-orb-3 { width: 300px; height: 300px; background: radial-gradient(circle,#d4a84b,transparent); top: 50%; left: 40%; animation-delay: -2s; opacity: .12; }
-        @keyframes lhPulse { 0%,100% { transform: scale(1) translate(0,0); } 50% { transform: scale(1.08) translate(10px,-10px); } }
+        .lh-orb-1 { width: 600px; height: 600px; background: radial-gradient(circle,#1a56db,transparent); top: -100px; right: -100px; }
+        .lh-orb-2 { width: 400px; height: 400px; background: radial-gradient(circle,#0ea5e9,transparent); bottom: 0; left: -80px; }
+        .lh-orb-3 { width: 300px; height: 300px; background: radial-gradient(circle,#d4a84b,transparent); top: 50%; left: 40%; opacity: .12; }
         .lh-grid-overlay {
           position: absolute; inset: 0;
           background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
@@ -217,6 +262,7 @@ export default function HomePage() {
           background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
           border-radius: 20px; padding: 28px;
           transition: all .3s; position: relative; overflow: hidden;
+          cursor: default;
         }
         .lh-feature-card:hover { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.12); transform: translateY(-3px); }
         .lh-feature-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; }
@@ -314,18 +360,25 @@ export default function HomePage() {
           50% { transform: scale(1.2) rotate(10deg); }
         }
 
-        /* Fade-up animation */
-        @keyframes lhFadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .lh-fade-1 { animation: lhFadeUp .7s ease both; }
-        .lh-fade-2 { animation: lhFadeUp .7s .15s ease both; }
-        .lh-fade-3 { animation: lhFadeUp .7s .3s ease both; }
-        .lh-fade-4 { animation: lhFadeUp .7s .45s ease both; }
+        @keyframes lhPulse { 
+          0%,100% { transform: scale(1) translate(0,0); } 
+          50% { transform: scale(1.08) translate(10px,-10px); } 
+        }
+
+        .lh-orb-1 { animation: lhPulse 8s ease-in-out infinite; }
+        .lh-orb-2 { animation: lhPulse 8s ease-in-out infinite reverse; }
+        .lh-orb-3 { animation: lhPulse 10s ease-in-out infinite; }
       `}</style>
 
       <div className="lh-root">
 
         {/* ── NAV ── */}
-        <nav className="lh-nav">
+        <motion.nav 
+          className="lh-nav"
+          initial={{ y: -100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        >
           <Link href="/" className="lh-logo">
             <div className="lh-logo-icon">
               <Droplets className="w-4 h-4 text-white" />
@@ -336,94 +389,198 @@ export default function HomePage() {
             <Link href="/login" className="lh-btn-ghost">Sign In</Link>
             <Link href="/register" className="lh-btn-primary">Get Started →</Link>
           </div>
-        </nav>
+        </motion.nav>
 
         {/* ── HERO ── */}
         <section className="lh-hero">
           {/* Background effects */}
           <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
-            <div className="lh-orb lh-orb-1" />
-            <div className="lh-orb lh-orb-2" />
+            <motion.div 
+              className="lh-orb lh-orb-1"
+              animate={pulseGlow.animate}
+            />
+            <motion.div 
+              className="lh-orb lh-orb-2"
+              animate={pulseGlow.animate}
+              transition={{ delay: 1 }}
+            />
             <div className="lh-orb lh-orb-3" />
             <div className="lh-grid-overlay" />
           </div>
 
           <div className="lh-hero-content">
-            <div className="lh-badge lh-fade-1">
-              <span className="lh-badge-dot" />
-              Kenya&apos;s #1 Estate Water Platform
-            </div>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
+              <div className="lh-badge">
+                <span className="lh-badge-dot" />
+                Kenya&apos;s #1 Estate Water Platform
+              </div>
+            </motion.div>
 
-            <h1 className="lh-fade-2">
+            <motion.h1
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.3 }}
+            >
               Smart Water.<br />
               <em>Smarter Billing.</em>
-            </h1>
+            </motion.h1>
 
-            <p className="lh-fade-3">
+            <motion.p
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.4 }}
+            >
               Manage meters, generate bills, collect M-Pesa payments, and keep every
               resident in the loop — from one powerful dashboard.
-            </p>
+            </motion.p>
 
-            <div className="lh-hero-cta lh-fade-4">
-              <Link href="/register" className="lh-btn-xl solid">
-                Create Your Account <ArrowRight className="w-5 h-5" />
-              </Link>
-              <Link href="/login" className="lh-btn-xl outline">
-                Sign In to Dashboard
-              </Link>
-            </div>
+            <motion.div 
+              className="lh-hero-cta"
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.5 }}
+            >
+              <motion.div {...scaleOnHover}>
+                <Link href="/register" className="lh-btn-xl solid">
+                  Create Your Account <ArrowRight className="w-5 h-5" />
+                </Link>
+              </motion.div>
+              <motion.div {...scaleOnHover}>
+                <Link href="/login" className="lh-btn-xl outline">
+                  Sign In to Dashboard
+                </Link>
+              </motion.div>
+            </motion.div>
 
-            <div className="lh-trust-row lh-fade-4">
-              {trustItems.map(item => (
-                <div key={item} className="lh-trust-item">
+            <motion.div 
+              className="lh-trust-row"
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.6 }}
+            >
+              {trustItems.map((item, index) => (
+                <motion.div 
+                  key={item} 
+                  className="lh-trust-item"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.4, delay: 0.7 + index * 0.1 }}
+                >
                   <CheckCircle className="w-3.5 h-3.5" style={{ color: '#22c55e', flexShrink: 0 }} />
                   {item}
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           </div>
         </section>
 
         {/* ── STATS ── */}
-        <div className="lh-stats-strip">
+        <motion.div 
+          className="lh-stats-strip"
+          initial={{ opacity: 0, y: 60 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.7 }}
+        >
           <div className="lh-stats-inner">
-            {stats.map(({ num, unit, label }) => (
-              <div key={label} className="lh-stat-block">
+            {stats.map(({ num, unit, label }, index) => (
+              <motion.div 
+                key={label} 
+                className="lh-stat-block"
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+              >
                 <div className="lh-stat-num">
                   {num}<span>{unit}</span>
                 </div>
                 <div className="lh-stat-label">{label}</div>
-              </div>
+              </motion.div>
             ))}
           </div>
-        </div>
+        </motion.div>
 
         {/* ── FEATURES ── */}
         <section className="lh-section">
           <div className="lh-section-inner">
-            <p className="lh-eyebrow">Platform Features</p>
-            <h2 className="lh-section-title">Everything in<br />one place.</h2>
-            <p className="lh-section-sub">
+            <motion.p 
+              className="lh-eyebrow"
+              initial={{ opacity: 0, x: -30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+            >
+              Platform Features
+            </motion.p>
+            <motion.h2 
+              className="lh-section-title"
+              initial={{ opacity: 0, x: -30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+            >
+              Everything in<br />one place.
+            </motion.h2>
+            <motion.p 
+              className="lh-section-sub"
+              initial={{ opacity: 0, x: -30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
               Purpose-built for Kenyan estates — designed for residents and admins alike.
-            </p>
-            <div className="lh-features-grid">
+            </motion.p>
+            
+            <motion.div 
+              className="lh-features-grid"
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.2 }}
+            >
               {features.map(({ icon: Icon, title, desc, color, bg }) => (
-                <div key={title} className="lh-feature-card">
-                  <div className="lh-feature-icon" style={{ background: bg }}>
+                <motion.div 
+                  key={title} 
+                  className="lh-feature-card"
+                  variants={fadeInUp}
+                  whileHover={{ 
+                    y: -8,
+                    borderColor: color,
+                    boxShadow: `0 8px 30px rgba(0,0,0,0.3)`
+                  }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <motion.div 
+                    className="lh-feature-icon" 
+                    style={{ background: bg }}
+                    whileHover={{ rotate: 10, scale: 1.1 }}
+                    transition={{ duration: 0.2 }}
+                  >
                     <Icon style={{ color, width: 22, height: 22, strokeWidth: 1.8 }} />
-                  </div>
+                  </motion.div>
                   <h3>{title}</h3>
                   <p>{desc}</p>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           </div>
         </section>
 
         {/* ── BILLING ── */}
         <section className="lh-billing">
           <div className="lh-billing-inner">
-            <div className="lh-billing-left">
+            <motion.div 
+              className="lh-billing-left"
+              initial={{ opacity: 0, x: -60 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.7 }}
+            >
               <p className="lh-eyebrow">Pricing Model</p>
               <h2>Simple pricing.<br />Zero surprises.</h2>
               <p>
@@ -431,30 +588,57 @@ export default function HomePage() {
                 every resident knows exactly what they owe and why.
               </p>
               <ul className="lh-check-list">
-                {noneItems.map(item => (
-                  <li key={item}>
+                {noneItems.map((item, index) => (
+                  <motion.li 
+                    key={item}
+                    initial={{ opacity: 0, x: -20 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.4, delay: index * 0.1 }}
+                  >
                     <CheckCircle style={{ width: 16, height: 16, color: '#22c55e', flexShrink: 0 }} />
                     {item}
-                  </li>
+                  </motion.li>
                 ))}
               </ul>
-            </div>
+            </motion.div>
 
-            <div className="lh-billing-card">
+            <motion.div 
+              className="lh-billing-card"
+              initial={{ opacity: 0, scale: 0.9, y: 30 }}
+              whileInView={{ opacity: 1, scale: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.7, delay: 0.2 }}
+              whileHover={{ 
+                scale: 1.02,
+                boxShadow: "0 20px 60px rgba(26,86,219,0.2)",
+                transition: { duration: 0.3 }
+              }}
+            >
               <div className="lh-billing-label">Current Flat Rate</div>
-              <div className="lh-billing-rate">
+              <motion.div 
+                className="lh-billing-rate"
+                whileHover={{ scale: 1.05 }}
+                transition={{ duration: 0.2 }}
+              >
                 250<span>KES</span>
-              </div>
+              </motion.div>
               <div className="lh-billing-unit">per unit consumed</div>
               <div className="lh-billing-formula">
                 Bill = (<strong>Current</strong> − <strong>Previous</strong>) × <strong>KES 250</strong>
               </div>
-            </div>
+            </motion.div>
           </div>
         </section>
 
         {/* ── FOOTER ── */}
-        <footer className="lh-footer">
+        <motion.footer 
+          className="lh-footer"
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.6 }}
+        >
           <div className="lh-footer-inner">
             <div className="lh-footer-top">
               <Link href="/" className="lh-logo">
@@ -468,14 +652,18 @@ export default function HomePage() {
               </p>
             </div>
             
-            <div className="lh-footer-powered">
+            <motion.div 
+              className="lh-footer-powered"
+              whileHover={{ scale: 1.02 }}
+              transition={{ duration: 0.2 }}
+            >
               <span className="zap-icon">⚡</span> Powered by{' '}
               <span className="kish-text">Kish Tech</span>
               {' '}·{' '}
               <a href="tel:+254796307638" className="phone-link">0796 307 638</a>
-            </div>
+            </motion.div>
           </div>
-        </footer>
+        </motion.footer>
 
       </div>
     </>
