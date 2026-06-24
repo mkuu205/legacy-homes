@@ -526,9 +526,6 @@ export class PaymentService {
 
     return header + rows;
   }
-}
-
-export const paymentService = new PaymentService();
 
   async queryTumaStatus(checkoutRequestId: string) {
     const token = await this.getAuthToken();
@@ -611,3 +608,6 @@ export const paymentService = new PaymentService();
       }
     }
   }
+}
+
+export const paymentService = new PaymentService();
