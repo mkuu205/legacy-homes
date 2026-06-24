@@ -126,12 +126,7 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString(), service: 'Legacy Homes API' });
 });
 
-// Callback Debugging Middleware
-app.use('/api/payments/callback', (req, res, next) => {
-  logger.info('CALLBACK HIT: ' + req.method + ' ' + req.url);
-  logger.info('CALLBACK BODY: ' + JSON.stringify(req.body));
-  next();
-});
+
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -156,15 +151,7 @@ httpServer.listen(PORT, () => {
   logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
   logger.info(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
 
-  // Fallback verification for pending payments every 2 minutes
-  setInterval(async () => {
-    try {
-      const { paymentService } = await import('./services/payment.service');
-      await paymentService.verifyPendingPayments();
-    } catch (error: any) {
-      logger.error('Background payment verification failed:', error.message);
-    }
-  }, 2 * 60 * 1000);
+
 });
 
 export default app;

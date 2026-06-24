@@ -17,8 +17,7 @@ export class PaymentController {
 
   async handleCallback(req: Request, res: Response, next: NextFunction) {
     try {
-      logger.info('Tuma callback received', req.body);
-      const result = await paymentService.handleCallback(req.body);
+      const result = await paymentService.handleCallback(req.body, req.headers);
       res.json(result);
     } catch (error) {
       logger.error('Callback error:', error);
@@ -99,8 +98,8 @@ export class PaymentController {
 
   async retryVerification(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const result = await paymentService.manualReconcile(req.params.paymentId);
-      res.json(result);
+      const result = await paymentService.retryPaymentVerification(req.params.paymentId);
+      res.json({ success: true, data: result });
     } catch (error) { next(error); }
   }
 

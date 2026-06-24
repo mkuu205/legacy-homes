@@ -13,6 +13,20 @@ router.delete('/my-history', authenticate, paymentController.clearMyPaymentHisto
 // Tuma Payments webhook
 router.post('/callback', paymentController.handleCallback.bind(paymentController));
 
+// Diagnostic Routes
+router.post('/callback-test', (req, res) => {
+  logger.info('CALLBACK TEST RECEIVED');
+  logger.info(JSON.stringify(req.body, null, 2));
+  return res.status(200).json({ success: true });
+});
+
+router.get('/callback-health', (_req, res) => {
+  return res.json({
+    success: true,
+    message: 'Callback endpoint reachable'
+  });
+});
+
 // Admin routes
 router.get('/stats', authenticate, authorize('SUPER_ADMIN'), paymentController.getStats.bind(paymentController));
 router.get('/export/csv', authenticate, authorize('SUPER_ADMIN'), paymentController.exportCSV.bind(paymentController));
