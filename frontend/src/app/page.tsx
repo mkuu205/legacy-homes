@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import {
   Droplets, Shield, CreditCard, BarChart3,
   Bell, Headphones, ArrowRight, CheckCircle, Zap,
@@ -86,36 +86,26 @@ export default function HomePage() {
     'No hidden charges',
   ];
 
-  // Animation variants
-  const fadeInUp = {
+  // Animation variants with correct Framer Motion types
+  const fadeInUp: Variants = {
     hidden: { opacity: 0, y: 60 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
+    visible: { 
+      opacity: 1, 
+      y: 0, 
+      transition: { 
+        duration: 0.6, 
+        ease: [0.22, 1, 0.36, 1] 
+      } 
+    }
   };
 
-  const staggerContainer = {
+  const staggerContainer: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
       transition: {
         staggerChildren: 0.1,
         delayChildren: 0.2,
-      }
-    }
-  };
-
-  const scaleOnHover = {
-    whileHover: { scale: 1.05, transition: { duration: 0.2 } },
-    whileTap: { scale: 0.95 }
-  };
-
-  const orbAnimation = {
-    animate: {
-      scale: [1, 1.05, 1],
-      opacity: [0.3, 0.5, 0.3],
-      transition: {
-        duration: 4,
-        repeat: Infinity,
-        ease: "easeInOut"
       }
     }
   };
