@@ -19,7 +19,8 @@ import {
   LogOut,
   Menu,
   X,
-  Shield
+  Shield,
+  Activity
 } from 'lucide-react';
 
 const navItems = [
@@ -32,6 +33,7 @@ const navItems = [
   { href: '/admin/notifications', icon: Bell, label: 'Notifications' },
   { href: '/admin/reports', icon: BarChart3, label: 'Reports' },
   { href: '/admin/settings', icon: Settings, label: 'Settings' },
+  { href: '/admin/system-check', icon: Activity, label: 'System Check' },
 ];
 
 export default function AdminLayout({

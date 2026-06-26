@@ -83,7 +83,7 @@ export default function PaymentsPage() {
 
       const res = await api.post('/payments/initiate', {
         billId: selectedBillId,
-        provider: 'TUMA',
+        provider: paymentMethod === 'MPESA_STK_PUSH' ? 'TUMA' : 'PESAPAL',
         paymentMethod,
         phoneNumber: phone,
         amount: parseFloat(amount),
@@ -92,9 +92,13 @@ export default function PaymentsPage() {
       return res.data.data;
     },
     onSuccess: (data) => {
+      if (paymentMethod === 'CARD_PAYMENT' && data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
       setPendingPaymentId(data.paymentId);
       setPaymentStartedAt(Date.now());
-      toast({ type: 'success', title: 'Payment initiated', description: 'Please check your phone for the M-Pesa prompt' });
+      toast({ type: 'success', title: 'Payment initiated', description: paymentMethod === 'MPESA_STK_PUSH' ? 'Please check your phone for the M-Pesa prompt' : 'Redirecting to payment page...' });
     },
     onError: (err) => {
       toast({ type: 'error', title: 'Payment failed', description: getErrorMessage(err) });

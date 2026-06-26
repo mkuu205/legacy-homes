@@ -1,8 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, getErrorMessage } from '@/lib/api';
-import { ArrowLeft, RefreshCw, Loader2 } from 'lucide-react';
+import { api } from '@/lib/api';
+import { ArrowLeft, RefreshCw, Loader2, Server, Database, Phone, CreditCard, Webhook, Mail, Settings, Clock, Globe } from 'lucide-react';
 import Link from 'next/link';
 
 const StatusIndicator = ({ status }: { status: 'ONLINE' | 'OFFLINE' | 'WARNING' }) => {
@@ -26,6 +27,8 @@ const StatusIndicator = ({ status }: { status: 'ONLINE' | 'OFFLINE' | 'WARNING' 
 };
 
 export default function SystemCheckPage() {
+  const [selectedService, setSelectedService] = useState<string | null>(null);
+
   const { data: healthData, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['system-health'],
     queryFn: async () => {
@@ -38,6 +41,16 @@ export default function SystemCheckPage() {
   const services = healthData?.services || {};
   const timestamp = healthData?.timestamp;
 
+  const serviceCards = [
+    { id: 'backendApi', name: 'Backend API', icon: <Server size={20} />, data: services.backendApi },
+    { id: 'database', name: 'PostgreSQL Database', icon: <Database size={20} />, data: services.database },
+    { id: 'tumaApi', name: 'Tuma Payment API', icon: <Phone size={20} />, data: services.tumaApi },
+    { id: 'pesapalApi', name: 'Pesapal API', icon: <CreditCard size={20} />, data: services.pesapalApi },
+    { id: 'callbackEndpoint', name: 'Payment Callback Endpoint', icon: <Webhook size={20} />, data: services.callbackEndpoint },
+    { id: 'emailService', name: 'Email Service (SMTP)', icon: <Mail size={20} />, data: services.emailService },
+    { id: 'environmentVariables', name: 'Environment Variables', icon: <Settings size={20} />, data: services.environmentVariables },
+  ];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header */}
@@ -48,7 +61,7 @@ export default function SystemCheckPage() {
           </Link>
           <div>
             <h1 className="pg-h" style={{ fontSize: '24px', marginBottom: '4px' }}>System Check</h1>
-            <p className="pg-sh">Monitor payment system health and configuration</p>
+            <p className="pg-sh">Real-time health overview of all critical services</p>
           </div>
         </div>
         <button
@@ -69,130 +82,109 @@ export default function SystemCheckPage() {
           }}
         >
           {isFetching ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} />}
-          Refresh
+          Refresh Status
         </button>
       </div>
 
-      {/* Last Updated */}
-      {timestamp && (
-        <div style={{ fontSize: '12px', color: 'var(--t3)' }}>
-          Last updated: {new Date(timestamp).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}
+      {/* Time Info */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        <div style={{ padding: '16px', borderRadius: '12px', border: '1px solid var(--bd)', background: 'var(--c2)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Clock size={20} color="var(--t2)" />
+          <div>
+            <p style={{ fontSize: '11px', color: 'var(--t3)', margin: 0 }}>Server Time</p>
+            <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>
+              {healthData?.serverTime ? new Date(healthData.serverTime).toLocaleTimeString() : '--:--'}
+            </p>
+          </div>
         </div>
-      )}
+        <div style={{ padding: '16px', borderRadius: '12px', border: '1px solid var(--bd)', background: 'var(--c2)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Globe size={20} color="var(--t2)" />
+          <div>
+            <p style={{ fontSize: '11px', color: 'var(--t3)', margin: 0 }}>Application Timezone</p>
+            <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{healthData?.timezone || 'N/A'}</p>
+          </div>
+        </div>
+      </div>
 
-      {/* Services Status */}
+      {/* Services Grid */}
       {isLoading ? (
         <div style={{ padding: '32px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)', textAlign: 'center' }}>
           <Loader2 size={32} style={{ margin: '0 auto 16px', animation: 'spin 1s linear infinite', color: 'var(--t2)' }} />
-          <p style={{ fontSize: '14px', color: 'var(--t2)' }}>Loading system status...</p>
+          <p style={{ fontSize: '14px', color: 'var(--t2)' }}>Checking services status...</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-          {/* Backend API */}
-          <div style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Backend API</h3>
-              <StatusIndicator status={services.database?.status || 'OFFLINE'} />
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--t3)', margin: 0 }}>{services.database?.message || 'No information'}</p>
-          </div>
-
-          {/* Database */}
-          <div style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Database</h3>
-              <StatusIndicator status={services.database?.status || 'OFFLINE'} />
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--t3)', margin: 0 }}>{services.database?.message || 'No information'}</p>
-          </div>
-
-          {/* Tuma API */}
-          <div style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Tuma API (M-Pesa)</h3>
-              <StatusIndicator status={services.tumaApi?.status || 'OFFLINE'} />
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--t3)', margin: 0 }}>{services.tumaApi?.message || 'No information'}</p>
-          </div>
-
-          {/* Pesapal API */}
-          <div style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Pesapal API (Card)</h3>
-              <StatusIndicator status={services.pesapalApi?.status || 'OFFLINE'} />
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--t3)', margin: 0 }}>{services.pesapalApi?.message || 'No information'}</p>
-          </div>
-
-          {/* Payment Callback */}
-          <div style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Payment Callback</h3>
-              <StatusIndicator status="ONLINE" />
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--t3)', margin: 0 }}>Callback endpoint is configured and reachable</p>
-          </div>
-
-          {/* Environment Variables */}
-          <div style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Environment Variables</h3>
-              <StatusIndicator status={services.environmentVariables?.status || 'OFFLINE'} />
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--t3)', margin: 0 }}>{services.environmentVariables?.message || 'No information'}</p>
-            {services.environmentVariables?.missing && services.environmentVariables.missing.length > 0 && (
-              <div style={{ marginTop: '12px', padding: '8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)' }}>
-                <p style={{ fontSize: '11px', color: '#ef4444', margin: 0, fontWeight: 500 }}>Missing variables:</p>
-                {services.environmentVariables.missing.map((v: string) => (
-                  <p key={v} style={{ fontSize: '11px', color: '#ef4444', margin: '4px 0 0 0' }}>• {v}</p>
-                ))}
+          {serviceCards.map((service) => (
+            <div 
+              key={service.id} 
+              onClick={() => setSelectedService(selectedService === service.id ? null : service.id)}
+              style={{ 
+                padding: '20px', 
+                borderRadius: '14px', 
+                border: '1px solid var(--bd)', 
+                background: 'var(--c2)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                borderColor: selectedService === service.id ? 'var(--t1)' : 'var(--bd)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ color: 'var(--t2)' }}>{service.icon}</div>
+                  <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{service.name}</h3>
+                </div>
+                <StatusIndicator status={service.data?.status || 'OFFLINE'} />
               </div>
-            )}
-          </div>
+              
+              <p style={{ fontSize: '12px', color: 'var(--t3)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {service.data?.message || 'No status information available'}
+              </p>
+
+              {selectedService === service.id && (
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--bd)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                    <span style={{ color: 'var(--t3)' }}>Current status:</span>
+                    <span style={{ fontWeight: 500, color: 'var(--t1)' }}>{service.data?.status}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                    <span style={{ color: 'var(--t3)' }}>Last check:</span>
+                    <span style={{ fontWeight: 500, color: 'var(--t1)' }}>{timestamp ? new Date(timestamp).toLocaleTimeString() : 'N/A'}</span>
+                  </div>
+                  {service.data?.responseTime && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: 'var(--t3)' }}>Response time:</span>
+                      <span style={{ fontWeight: 500, color: 'var(--t1)' }}>{service.data.responseTime}</span>
+                    </div>
+                  )}
+                  {service.data?.lastCallbackReceived && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: 'var(--t3)' }}>Last callback:</span>
+                      <span style={{ fontWeight: 500, color: 'var(--t1)' }}>{service.data.lastCallbackReceived === 'Never' ? 'Never' : new Date(service.data.lastCallbackReceived).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {service.data?.configSummary && (
+                    <div style={{ marginTop: '8px' }}>
+                      <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--t2)', marginBottom: '4px' }}>Configuration Summary:</p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {Object.entries(service.data.configSummary).map(([key, value]) => (
+                          <div key={key} style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'var(--bd)', color: 'var(--t2)' }}>
+                            {key}: {value ? '✅' : '❌'}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {service.data?.status !== 'ONLINE' && service.data?.message && (
+                    <div style={{ marginTop: '8px', padding: '8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                      <p style={{ fontSize: '11px', color: '#ef4444', margin: 0 }}>{service.data.message}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
-
-      {/* Configuration Guide */}
-      <div style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-        <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '12px' }}>Configuration Guide</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12px', color: 'var(--t2)' }}>
-          <p style={{ margin: 0 }}>
-            <strong>Tuma API (M-Pesa):</strong> Ensure TUMA_API_URL, TUMA_AUTH_URL, TUMA_BUSINESS_EMAIL, TUMA_API_KEY, and TUMA_CALLBACK_URL are configured in environment variables.
-          </p>
-          <p style={{ margin: 0 }}>
-            <strong>Pesapal API (Card):</strong> Ensure PESAPAL_API_URL, PESAPAL_CONSUMER_KEY, PESAPAL_CONSUMER_SECRET, and PESAPAL_IPN_URL are configured in environment variables.
-          </p>
-          <p style={{ margin: 0 }}>
-            <strong>Callback URLs:</strong> Must be publicly accessible and match the configuration in your payment provider dashboard.
-          </p>
-          <p style={{ margin: 0 }}>
-            <strong>Database:</strong> Ensure DATABASE_URL is configured and the database is running.
-          </p>
-        </div>
-      </div>
-
-      {/* Troubleshooting */}
-      <div style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-        <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '12px' }}>Troubleshooting</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12px', color: 'var(--t2)' }}>
-          <div>
-            <p style={{ margin: '0 0 4px 0', fontWeight: 500 }}>🔴 Tuma API Offline:</p>
-            <p style={{ margin: 0, color: 'var(--t3)' }}>Check if TUMA_API_KEY and TUMA_BUSINESS_EMAIL are correct. Verify network connectivity to api.tuma.co.ke.</p>
-          </div>
-          <div>
-            <p style={{ margin: '0 0 4px 0', fontWeight: 500 }}>🔴 Pesapal API Offline:</p>
-            <p style={{ margin: 0, color: 'var(--t3)' }}>Check if PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET are correct. Verify network connectivity to api.pesapal.com.</p>
-          </div>
-          <div>
-            <p style={{ margin: '0 0 4px 0', fontWeight: 500 }}>🔴 Database Offline:</p>
-            <p style={{ margin: 0, color: 'var(--t3)' }}>Check if DATABASE_URL is correct and the database server is running. Verify network connectivity to the database.</p>
-          </div>
-          <div>
-            <p style={{ margin: '0 0 4px 0', fontWeight: 500 }}>🟡 Missing Environment Variables:</p>
-            <p style={{ margin: 0, color: 'var(--t3)' }}>Add the missing variables to your .env file and restart the application.</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

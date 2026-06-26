@@ -177,7 +177,7 @@ export default function BillingPage() {
                 {bill.status !== 'PAID' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--bd)' }}>
                     <Link
-                      href={`/dashboard/payments?billId=${bill.id}`}
+                      href={`/dashboard/payment-methods?billId=${bill.id}&amount=${bill.balance}`}
                       className="btn bp btn-sm"
                     >
                       Pay Now <ArrowRight size={14} />

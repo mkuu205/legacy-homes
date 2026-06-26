@@ -448,20 +448,40 @@ export class PaymentEngineService {
    * Check system health
    */
   async checkSystemHealth() {
+    const start = Date.now();
     const health: Record<string, any> = {
       timestamp: new Date(),
+      serverTime: new Date().toISOString(),
+      timezone: process.env.TZ || 'Africa/Nairobi',
       services: {},
     };
 
-    // Check database
+    // 1. Backend API
+    health.services.backendApi = {
+      status: 'ONLINE',
+      message: 'Backend API is running',
+      responseTime: `${Date.now() - start}ms`
+    };
+
+    // 2. Database
+    const dbStart = Date.now();
     try {
       await prisma.$queryRaw`SELECT 1`;
-      health.services.database = { status: 'ONLINE', message: 'Database connection successful' };
+      health.services.database = { 
+        status: 'ONLINE', 
+        message: 'Database connection successful',
+        responseTime: `${Date.now() - dbStart}ms`
+      };
     } catch (error) {
-      health.services.database = { status: 'OFFLINE', message: error instanceof Error ? error.message : 'Unknown error' };
+      health.services.database = { 
+        status: 'OFFLINE', 
+        message: error instanceof Error ? error.message : 'Unknown error',
+        responseTime: `${Date.now() - dbStart}ms`
+      };
     }
 
-    // Check Tuma API
+    // 3. Tuma API
+    const tumaStart = Date.now();
     try {
       const tumaProvider = this.getProvider('TUMA');
       if (tumaProvider) {
@@ -469,6 +489,7 @@ export class PaymentEngineService {
         health.services.tumaApi = {
           status: isValid ? 'ONLINE' : 'OFFLINE',
           message: isValid ? 'Tuma API credentials valid' : 'Tuma API credentials invalid',
+          responseTime: `${Date.now() - tumaStart}ms`
         };
       } else {
         health.services.tumaApi = { status: 'OFFLINE', message: 'Tuma provider not initialized' };
@@ -477,7 +498,8 @@ export class PaymentEngineService {
       health.services.tumaApi = { status: 'OFFLINE', message: error instanceof Error ? error.message : 'Unknown error' };
     }
 
-    // Check Pesapal API
+    // 4. Pesapal API
+    const pesapalStart = Date.now();
     try {
       const pesapalProvider = this.getProvider('PESAPAL');
       if (pesapalProvider) {
@@ -485,6 +507,7 @@ export class PaymentEngineService {
         health.services.pesapalApi = {
           status: isValid ? 'ONLINE' : 'OFFLINE',
           message: isValid ? 'Pesapal API credentials valid' : 'Pesapal API credentials invalid',
+          responseTime: `${Date.now() - pesapalStart}ms`
         };
       } else {
         health.services.pesapalApi = { status: 'OFFLINE', message: 'Pesapal provider not initialized' };
@@ -493,8 +516,31 @@ export class PaymentEngineService {
       health.services.pesapalApi = { status: 'OFFLINE', message: error instanceof Error ? error.message : 'Unknown error' };
     }
 
-    // Check environment variables
+    // 5. Payment Callback Endpoint
+    try {
+      const lastCallback = await prisma.auditLog.findFirst({
+        where: { action: { contains: 'CALLBACK' } },
+        orderBy: { createdAt: 'desc' }
+      });
+      health.services.callbackEndpoint = {
+        status: 'ONLINE',
+        message: 'https://legacy-homes.onrender.com/api/payments/callback',
+        lastCallbackReceived: lastCallback ? lastCallback.createdAt : 'Never'
+      };
+    } catch (error) {
+      health.services.callbackEndpoint = { status: 'WARNING', message: 'Could not fetch last callback info' };
+    }
+
+    // 6. Email Service (SMTP)
+    // Based on email.service.ts, it's currently a stub logging to console
+    health.services.emailService = {
+      status: 'WARNING',
+      message: 'Email service is in LOG-ONLY mode (No SMTP configured)',
+    };
+
+    // 7. Environment Variables
     const requiredEnvVars = [
+      'DATABASE_URL',
       'TUMA_API_URL',
       'TUMA_AUTH_URL',
       'TUMA_BUSINESS_EMAIL',
@@ -508,8 +554,13 @@ export class PaymentEngineService {
     const missingEnvVars = requiredEnvVars.filter((v) => !process.env[v]);
     health.services.environmentVariables = {
       status: missingEnvVars.length === 0 ? 'ONLINE' : 'WARNING',
-      message: missingEnvVars.length === 0 ? 'All environment variables configured' : `Missing: ${missingEnvVars.join(', ')}`,
+      message: missingEnvVars.length === 0 ? 'All critical environment variables configured' : `Missing: ${missingEnvVars.join(', ')}`,
       missing: missingEnvVars,
+      configSummary: {
+        tumaConfigured: !!process.env.TUMA_API_KEY,
+        pesapalConfigured: !!process.env.PESAPAL_CONSUMER_KEY,
+        databaseConfigured: !!process.env.DATABASE_URL
+      }
     };
 
     return health;
