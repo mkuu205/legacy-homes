@@ -1,9 +1,9 @@
-import { prisma } from '@/config/prisma';
-import { PaymentProvider } from '@/providers/payment-provider.interface';
-import { TumaProvider } from '@/providers/tuma.provider';
-import { PayHeroProvider } from '@/providers/payhero.provider';
-import { PesapalProvider } from '@/providers/pesapal.provider';
-import { logger } from '@/utils/logger';
+import { prisma } from '../config/prisma';
+import { PaymentProvider } from '../providers/payment-provider.interface';
+import { TumaProvider } from '../providers/tuma.provider';
+import { PayHeroProvider } from '../providers/payhero.provider';
+import { PesapalProvider } from '../providers/pesapal.provider';
+import { logger } from '../utils/logger';
 import { PaymentProviderType, PaymentStatus, PaymentMethodType } from '@prisma/client';
 
 export class PaymentEngineService {

@@ -16,12 +16,12 @@ export declare class SupportService {
         createdAt: Date;
         updatedAt: Date;
         residentId: string;
-        status: import("@prisma/client").$Enums.TicketStatus;
+        status: import(".prisma/client").$Enums.TicketStatus;
         ticketId: string;
         assignedTo: string | null;
         subject: string;
         description: string;
-        category: import("@prisma/client").$Enums.TicketCategory;
+        category: import(".prisma/client").$Enums.TicketCategory;
         attachments: string[];
     }>;
     getResidentTickets(residentId: string, query: {
@@ -44,12 +44,12 @@ export declare class SupportService {
             createdAt: Date;
             updatedAt: Date;
             residentId: string;
-            status: import("@prisma/client").$Enums.TicketStatus;
+            status: import(".prisma/client").$Enums.TicketStatus;
             ticketId: string;
             assignedTo: string | null;
             subject: string;
             description: string;
-            category: import("@prisma/client").$Enums.TicketCategory;
+            category: import(".prisma/client").$Enums.TicketCategory;
             attachments: string[];
         })[];
         pagination: {
@@ -89,12 +89,12 @@ export declare class SupportService {
             createdAt: Date;
             updatedAt: Date;
             residentId: string;
-            status: import("@prisma/client").$Enums.TicketStatus;
+            status: import(".prisma/client").$Enums.TicketStatus;
             ticketId: string;
             assignedTo: string | null;
             subject: string;
             description: string;
-            category: import("@prisma/client").$Enums.TicketCategory;
+            category: import(".prisma/client").$Enums.TicketCategory;
             attachments: string[];
         })[];
         pagination: {
@@ -116,7 +116,7 @@ export declare class SupportService {
         replies: ({
             user: {
                 fullName: string;
-                role: import("@prisma/client").$Enums.Role;
+                role: import(".prisma/client").$Enums.Role;
                 profilePicture: string;
             };
         } & {
@@ -133,12 +133,12 @@ export declare class SupportService {
         createdAt: Date;
         updatedAt: Date;
         residentId: string;
-        status: import("@prisma/client").$Enums.TicketStatus;
+        status: import(".prisma/client").$Enums.TicketStatus;
         ticketId: string;
         assignedTo: string | null;
         subject: string;
         description: string;
-        category: import("@prisma/client").$Enums.TicketCategory;
+        category: import(".prisma/client").$Enums.TicketCategory;
         attachments: string[];
     }>;
     replyToTicket(data: {
@@ -150,7 +150,7 @@ export declare class SupportService {
     }): Promise<{
         user: {
             fullName: string;
-            role: import("@prisma/client").$Enums.Role;
+            role: import(".prisma/client").$Enums.Role;
             profilePicture: string;
         };
     } & {
@@ -167,12 +167,12 @@ export declare class SupportService {
         createdAt: Date;
         updatedAt: Date;
         residentId: string;
-        status: import("@prisma/client").$Enums.TicketStatus;
+        status: import(".prisma/client").$Enums.TicketStatus;
         ticketId: string;
         assignedTo: string | null;
         subject: string;
         description: string;
-        category: import("@prisma/client").$Enums.TicketCategory;
+        category: import(".prisma/client").$Enums.TicketCategory;
         attachments: string[];
     }>;
     getTicketStats(): Promise<{

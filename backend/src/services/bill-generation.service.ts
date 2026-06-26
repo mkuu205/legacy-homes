@@ -1,12 +1,12 @@
-import { prisma } from '@/config/prisma';
-import { logger } from '@/utils/logger';
+import { prisma } from '../config/prisma';
+import { logger } from '../utils/logger';
 import {
   calculateDueDate,
   calculateDaysUntilDue,
   calculateOverdueDays,
   isBillOverdue,
   formatBillingPeriod,
-} from '@/utils/timezone';
+} from '../utils/timezone';
 import { DateTime } from 'luxon';
 
 export class BillGenerationService {

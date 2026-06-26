@@ -15,10 +15,6 @@
     "declarationMap": true,
     "sourceMap": true,
     "experimentalDecorators": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    },
     "emitDecoratorMetadata": true
   },
   "include": ["src/**/*"],

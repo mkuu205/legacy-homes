@@ -1,5 +1,5 @@
-import { prisma } from '@/config/prisma';
-import { logger } from '@/utils/logger';
+import { prisma } from '../config/prisma';
+import { logger } from '../utils/logger';
 import { PaymentReconciliationStatus, PaymentStatus } from '@prisma/client';
 
 export class ReconciliationService {

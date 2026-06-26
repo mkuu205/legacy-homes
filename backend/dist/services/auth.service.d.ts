@@ -23,9 +23,9 @@ export declare class AuthService {
             email: string;
             phone: string;
             passwordHash: string;
-            role: import("@prisma/client").$Enums.Role;
-            accountStatus: import("@prisma/client").$Enums.AccountStatus;
-            registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
+            role: import(".prisma/client").$Enums.Role;
+            accountStatus: import(".prisma/client").$Enums.AccountStatus;
+            registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
             profilePicture: string | null;
             nationalId: string | null;
             accountNumber: string;
@@ -46,9 +46,9 @@ export declare class AuthService {
             email: string;
             phone: string;
             passwordHash: string;
-            role: import("@prisma/client").$Enums.Role;
-            accountStatus: import("@prisma/client").$Enums.AccountStatus;
-            registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
+            role: import(".prisma/client").$Enums.Role;
+            accountStatus: import(".prisma/client").$Enums.AccountStatus;
+            registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
             profilePicture: string | null;
             nationalId: string | null;
             accountNumber: string;

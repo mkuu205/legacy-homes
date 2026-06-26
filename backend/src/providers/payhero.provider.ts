@@ -9,7 +9,7 @@ import {
   CallbackVerificationRequest,
   CallbackVerificationResponse,
 } from './payment-provider.interface';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 export class PayHeroProvider implements PaymentProvider {
   private username: string;

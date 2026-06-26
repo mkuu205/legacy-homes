@@ -1,5 +1,5 @@
-import { logger } from '@/utils/logger';
-import { formatDateForDisplay } from '@/utils/timezone';
+import { logger } from '../utils/logger';
+import { formatDateForDisplay } from '../utils/timezone';
 
 export class SMSService {
   /**

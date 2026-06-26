@@ -1,5 +1,5 @@
-import { logger } from '@/utils/logger';
-import { formatDateForDisplay, formatBillingPeriod } from '@/utils/timezone';
+import { logger } from '../utils/logger';
+import { formatDateForDisplay, formatBillingPeriod } from '../utils/timezone';
 
 export class EmailService {
   /**

@@ -13,7 +13,7 @@ export declare class ResidentService {
             fullName: string;
             email: string;
             phone: string;
-            accountStatus: import("@prisma/client").$Enums.AccountStatus;
+            accountStatus: import(".prisma/client").$Enums.AccountStatus;
             profilePicture: string;
             nationalId: string;
             accountNumber: string;
@@ -51,9 +51,9 @@ export declare class ResidentService {
             totalAmount: number;
             amountPaid: number;
             balance: number;
-            status: import("@prisma/client").$Enums.BillStatus;
-            paymentProvider: import("@prisma/client").$Enums.PaymentProviderType | null;
-            paymentMethod: import("@prisma/client").$Enums.PaymentMethodType | null;
+            status: import(".prisma/client").$Enums.BillStatus;
+            paymentProvider: import(".prisma/client").$Enums.PaymentProviderType | null;
+            paymentMethod: import(".prisma/client").$Enums.PaymentMethodType | null;
             paymentId: string | null;
             daysUntilDue: number | null;
             overdueDays: number | null;
@@ -64,9 +64,9 @@ export declare class ResidentService {
             createdAt: Date;
             updatedAt: Date;
             residentId: string;
-            status: import("@prisma/client").$Enums.PaymentStatus;
-            paymentMethod: import("@prisma/client").$Enums.PaymentMethodType;
-            provider: import("@prisma/client").$Enums.PaymentProviderType;
+            status: import(".prisma/client").$Enums.PaymentStatus;
+            paymentMethod: import(".prisma/client").$Enums.PaymentMethodType;
+            provider: import(".prisma/client").$Enums.PaymentProviderType;
             billId: string;
             merchantReference: string | null;
             providerTransactionId: string | null;
@@ -81,7 +81,7 @@ export declare class ResidentService {
             cardBrand: string | null;
             currency: string | null;
             amount: number;
-            reconciliationStatus: import("@prisma/client").$Enums.PaymentReconciliationStatus;
+            reconciliationStatus: import(".prisma/client").$Enums.PaymentReconciliationStatus;
             merchantRequestId: string | null;
             checkoutRequestId: string | null;
             callbackPayload: import("@prisma/client/runtime/library").JsonValue | null;
@@ -97,8 +97,8 @@ export declare class ResidentService {
         fullName: string;
         email: string;
         phone: string;
-        accountStatus: import("@prisma/client").$Enums.AccountStatus;
-        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
+        accountStatus: import(".prisma/client").$Enums.AccountStatus;
+        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
         profilePicture: string;
         nationalId: string;
         accountNumber: string;
@@ -116,9 +116,9 @@ export declare class ResidentService {
         email: string;
         phone: string;
         passwordHash: string;
-        role: import("@prisma/client").$Enums.Role;
-        accountStatus: import("@prisma/client").$Enums.AccountStatus;
-        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
+        role: import(".prisma/client").$Enums.Role;
+        accountStatus: import(".prisma/client").$Enums.AccountStatus;
+        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
         profilePicture: string | null;
         nationalId: string | null;
         accountNumber: string;
@@ -135,7 +135,7 @@ export declare class ResidentService {
         fullName: string;
         email: string;
         phone: string;
-        accountStatus: import("@prisma/client").$Enums.AccountStatus;
+        accountStatus: import(".prisma/client").$Enums.AccountStatus;
         profilePicture: string;
         nationalId: string;
         accountNumber: string;
@@ -156,9 +156,9 @@ export declare class ResidentService {
         email: string;
         phone: string;
         passwordHash: string;
-        role: import("@prisma/client").$Enums.Role;
-        accountStatus: import("@prisma/client").$Enums.AccountStatus;
-        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
+        role: import(".prisma/client").$Enums.Role;
+        accountStatus: import(".prisma/client").$Enums.AccountStatus;
+        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
         profilePicture: string | null;
         nationalId: string | null;
         accountNumber: string;
@@ -204,9 +204,9 @@ export declare class ResidentService {
             totalAmount: number;
             amountPaid: number;
             balance: number;
-            status: import("@prisma/client").$Enums.BillStatus;
-            paymentProvider: import("@prisma/client").$Enums.PaymentProviderType | null;
-            paymentMethod: import("@prisma/client").$Enums.PaymentMethodType | null;
+            status: import(".prisma/client").$Enums.BillStatus;
+            paymentProvider: import(".prisma/client").$Enums.PaymentProviderType | null;
+            paymentMethod: import(".prisma/client").$Enums.PaymentMethodType | null;
             paymentId: string | null;
             daysUntilDue: number | null;
             overdueDays: number | null;
@@ -217,9 +217,9 @@ export declare class ResidentService {
             createdAt: Date;
             updatedAt: Date;
             residentId: string;
-            status: import("@prisma/client").$Enums.PaymentStatus;
-            paymentMethod: import("@prisma/client").$Enums.PaymentMethodType;
-            provider: import("@prisma/client").$Enums.PaymentProviderType;
+            status: import(".prisma/client").$Enums.PaymentStatus;
+            paymentMethod: import(".prisma/client").$Enums.PaymentMethodType;
+            provider: import(".prisma/client").$Enums.PaymentProviderType;
             billId: string;
             merchantReference: string | null;
             providerTransactionId: string | null;
@@ -234,7 +234,7 @@ export declare class ResidentService {
             cardBrand: string | null;
             currency: string | null;
             amount: number;
-            reconciliationStatus: import("@prisma/client").$Enums.PaymentReconciliationStatus;
+            reconciliationStatus: import(".prisma/client").$Enums.PaymentReconciliationStatus;
             merchantRequestId: string | null;
             checkoutRequestId: string | null;
             callbackPayload: import("@prisma/client/runtime/library").JsonValue | null;
@@ -265,7 +265,7 @@ export declare class ResidentService {
         fullName: string;
         email: string;
         phone: string;
-        accountStatus: import("@prisma/client").$Enums.AccountStatus;
+        accountStatus: import(".prisma/client").$Enums.AccountStatus;
         accountNumber: string;
     }>;
     exportResidentsCSV(query: {

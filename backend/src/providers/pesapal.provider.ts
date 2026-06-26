@@ -8,7 +8,7 @@ import {
   CallbackVerificationRequest,
   CallbackVerificationResponse,
 } from './payment-provider.interface';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 export class PesapalProvider implements PaymentProvider {
   private consumerKey: string;

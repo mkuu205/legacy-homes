@@ -9,7 +9,7 @@ import {
   CallbackVerificationRequest,
   CallbackVerificationResponse,
 } from './payment-provider.interface';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 export class TumaProvider implements PaymentProvider {
   private apiKey: string;

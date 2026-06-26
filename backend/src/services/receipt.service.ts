@@ -1,10 +1,10 @@
-import { prisma } from '@/config/prisma';
-import { logger } from '@/utils/logger';
+import { prisma } from '../config/prisma';
+import { logger } from '../utils/logger';
 import crypto from 'crypto';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
-import { formatDateInAppTimezone, formatBillingPeriod } from '@/utils/timezone';
+import { formatDateInAppTimezone, formatBillingPeriod } from '../utils/timezone';
 
 export class ReceiptService {
   /**
