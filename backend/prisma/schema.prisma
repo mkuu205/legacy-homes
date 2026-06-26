@@ -345,6 +345,9 @@ model Payment {
   currency              String?
   amount                Float
   status                PaymentStatus             @default(PENDING)
+  reconciliationStatus  PaymentReconciliationStatus @default(PENDING)
+  merchantRequestId     String?
+  checkoutRequestId     String?
   callbackPayload       Json?
   providerPayload       Json?
   failureReason         String?

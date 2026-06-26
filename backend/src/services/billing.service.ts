@@ -106,11 +106,13 @@ export class BillingService {
       const bill = await prisma.bill.create({
         data: {
           billNumber,
-          residentId: house.resident.id,
-          meterId: reading.meterId,
-          houseId: meter.houseId,
-          readingId: reading.id,
+          resident: { connect: { id: house.resident.id } },
+          meter: { connect: { id: reading.meterId } },
+          house: { connect: { id: meter.houseId } },
+          reading: { connect: { id: reading.id } },
           billingMonth,
+          billingPeriodStart: new Date(),
+          billingPeriodEnd: new Date(),
           previousReading: reading.previousReading,
           currentReading: reading.currentReading,
           unitsConsumed: reading.unitsConsumed,
@@ -759,7 +761,7 @@ export class BillingService {
         const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
         const chunks: Buffer[] = [];
         doc.on('data', (chunk) => chunks.push(chunk));
-        doc.on('end', () => resolve({ pdfBuffer: Buffer.concat(chunks), filename: `receipt-${payment.paymentId}.pdf` }));
+        doc.on('end', () => resolve({ pdfBuffer: Buffer.concat(chunks), filename: `receipt-${payment.id}.pdf` }));
         doc.on('error', reject);
 
         const pageW = doc.page.width;
@@ -793,7 +795,7 @@ export class BillingService {
           doc.fill('#1a1a1a').fontSize(10).font('Helvetica-Bold').text(value, x, cy + 12);
         };
 
-        labelVal('Receipt Number', payment.paymentId, colA, y);
+        labelVal('Receipt Number', payment.id, colA, y);
         labelVal('Invoice Number', payment.bill.billNumber, colB, y);
         y += 38;
         labelVal('Payment Date', new Date(payment.createdAt).toLocaleDateString('en-KE'), colA, y);
@@ -834,11 +836,11 @@ export class BillingService {
         };
 
         y = detailRow('Amount Paid', `KES ${payment.amount.toFixed(2)}`, false, y);
-        y = detailRow('Payment Method', payment.mpesaReceiptCode ? 'M-Pesa' : 'Bank Transfer', true, y);
-        if (payment.mpesaReceiptCode) {
-          y = detailRow('M-Pesa Transaction Code', payment.mpesaReceiptCode, false, y);
+        y = detailRow('Payment Method', payment.confirmationCode ? 'M-Pesa' : 'Bank Transfer', true, y);
+        if (payment.confirmationCode) {
+          y = detailRow('M-Pesa Transaction Code', payment.confirmationCode, false, y);
         }
-        y = detailRow('Payment Status', payment.status, payment.mpesaReceiptCode ? true : false, y);
+        y = detailRow('Payment Status', payment.status, payment.confirmationCode ? true : false, y);
         doc.moveTo(marginL, y).lineTo(pageW - marginR, y).lineWidth(1).stroke('#0a3d62');
         y += 16;
 

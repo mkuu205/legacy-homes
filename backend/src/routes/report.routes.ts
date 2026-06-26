@@ -23,8 +23,8 @@ router.get('/export/revenue', authenticate, authorize('SUPER_ADMIN'), async (req
       p.resident?.accountNumber || '',
       p.resident?.houseNumber || '',
       p.amount,
-      p.paymentId,
-      p.mpesaReceiptCode || '',
+      p.id,
+      p.confirmationCode || '',
     ]);
     const csv = [headers.join(','), ...rows.map((r: any[]) => r.map((v: any) => `"${v}"`).join(','))].join('\n');
     res.setHeader('Content-Type', 'text/csv');

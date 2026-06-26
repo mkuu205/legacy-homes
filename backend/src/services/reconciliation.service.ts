@@ -64,7 +64,7 @@ export class ReconciliationService {
       }
 
       // If payment is failed or cancelled, mark as such
-      if ([PaymentStatus.FAILED, PaymentStatus.CANCELLED, PaymentStatus.REFUNDED].includes(payment.status)) {
+      if (([PaymentStatus.FAILED, PaymentStatus.CANCELLED, PaymentStatus.REFUNDED] as any[]).includes(payment.status)) {
         await prisma.payment.update({
           where: { id: paymentId },
           data: {

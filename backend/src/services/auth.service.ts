@@ -60,7 +60,7 @@ export class AuthService {
         fullName: data.fullName,
         email: data.email,
         phone: data.phone,
-        houseId: house.id,
+        assignedHouse: { connect: { id: house.id } },
         passwordHash,
         nationalId: data.nationalId,
         profilePicture: data.profilePicture,
@@ -98,7 +98,7 @@ export class AuthService {
 
     await prisma.otpCode.create({
       data: {
-        userId,
+        user: { connect: { id: userId } },
         otpHash,
         expiresAt,
       },

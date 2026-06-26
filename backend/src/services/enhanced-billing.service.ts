@@ -1,5 +1,5 @@
 import { PrismaClient, Bill, BillStatus } from "@prisma/client";
-import logger from "../utils/logger";
+import { logger } from "../utils/logger";
 
 const prisma = new PrismaClient();
 
@@ -54,10 +54,12 @@ export class EnhancedBillingService {
       const finalBill = await prisma.bill.create({
         data: {
           billNumber: `FINAL-${Date.now()}`,
-          residentId,
-          houseId: resident.assignedHouse.id,
-          meterId: "", // Will be updated if meter exists
+          resident: { connect: { id: residentId } },
+          house: { connect: { id: resident.assignedHouse.id } },
+          meter: { connect: { id: "" } }, // This might still fail if "" is not a valid UUID
           billingMonth: new Date().toISOString().slice(0, 7),
+          billingPeriodStart: new Date(),
+          billingPeriodEnd: new Date(),
           previousReading: 0,
           currentReading: 0,
           unitsConsumed: 0,

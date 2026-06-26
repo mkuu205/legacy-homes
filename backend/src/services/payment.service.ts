@@ -116,9 +116,9 @@ export class PaymentService {
 
     const payment = await prisma.payment.create({
       data: {
-        paymentId,
-        billId: data.billId,
-        residentId: data.residentId,
+        bill: { connect: { id: data.billId } },
+        resident: { connect: { id: data.residentId } },
+        paymentMethod: 'MPESA_STK_PUSH',
         amount: data.amount,
         phoneNumber: phone,
         status: 'PENDING',
@@ -244,11 +244,11 @@ export class PaymentService {
       if (payment) {
         await prisma.callbackAudit.update({
           where: { id: auditId },
-          data: { paymentId: payment.paymentId }
+          data: { paymentId: payment.id }
         });
 
         if (payment.status === 'SUCCESSFUL') {
-          logger.info(`Callback for already successful payment: ${payment.paymentId}. Skipping.`);
+          logger.info(`Callback for already successful payment: ${payment.id}. Skipping.`);
           await prisma.callbackAudit.update({
             where: { id: auditId },
             data: { processed: true, processingResult: 'ALREADY_SUCCESSFUL' }
@@ -260,18 +260,18 @@ export class PaymentService {
 
         // 3. Success processing
         if (result_code === 0 || result_code === "0" || status === 'completed') {
-          logger.info(`Payment ${payment.paymentId} marked as SUCCESSFUL in Tuma callback.`);
+          logger.info(`Payment ${payment.id} marked as SUCCESSFUL in Tuma callback.`);
           await this.reconcilePayment(payment.id, mpesa_receipt_number, Number(amount || payment.amount), payload, verificationTimestamp);
           
           await prisma.callbackAudit.update({
             where: { id: auditId },
             data: { processed: true, processingResult: 'SUCCESS' }
           });
-          logger.info(`Payment updated: ${payment.paymentId} status = SUCCESSFUL`);
+          logger.info(`Payment updated: ${payment.id} status = SUCCESSFUL`);
         } 
         // 4. Failure processing
         else if (result_code !== 0 || status === 'failed') {
-          logger.info(`Payment ${payment.paymentId} marked as FAILED in callback: ${result_desc}`);
+          logger.info(`Payment ${payment.id} marked as FAILED in callback: ${result_desc}`);
           await prisma.payment.update({
             where: { id: payment.id },
             data: {
@@ -286,7 +286,7 @@ export class PaymentService {
             where: { id: auditId },
             data: { processed: true, processingResult: 'FAILED_IN_PAYLOAD' }
           });
-          logger.info(`Payment updated: ${payment.paymentId} status = FAILED`);
+          logger.info(`Payment updated: ${payment.id} status = FAILED`);
         }
       } else {
         logger.warn(`Callback received for unknown payment. MerchantID: ${merchant_request_id}, CheckoutID: ${checkout_request_id}.`);
@@ -345,7 +345,7 @@ export class PaymentService {
         where: { id: paymentId },
         data: {
           status: 'SUCCESSFUL',
-          mpesaReceiptCode,
+          confirmationCode: mpesaReceiptCode,
           callbackPayload: payload,
           verificationTimestamp,
           failureReason: null,
@@ -370,7 +370,7 @@ export class PaymentService {
       // Prepare data for post-transaction operations
       result = {
         residentId: payment.residentId,
-        paymentId: payment.paymentId,
+        paymentId: payment.id,
         billId: payment.billId,
         billNumber: payment.bill.billNumber,
         newBalance,
@@ -403,7 +403,7 @@ export class PaymentService {
       io.to(room).emit('payment_completed', {
         paymentId: result.paymentId,
         amount,
-        mpesaReceiptCode,
+        confirmationCode: mpesaReceiptCode,
         billId: result.billId,
         newBalance: result.newBalance,
         newStatus: result.newStatus
@@ -432,7 +432,7 @@ export class PaymentService {
 
   async checkPaymentStatus(paymentId: string, userId: string) {
     const payment = await prisma.payment.findUnique({
-      where: { paymentId },
+      where: { id: paymentId },
       include: { bill: true },
     });
 
@@ -481,8 +481,8 @@ export class PaymentService {
     if (query.residentId) where.residentId = query.residentId;
     if (query.search) {
       where.OR = [
-        { mpesaReceiptCode: { contains: query.search, mode: 'insensitive' } },
-        { paymentId: { contains: query.search, mode: 'insensitive' } },
+        { confirmationCode: { contains: query.search, mode: 'insensitive' } },
+        { id: { contains: query.search, mode: 'insensitive' } },
         { resident: { fullName: { contains: query.search, mode: 'insensitive' } } },
         { resident: { accountNumber: { contains: query.search, mode: 'insensitive' } } },
         { bill: { billNumber: { contains: query.search, mode: 'insensitive' } } },
@@ -536,7 +536,7 @@ export class PaymentService {
   }
 
   async retryPaymentVerification(paymentId: string) {
-    const payment = await prisma.payment.findFirst({ where: { paymentId } });
+    const payment = await prisma.payment.findFirst({ where: { id: paymentId } });
     if (!payment) throw new AppError('Payment not found', 404);
     if (payment.status === 'SUCCESSFUL') throw new AppError('Payment already successful', 400);
     
@@ -560,7 +560,7 @@ export class PaymentService {
 
     const header = 'Date,Payment ID,Resident,Account,Bill,Amount,M-Pesa Receipt,Status\n';
     const rows = payments.map(p => {
-      return `${p.createdAt.toISOString()},${p.paymentId},${p.resident.fullName},${p.resident.accountNumber},${p.bill.billNumber},${p.amount},${p.mpesaReceiptCode || ''},${p.status}`;
+      return `${p.createdAt.toISOString()},${p.id},${p.resident.fullName},${p.resident.accountNumber},${p.bill.billNumber},${p.amount},${p.confirmationCode || ''},${p.status}`;
     }).join('\n');
 
     return header + rows;

@@ -31,10 +31,10 @@ export class AIService {
           orderBy: { createdAt: 'desc' },
           take: 3,
           select: {
-            paymentId: true,
+            id: true,
             amount: true,
             status: true,
-            mpesaReceiptCode: true,
+            confirmationCode: true,
             createdAt: true,
           },
         },
@@ -65,7 +65,7 @@ export class AIService {
       }
     }
 
-    const currentBill = user.bills[0];
+    const currentBill = (user as any).bills[0];
     const systemPrompt = `You are a helpful AI assistant for Legacy Homes Water Billing System in Kenya.
 
 RESIDENT INFORMATION:
@@ -90,11 +90,11 @@ ${
 
 RECENT PAYMENTS:
 ${
-  user.payments.length > 0
-    ? user.payments
+  (user as any).payments.length > 0
+    ? (user as any).payments
         .map(
-          (p) =>
-            `- ${p.paymentId}: KES ${p.amount.toLocaleString()} - ${p.status} ${p.mpesaReceiptCode ? `(Receipt: ${p.mpesaReceiptCode})` : ''}`
+          (p: any) =>
+            `- ${p.id}: KES ${p.amount.toLocaleString()} - ${p.status} ${p.confirmationCode ? `(Receipt: ${p.confirmationCode})` : ''}`
         )
         .join('\n')
     : '- No payment history'
@@ -156,7 +156,7 @@ INSTRUCTIONS:
 
   private getFallbackResponse(message: string, user: any, houseNumber: string) {
     const lower = message.toLowerCase();
-    const currentBill = user.bills[0];
+    const currentBill = (user as any).bills[0];
 
     if (lower.includes('bill') || lower.includes('amount') || lower.includes('balance')) {
       if (currentBill) {

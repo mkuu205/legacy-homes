@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { auditService } from "../services/audit.service";
 import { searchService } from "../services/search.service";
 import { settingsService } from "../services/settings.service";
-import logger from "../utils/logger";
+import { logger } from "../utils/logger";
 
 export class AuditSearchSettingsController {
   // ─── AUDIT LOGGING ───
