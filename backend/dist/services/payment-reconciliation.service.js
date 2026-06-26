@@ -1,11 +1,8 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentReconciliationService = void 0;
 const client_1 = require("@prisma/client");
-const logger_1 = __importDefault(require("../utils/logger"));
+const logger_1 = require("../utils/logger");
 const prisma = new client_1.PrismaClient();
 class PaymentReconciliationService {
     // Reconcile a payment
@@ -15,11 +12,11 @@ class PaymentReconciliationService {
                 where: { id: paymentId },
                 data: { reconciliationStatus: status },
             });
-            logger_1.default.info(`Payment reconciled: ${paymentId} - ${status}`);
+            logger_1.logger.info(`Payment reconciled: ${paymentId} - ${status}`);
             return payment;
         }
         catch (error) {
-            logger_1.default.error(`Error reconciling payment: ${error}`);
+            logger_1.logger.error(`Error reconciling payment: ${error}`);
             throw error;
         }
     }
@@ -41,7 +38,7 @@ class PaymentReconciliationService {
             return payments;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching unreconciled payments: ${error}`);
+            logger_1.logger.error(`Error fetching unreconciled payments: ${error}`);
             throw error;
         }
     }
@@ -63,7 +60,7 @@ class PaymentReconciliationService {
             return payments;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching mismatched payments: ${error}`);
+            logger_1.logger.error(`Error fetching mismatched payments: ${error}`);
             throw error;
         }
     }
@@ -84,7 +81,7 @@ class PaymentReconciliationService {
             return payments;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching orphaned payments: ${error}`);
+            logger_1.logger.error(`Error fetching orphaned payments: ${error}`);
             throw error;
         }
     }
@@ -109,7 +106,7 @@ class PaymentReconciliationService {
             };
         }
         catch (error) {
-            logger_1.default.error(`Error getting reconciliation stats: ${error}`);
+            logger_1.logger.error(`Error getting reconciliation stats: ${error}`);
             throw error;
         }
     }
@@ -138,11 +135,11 @@ class PaymentReconciliationService {
                     }
                 }
             }
-            logger_1.default.info(`Auto-reconciled ${reconciled} payments`);
+            logger_1.logger.info(`Auto-reconciled ${reconciled} payments`);
             return reconciled;
         }
         catch (error) {
-            logger_1.default.error(`Error auto-reconciling payments: ${error}`);
+            logger_1.logger.error(`Error auto-reconciling payments: ${error}`);
             throw error;
         }
     }
@@ -176,7 +173,7 @@ class PaymentReconciliationService {
             return report;
         }
         catch (error) {
-            logger_1.default.error(`Error generating reconciliation report: ${error}`);
+            logger_1.logger.error(`Error generating reconciliation report: ${error}`);
             throw error;
         }
     }
@@ -187,11 +184,11 @@ class PaymentReconciliationService {
                 where: { id: { in: paymentIds } },
                 data: { reconciliationStatus: status },
             });
-            logger_1.default.info(`Bulk reconciled ${result.count} payments to ${status}`);
+            logger_1.logger.info(`Bulk reconciled ${result.count} payments to ${status}`);
             return result.count;
         }
         catch (error) {
-            logger_1.default.error(`Error bulk reconciling payments: ${error}`);
+            logger_1.logger.error(`Error bulk reconciling payments: ${error}`);
             throw error;
         }
     }

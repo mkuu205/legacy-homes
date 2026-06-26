@@ -147,12 +147,15 @@ export default function BillingPage() {
                       </div>
 
                       <p style={{ fontSize: '12px', color: 'var(--t2)', marginBottom: '8px' }}>
-                        {bill.billingMonth} · Meter: {bill.meter?.meterNumber}
+                        {new Date(bill.billingPeriodStart).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })} — {new Date(bill.billingPeriodEnd).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        <br/>
+                        Generated: {new Date(bill.generatedAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </p>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '11px', color: 'var(--t3)' }}>
+                        <span>Meter: {bill.meter?.meterNumber}</span>
                         <span>{bill.unitsConsumed} units × KES 250</span>
-                        <span>Due: {new Date(bill.dueDate).toLocaleDateString('en-KE')}</span>
+                        <span>Due: {new Date(bill.dueDate).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                       </div>
                     </div>
                   </div>

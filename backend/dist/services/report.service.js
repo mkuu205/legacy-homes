@@ -73,7 +73,6 @@ class ReportService {
             where: { status: 'SUCCESSFUL', createdAt: { gte: startDate, lte: endDate } },
             select: {
                 id: true,
-                paymentId: true,
                 amount: true,
                 status: true,
                 residentId: true,

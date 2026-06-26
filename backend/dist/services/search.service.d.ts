@@ -4,7 +4,7 @@ export declare class SearchService {
             assignedHouse: {
                 id: string;
                 houseNumber: string;
-                occupancyStatus: import(".prisma/client").$Enums.HouseStatus;
+                occupancyStatus: import("@prisma/client").$Enums.HouseStatus;
                 creationDate: Date;
                 notes: string | null;
                 isLocked: boolean;
@@ -16,8 +16,8 @@ export declare class SearchService {
             fullName: string;
             email: string;
             phone: string;
-            accountStatus: import(".prisma/client").$Enums.AccountStatus;
-            registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+            accountStatus: import("@prisma/client").$Enums.AccountStatus;
+            registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
             accountNumber: string;
         }[];
         bills: {
@@ -37,7 +37,7 @@ export declare class SearchService {
             houseId: string;
             billingMonth: string;
             totalAmount: number;
-            status: import(".prisma/client").$Enums.BillStatus;
+            status: import("@prisma/client").$Enums.BillStatus;
         }[];
         tickets: {
             resident: {
@@ -48,7 +48,7 @@ export declare class SearchService {
             id: string;
             createdAt: Date;
             residentId: string;
-            status: import(".prisma/client").$Enums.TicketStatus;
+            status: import("@prisma/client").$Enums.TicketStatus;
             ticketId: string;
             subject: string;
         }[];
@@ -60,7 +60,7 @@ export declare class SearchService {
             id: string;
             createdAt: Date;
             houseId: string;
-            status: import(".prisma/client").$Enums.MeterStatus;
+            status: import("@prisma/client").$Enums.MeterStatus;
             meterNumber: string;
             meterSerial: string;
         }[];
@@ -69,7 +69,7 @@ export declare class SearchService {
         assignedHouse: {
             id: string;
             houseNumber: string;
-            occupancyStatus: import(".prisma/client").$Enums.HouseStatus;
+            occupancyStatus: import("@prisma/client").$Enums.HouseStatus;
             creationDate: Date;
             notes: string | null;
             isLocked: boolean;
@@ -81,8 +81,8 @@ export declare class SearchService {
         fullName: string;
         email: string;
         phone: string;
-        accountStatus: import(".prisma/client").$Enums.AccountStatus;
-        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+        accountStatus: import("@prisma/client").$Enums.AccountStatus;
+        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
         accountNumber: string;
     }[]>;
     searchBills(query: string, skip?: number, take?: number): Promise<{
@@ -102,7 +102,7 @@ export declare class SearchService {
         houseId: string;
         billingMonth: string;
         totalAmount: number;
-        status: import(".prisma/client").$Enums.BillStatus;
+        status: import("@prisma/client").$Enums.BillStatus;
     }[]>;
     searchTickets(query: string, skip?: number, take?: number): Promise<{
         resident: {
@@ -113,7 +113,7 @@ export declare class SearchService {
         id: string;
         createdAt: Date;
         residentId: string;
-        status: import(".prisma/client").$Enums.TicketStatus;
+        status: import("@prisma/client").$Enums.TicketStatus;
         ticketId: string;
         subject: string;
     }[]>;
@@ -125,7 +125,7 @@ export declare class SearchService {
         id: string;
         createdAt: Date;
         houseId: string;
-        status: import(".prisma/client").$Enums.MeterStatus;
+        status: import("@prisma/client").$Enums.MeterStatus;
         meterNumber: string;
         meterSerial: string;
     }[]>;
@@ -141,7 +141,7 @@ export declare class SearchService {
         assignedHouse: {
             id: string;
             houseNumber: string;
-            occupancyStatus: import(".prisma/client").$Enums.HouseStatus;
+            occupancyStatus: import("@prisma/client").$Enums.HouseStatus;
             creationDate: Date;
             notes: string | null;
             isLocked: boolean;
@@ -153,8 +153,8 @@ export declare class SearchService {
         fullName: string;
         email: string;
         phone: string;
-        accountStatus: import(".prisma/client").$Enums.AccountStatus;
-        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+        accountStatus: import("@prisma/client").$Enums.AccountStatus;
+        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
         accountNumber: string;
     }[] | {
         resident: {
@@ -173,7 +173,7 @@ export declare class SearchService {
         houseId: string;
         billingMonth: string;
         totalAmount: number;
-        status: import(".prisma/client").$Enums.BillStatus;
+        status: import("@prisma/client").$Enums.BillStatus;
     }[] | {
         resident: {
             id: string;
@@ -183,7 +183,7 @@ export declare class SearchService {
         id: string;
         createdAt: Date;
         residentId: string;
-        status: import(".prisma/client").$Enums.TicketStatus;
+        status: import("@prisma/client").$Enums.TicketStatus;
         ticketId: string;
         subject: string;
     }[] | {
@@ -194,7 +194,7 @@ export declare class SearchService {
         id: string;
         createdAt: Date;
         houseId: string;
-        status: import(".prisma/client").$Enums.MeterStatus;
+        status: import("@prisma/client").$Enums.MeterStatus;
         meterNumber: string;
         meterSerial: string;
     }[]>;

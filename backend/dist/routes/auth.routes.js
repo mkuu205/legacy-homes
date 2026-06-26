@@ -27,5 +27,6 @@ router.post('/logout', auth_controller_1.authController.logout.bind(auth_control
 router.post('/forgot-password', authLimiter, auth_controller_1.authController.forgotPassword.bind(auth_controller_1.authController));
 router.post('/reset-password', authLimiter, auth_controller_1.authController.resetPassword.bind(auth_controller_1.authController));
 router.get('/me', auth_1.authenticate, auth_controller_1.authController.getMe.bind(auth_controller_1.authController));
+router.delete('/delete-account', auth_1.authenticate, auth_controller_1.authController.deleteAccount.bind(auth_controller_1.authController));
 exports.default = router;
 //# sourceMappingURL=auth.routes.js.map

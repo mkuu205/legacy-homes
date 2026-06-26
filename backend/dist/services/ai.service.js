@@ -35,10 +35,10 @@ class AIService {
                     orderBy: { createdAt: 'desc' },
                     take: 3,
                     select: {
-                        paymentId: true,
+                        id: true,
                         amount: true,
                         status: true,
-                        mpesaReceiptCode: true,
+                        confirmationCode: true,
                         createdAt: true,
                     },
                 },
@@ -90,7 +90,7 @@ ${currentBill
 RECENT PAYMENTS:
 ${user.payments.length > 0
             ? user.payments
-                .map((p) => `- ${p.paymentId}: KES ${p.amount.toLocaleString()} - ${p.status} ${p.mpesaReceiptCode ? `(Receipt: ${p.mpesaReceiptCode})` : ''}`)
+                .map((p) => `- ${p.id}: KES ${p.amount.toLocaleString()} - ${p.status} ${p.confirmationCode ? `(Receipt: ${p.confirmationCode})` : ''}`)
                 .join('\n')
             : '- No payment history'}
 

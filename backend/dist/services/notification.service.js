@@ -9,51 +9,52 @@ const email_1 = require("../utils/email");
 const server_1 = require("../server");
 const logger_1 = require("../utils/logger");
 const errorHandler_1 = require("../middleware/errorHandler");
-let AT = null;
-let TALKSASA_API_KEY = process.env.TALKSASA_API_KEY || '';
-let TALKSASA_SENDER_ID = 'TALK-SASA';
-try {
-    const AfricasTalking = require('africastalking');
-    AT = AfricasTalking({
-        apiKey: process.env.AT_API_KEY,
-        username: process.env.AT_USERNAME,
-    });
-}
-catch {
-    logger_1.logger.warn("Africa's Talking not initialized");
-}
+const axios_1 = __importDefault(require("axios"));
+const TALKSASA_API_TOKEN = process.env.TALKSASA_API_TOKEN || '';
+const TALKSASA_SENDER_ID = process.env.TALKSASA_SENDER_ID || 'TALK-SASA';
+const TALKSASA_API_URL = process.env.TALKSASA_API_URL || 'https://bulksms.talksasa.com/api/v3/';
 // Helper function to send SMS via TalkSasa
 async function sendTalkSasaSMS(phoneNumber, message) {
-    if (!TALKSASA_API_KEY) {
+    if (!TALKSASA_API_TOKEN) {
         logger_1.logger.warn('TalkSasa API key not configured');
         return;
     }
     try {
-        const axios = require('axios');
-        let phone = phoneNumber;
+        let phone = phoneNumber.trim().replace(/\s+/g, '');
+        // Format to E.164 without the plus sign for TalkSasa
         if (phone.startsWith('0')) {
             phone = '254' + phone.slice(1);
         }
         if (phone.startsWith('+')) {
             phone = phone.slice(1);
         }
-        if (!phone.startsWith('254')) {
+        if (!phone.startsWith('254') && phone.length === 9) {
             phone = '254' + phone;
         }
-        await axios.post('https://api.talksasa.com/v1/send', {
-            phone_number: phone,
-            message,
+        const response = await axios_1.default.post(`${TALKSASA_API_URL}sms/send`, {
+            recipient: phone,
             sender_id: TALKSASA_SENDER_ID,
+            type: 'plain',
+            message: message,
         }, {
             headers: {
-                'Authorization': `Bearer ${TALKSASA_API_KEY}`,
+                'Authorization': `Bearer ${TALKSASA_API_TOKEN}`,
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
             },
+            timeout: 15000,
         });
+        logger_1.logger.info(`TalkSasa SMS sent to ${phone}. Response: ${JSON.stringify(response.data)}`);
     }
     catch (error) {
-        logger_1.logger.error('Failed to send TalkSasa SMS:', error);
-        throw error;
+        const errorData = error.response?.data;
+        logger_1.logger.error('Failed to send TalkSasa SMS:', {
+            message: error.message,
+            response: errorData,
+            phone: phoneNumber
+        });
+        const errorMessage = errorData?.message || error.message || 'TalkSasa SMS delivery failed';
+        throw new Error(`TalkSasa Error: ${errorMessage}`);
     }
 }
 const VALID_NOTIFICATION_TYPES = [
@@ -77,7 +78,21 @@ class NotificationService {
         if (invalidChannels.length > 0) {
             throw new errorHandler_1.AppError(`Invalid channels: ${invalidChannels.join(', ')}`, 400);
         }
+        // BROADCAST FILTERING LOGIC
         if (data.targetAll) {
+            // 1. All Residents
+            const residents = await prisma_1.default.user.findMany({
+                where: {
+                    role: 'RESIDENT',
+                },
+                select: {
+                    id: true,
+                },
+            });
+            residentIds = residents.map((r) => r.id);
+        }
+        else if (data.targetGroup === 'active') {
+            // 2. Active Residents Only
             const residents = await prisma_1.default.user.findMany({
                 where: {
                     role: 'RESIDENT',
@@ -90,6 +105,7 @@ class NotificationService {
             residentIds = residents.map((r) => r.id);
         }
         else if (data.targetGroup === 'overdue') {
+            // 3. Residents with Overdue Bills
             const overdueBills = await prisma_1.default.bill.findMany({
                 where: {
                     status: 'OVERDUE',
@@ -101,7 +117,35 @@ class NotificationService {
             });
             residentIds = overdueBills.map((b) => b.residentId);
         }
+        else if (data.targetGroup === 'unpaid') {
+            // 4. Residents with Unpaid Bills
+            const unpaidBills = await prisma_1.default.bill.findMany({
+                where: {
+                    status: { in: ['UNPAID', 'OVERDUE', 'PARTIAL'] },
+                },
+                select: {
+                    residentId: true,
+                },
+                distinct: ['residentId'],
+            });
+            residentIds = unpaidBills.map((b) => b.residentId);
+        }
+        else if (data.targetGroup?.startsWith('house:')) {
+            // 5. Residents of a selected house
+            const houseId = data.targetGroup.split(':')[1];
+            const residents = await prisma_1.default.user.findMany({
+                where: {
+                    role: 'RESIDENT',
+                    houseId: houseId,
+                },
+                select: {
+                    id: true,
+                },
+            });
+            residentIds = residents.map((r) => r.id);
+        }
         else if (data.targetResidentIds?.length) {
+            // 6. Individual Residents
             residentIds = data.targetResidentIds;
         }
         if (residentIds.length === 0) {
@@ -147,6 +191,14 @@ class NotificationService {
         });
         for (const resident of residents) {
             for (const channel of data.channels) {
+                // According to requirements, do NOT send SMS for general notifications
+                // only for specific automated events (Bill, Payment, Reminder, Outage, Emergency)
+                if (channel === 'SMS') {
+                    const allowedSmsTypes = ['BILLING_ALERT', 'PAYMENT_CONFIRMATION', 'BILLING_REMINDER', 'WATER_OUTAGE', 'EMERGENCY'];
+                    if (!allowedSmsTypes.includes(data.type)) {
+                        continue;
+                    }
+                }
                 await this.deliverNotification(notification.id, resident, channel, data.title, data.message);
             }
         }
@@ -207,28 +259,11 @@ class NotificationService {
             }
             if (channel === 'SMS') {
                 try {
-                    // Try TalkSasa first
-                    if (TALKSASA_API_KEY) {
+                    if (TALKSASA_API_TOKEN) {
                         await sendTalkSasaSMS(resident.phone, `${title}: ${message}`);
                     }
-                    else if (AT) {
-                        // Fallback to Africa's Talking
-                        const sms = AT.SMS;
-                        let phone = resident.phone;
-                        if (phone.startsWith('0')) {
-                            phone = '+254' + phone.slice(1);
-                        }
-                        if (!phone.startsWith('+')) {
-                            phone = '+' + phone;
-                        }
-                        await sms.send({
-                            to: [phone],
-                            message: `${title}: ${message}`,
-                            from: process.env.AT_SENDER_ID,
-                        });
-                    }
                     else {
-                        throw new Error('No SMS provider configured');
+                        throw new Error('TalkSasa API key not configured');
                     }
                     await prisma_1.default.userNotification.updateMany({
                         where: {
@@ -320,6 +355,15 @@ class NotificationService {
                 readAt: new Date(),
             },
         });
+        // Get updated unread count and emit
+        const unreadCount = await prisma_1.default.userNotification.count({
+            where: {
+                userId,
+                channel: 'IN_APP',
+                status: { not: 'READ' }
+            }
+        });
+        server_1.io.to(`user_${userId}`).emit('unread_count_update', { unreadCount });
         return {
             message: 'Notification marked as read',
         };
@@ -338,6 +382,8 @@ class NotificationService {
                 readAt: new Date(),
             },
         });
+        // Emit updated count (0)
+        server_1.io.to(`user_${userId}`).emit('unread_count_update', { unreadCount: 0 });
         return {
             message: 'All notifications marked as read',
         };
@@ -346,7 +392,7 @@ class NotificationService {
         const pageNum = Number.parseInt(String(query?.page || 1), 10);
         const limitNum = Number.parseInt(String(query?.limit || 20), 10);
         const skip = (pageNum - 1) * limitNum;
-        const [notifications, total] = await Promise.all([
+        const [notifications, total, unreadCount] = await Promise.all([
             prisma_1.default.notification.findMany({
                 skip,
                 take: limitNum,
@@ -362,6 +408,10 @@ class NotificationService {
                 },
             }),
             prisma_1.default.notification.count(),
+            // Count all unread (PENDING) user notifications across all residents
+            prisma_1.default.userNotification.count({
+                where: { status: 'PENDING' },
+            }),
         ]);
         return {
             notifications,
@@ -371,6 +421,7 @@ class NotificationService {
                 total,
                 pages: Math.ceil(total / limitNum),
             },
+            unreadCount,
         };
     }
     async deleteAllResidentNotifications(userId) {
@@ -399,9 +450,9 @@ class NotificationService {
         if (!resident)
             throw new errorHandler_1.AppError('Resident not found', 404);
         // Send SMS
-        if (TALKSASA_API_KEY) {
+        if (TALKSASA_API_TOKEN) {
             try {
-                await sendTalkSasaSMS(resident.phone, `Legacy Homes: Your water bill has been generated. Please log in to view and pay.`);
+                await sendTalkSasaSMS(resident.phone, `Legacy Homes: Your water bill ${billNumber} for KES ${totalAmount.toFixed(2)} has been generated. Please log in to pay.`);
             }
             catch (error) {
                 logger_1.logger.error('Failed to send bill notification SMS:', error);
@@ -444,16 +495,48 @@ class NotificationService {
         });
         if (!resident)
             throw new errorHandler_1.AppError('Resident not found', 404);
-        // Send SMS
-        if (TALKSASA_API_KEY) {
+        const title = 'Payment Received';
+        const message = `Payment of KES ${paymentAmount.toFixed(2)} received successfully. Ref: ${mpesaCode || 'N/A'}. Thank you.`;
+        // 1. Create In-App Notification Record
+        try {
+            const notification = await prisma_1.default.notification.create({
+                data: {
+                    title,
+                    message,
+                    type: 'PAYMENT_CONFIRMATION',
+                    channels: ['IN_APP', 'EMAIL', 'SMS'],
+                    sentBy: 'SYSTEM',
+                },
+            });
+            await prisma_1.default.userNotification.create({
+                data: {
+                    notificationId: notification.id,
+                    userId: resident.id,
+                    channel: 'IN_APP',
+                    status: 'DELIVERED',
+                    deliveredAt: new Date(),
+                },
+            });
+            // Emit via Socket.io
+            server_1.io.to(`user_${resident.id}`).emit('notification', {
+                title,
+                message,
+                notificationId: notification.id,
+            });
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to create in-app notification for payment success:', error);
+        }
+        // 2. Send SMS
+        if (TALKSASA_API_TOKEN) {
             try {
-                await sendTalkSasaSMS(resident.phone, `Legacy Homes: Your payment has been received successfully. Thank you.`);
+                await sendTalkSasaSMS(resident.phone, `Legacy Homes: ${message}`);
             }
             catch (error) {
                 logger_1.logger.error('Failed to send payment success SMS:', error);
             }
         }
-        // Send Email
+        // 3. Send Email
         try {
             await (0, email_1.sendEmail)({
                 to: resident.email,
@@ -495,9 +578,9 @@ class NotificationService {
             throw new errorHandler_1.AppError('Notification not found', 404);
         await prisma_1.default.userNotification.update({
             where: { id: notificationId },
-            data: { status: 'READ' },
+            data: { status: 'PENDING', readAt: null },
         });
-        return { message: 'Notification marked as read' };
+        return { message: 'Notification marked as unread' };
     }
     async deleteOne(userId, notificationId) {
         const notification = await prisma_1.default.userNotification.findFirst({
@@ -511,6 +594,15 @@ class NotificationService {
         await prisma_1.default.userNotification.delete({
             where: { id: notificationId },
         });
+        // Get updated unread count and emit
+        const unreadCount = await prisma_1.default.userNotification.count({
+            where: {
+                userId,
+                channel: 'IN_APP',
+                status: { not: 'READ' }
+            }
+        });
+        server_1.io.to(`user_${userId}`).emit('unread_count_update', { unreadCount });
         return { message: 'Notification deleted' };
     }
     async getNotificationLogs(query) {

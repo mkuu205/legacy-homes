@@ -308,7 +308,7 @@ export default function DashboardPage() {
                       {p.paymentId}
                     </p>
                     <p style={{ fontSize: '12px', color: 'var(--t2)', marginTop: '2px' }}>
-                      {new Date(p.createdAt).toLocaleDateString('en-KE')}
+                      {new Date(p.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>

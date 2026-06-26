@@ -76,6 +76,13 @@ export class BillingService {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 30);
 
+    // Parse billingMonth (format: 'YYYY-MM') to get actual period boundaries
+    const [yearStr, monthStr] = billingMonth.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10) - 1; // 0-indexed
+    const periodStart = new Date(year, month, 1, 0, 0, 0, 0);
+    const periodEnd = new Date(year, month + 1, 0, 23, 59, 59, 999); // last day of month
+
     for (const reading of readings) {
       const meter = await prisma.meter.findUnique({
         where: { id: reading.meterId },
@@ -111,8 +118,8 @@ export class BillingService {
           house: { connect: { id: meter.houseId } },
           reading: { connect: { id: reading.id } },
           billingMonth,
-          billingPeriodStart: new Date(),
-          billingPeriodEnd: new Date(),
+          billingPeriodStart: periodStart,
+          billingPeriodEnd: periodEnd,
           previousReading: reading.previousReading,
           currentReading: reading.currentReading,
           unitsConsumed: reading.unitsConsumed,
@@ -395,12 +402,18 @@ export class BillingService {
           id: true,
           billNumber: true,
           billingMonth: true,
+          billingPeriodStart: true,
+          billingPeriodEnd: true,
+          generatedAt: true,
           totalAmount: true,
           amountPaid: true,
           balance: true,
           status: true,
           dueDate: true,
           meterId: true,
+          unitsConsumed: true,
+          unitRate: true,
+          createdAt: true,
         },
       }),
       prisma.bill.count({

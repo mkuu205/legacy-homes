@@ -3,7 +3,7 @@ import { paymentController } from '../controllers/payment.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
-const router = Router();
+const router: import("express").Router = Router();
 
 // Resident routes
 router.post('/initiate', authenticate, paymentController.initiatePayment.bind(paymentController));
@@ -11,8 +11,11 @@ router.get('/my-payments', authenticate, paymentController.getMyPayments.bind(pa
 router.get('/status/:paymentId', authenticate, paymentController.checkStatus.bind(paymentController));
 router.delete('/my-history', authenticate, paymentController.clearMyPaymentHistory.bind(paymentController));
 
-// Tuma Payments webhook
-router.post('/callback', paymentController.handleCallback.bind(paymentController));
+// Provider Webhooks / Callbacks
+router.post('/tuma/callback', paymentController.handleTumaCallback.bind(paymentController));
+router.post('/payhero/callback', paymentController.handlePayHeroCallback.bind(paymentController));
+router.post('/pesapal/ipn', paymentController.handlePesapalIpn.bind(paymentController));
+router.get('/pesapal/ipn', paymentController.handlePesapalIpn.bind(paymentController));
 
 // Diagnostic Routes
 router.post('/callback-test', (req, res) => {

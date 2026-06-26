@@ -5,7 +5,7 @@ import { AuthRequest } from '../middleware/auth';
 import { NextFunction, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 
-const router = Router();
+const router: import("express").Router = Router();
 
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,

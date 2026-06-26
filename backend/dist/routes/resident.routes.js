@@ -27,7 +27,9 @@ router.put('/profile', auth_1.authenticate, resident_controller_1.residentContro
 router.post('/profile/picture', auth_1.authenticate, upload.single('profilePicture'), resident_controller_1.residentController.updateProfilePicture.bind(resident_controller_1.residentController));
 router.put('/change-password', auth_1.authenticate, resident_controller_1.residentController.changePassword.bind(resident_controller_1.residentController));
 // Admin routes
+router.get('/export/csv', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), resident_controller_1.residentController.exportCSV.bind(resident_controller_1.residentController));
 router.get('/', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), resident_controller_1.residentController.getAll.bind(resident_controller_1.residentController));
+router.post('/', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), resident_controller_1.residentController.create.bind(resident_controller_1.residentController));
 router.get('/:id', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), resident_controller_1.residentController.getById.bind(resident_controller_1.residentController));
 router.put('/:id', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), resident_controller_1.residentController.update.bind(resident_controller_1.residentController));
 router.patch('/:id/status', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), resident_controller_1.residentController.updateStatus.bind(resident_controller_1.residentController));

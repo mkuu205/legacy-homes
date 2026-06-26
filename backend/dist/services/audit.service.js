@@ -1,11 +1,8 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.auditService = exports.AuditService = void 0;
 const client_1 = require("@prisma/client");
-const logger_1 = __importDefault(require("../utils/logger"));
+const logger_1 = require("../utils/logger");
 const prisma = new client_1.PrismaClient();
 class AuditService {
     // Log an action
@@ -22,11 +19,11 @@ class AuditService {
                     userAgent: data.userAgent,
                 },
             });
-            logger_1.default.info(`Audit log created: ${auditLog.id}`);
+            logger_1.logger.info(`Audit log created: ${auditLog.id}`);
             return auditLog;
         }
         catch (error) {
-            logger_1.default.error(`Error creating audit log: ${error}`);
+            logger_1.logger.error(`Error creating audit log: ${error}`);
             throw error;
         }
     }
@@ -59,7 +56,7 @@ class AuditService {
             return logs;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching audit logs: ${error}`);
+            logger_1.logger.error(`Error fetching audit logs: ${error}`);
             throw error;
         }
     }
@@ -75,7 +72,7 @@ class AuditService {
             return logs;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching user audit logs: ${error}`);
+            logger_1.logger.error(`Error fetching user audit logs: ${error}`);
             throw error;
         }
     }
@@ -91,7 +88,7 @@ class AuditService {
             return logs;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching resource audit logs: ${error}`);
+            logger_1.logger.error(`Error fetching resource audit logs: ${error}`);
             throw error;
         }
     }
@@ -107,7 +104,7 @@ class AuditService {
             return logs;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching action audit logs: ${error}`);
+            logger_1.logger.error(`Error fetching action audit logs: ${error}`);
             throw error;
         }
     }
@@ -130,7 +127,7 @@ class AuditService {
             return logs;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching resource audit trail: ${error}`);
+            logger_1.logger.error(`Error fetching resource audit trail: ${error}`);
             throw error;
         }
     }
@@ -165,7 +162,7 @@ class AuditService {
             };
         }
         catch (error) {
-            logger_1.default.error(`Error getting audit stats: ${error}`);
+            logger_1.logger.error(`Error getting audit stats: ${error}`);
             throw error;
         }
     }
@@ -197,7 +194,7 @@ class AuditService {
             return logs;
         }
         catch (error) {
-            logger_1.default.error(`Error searching audit logs: ${error}`);
+            logger_1.logger.error(`Error searching audit logs: ${error}`);
             throw error;
         }
     }
@@ -211,11 +208,11 @@ class AuditService {
                     createdAt: { lt: cutoffDate },
                 },
             });
-            logger_1.default.info(`Deleted ${result.count} old audit logs`);
+            logger_1.logger.info(`Deleted ${result.count} old audit logs`);
             return result.count;
         }
         catch (error) {
-            logger_1.default.error(`Error deleting old audit logs: ${error}`);
+            logger_1.logger.error(`Error deleting old audit logs: ${error}`);
             throw error;
         }
     }

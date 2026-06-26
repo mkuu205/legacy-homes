@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 export declare class NotificationController {
     send(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     getMyNotifications(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
+    getUnreadCount(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     markAsRead(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     markAsUnread(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
     markAllAsRead(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;

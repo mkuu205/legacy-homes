@@ -3,7 +3,7 @@ import { meterController } from '../controllers/meter.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import multer from 'multer';
 
-const router = Router();
+const router: import("express").Router = Router();
 const upload = multer({ dest: '/tmp/uploads/', limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Resident routes

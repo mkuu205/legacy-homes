@@ -2,7 +2,7 @@ import { Router } from "express";
 import paymentReconciliationController from "../controllers/payment-reconciliation.controller";
 import { authMiddleware } from "../middleware/auth";
 
-const router = Router();
+const router: import("express").Router = Router();
 
 // All routes require authentication
 router.use(authMiddleware);

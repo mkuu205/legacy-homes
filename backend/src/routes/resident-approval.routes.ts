@@ -2,7 +2,7 @@ import { Router } from "express";
 import residentApprovalController from "../controllers/resident-approval.controller";
 import { authMiddleware } from "../middleware/auth";
 
-const router = Router();
+const router: import("express").Router = Router();
 
 // All routes require authentication
 router.use(authMiddleware);

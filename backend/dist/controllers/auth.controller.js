@@ -6,6 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.authController = exports.AuthController = void 0;
 const auth_service_1 = require("../services/auth.service");
 const prisma_1 = __importDefault(require("../config/prisma"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const email_1 = require("../utils/email");
+const audit_service_1 = require("../services/audit.service");
 class AuthController {
     async register(req, res, next) {
         try {
@@ -165,6 +168,69 @@ class AuthController {
                     houseNumber: house?.houseNumber, // Return houseNumber for frontend
                 },
             });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async deleteAccount(req, res, next) {
+        try {
+            const { password } = req.body;
+            if (!password) {
+                res.status(400).json({ success: false, message: 'Password is required to delete your account' });
+                return;
+            }
+            const user = await prisma_1.default.user.findUnique({ where: { id: req.user.userId } });
+            if (!user) {
+                res.status(404).json({ success: false, message: 'User not found' });
+                return;
+            }
+            // Verify password
+            const isValid = await bcryptjs_1.default.compare(password, user.passwordHash);
+            if (!isValid) {
+                res.status(400).json({ success: false, message: 'Incorrect password. Please try again.' });
+                return;
+            }
+            // Audit log before deletion (while user still exists)
+            await audit_service_1.auditService.logAction({
+                userId: user.id,
+                action: 'DELETE_ACCOUNT',
+                resource: 'User',
+                resourceId: user.id,
+                details: { email: user.email, fullName: user.fullName },
+                ipAddress: req.ip,
+            }).catch(() => { });
+            // Send deletion email asynchronously
+            (0, email_1.sendAccountDeletedEmail)(user.email, user.fullName).catch(() => { });
+            // Explicitly delete all related records to avoid FK constraint violations
+            // (schema-level cascades are not defined for all relations)
+            await prisma_1.default.$transaction(async (tx) => {
+                // Payments reference bills (billId FK), delete payments first
+                await tx.payment.deleteMany({ where: { residentId: user.id } });
+                // Unlink meter readings from bills before deleting bills
+                const userBills = await tx.bill.findMany({ where: { residentId: user.id }, select: { id: true } });
+                const userBillIds = userBills.map((b) => b.id);
+                if (userBillIds.length > 0) {
+                    await tx.meterReading.updateMany({ where: { billId: { in: userBillIds } }, data: { billId: null } });
+                }
+                // Delete bills
+                await tx.bill.deleteMany({ where: { residentId: user.id } });
+                // Delete user notifications (UserNotification has cascade on user)
+                await tx.userNotification.deleteMany({ where: { userId: user.id } });
+                // Delete audit logs
+                await tx.auditLog.deleteMany({ where: { userId: user.id } });
+                // Support tickets
+                await tx.ticketReply.deleteMany({ where: { userId: user.id } });
+                await tx.ticket.deleteMany({ where: { residentId: user.id } });
+                // OTP codes and refresh tokens
+                await tx.otpCode.deleteMany({ where: { userId: user.id } });
+                await tx.refreshToken.deleteMany({ where: { userId: user.id } });
+                // Unassign house before deleting user
+                await tx.user.update({ where: { id: user.id }, data: { houseId: null } });
+                // Finally delete the user
+                await tx.user.delete({ where: { id: user.id } });
+            });
+            res.json({ success: true, message: 'Your account has been permanently deleted.' });
         }
         catch (error) {
             next(error);

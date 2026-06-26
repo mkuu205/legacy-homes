@@ -55,11 +55,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ['resident-dashboard'] });
       });
 
+      socket.on('unread_count_update', (data: any) => {
+        queryClient.setQueryData(['unread-notifications-count'], { count: data.unreadCount });
+        queryClient.invalidateQueries({ queryKey: ['resident-dashboard'] });
+      });
+
       return () => {
         socket.off('payment_completed');
         socket.off('bill_updated');
         socket.off('notification_created');
         socket.off('dashboard_updated');
+        socket.off('unread_count_update');
       };
     } else {
       disconnectSocket();

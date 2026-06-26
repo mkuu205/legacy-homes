@@ -1,6 +1,10 @@
 import { prisma } from '@/config/prisma';
 import { logger } from '@/utils/logger';
 import crypto from 'crypto';
+import PDFDocument from 'pdfkit';
+import fs from 'fs';
+import path from 'path';
+import { formatDateInAppTimezone, formatBillingPeriod } from '@/utils/timezone';
 
 export class ReceiptService {
   /**
@@ -48,12 +52,12 @@ export class ReceiptService {
         },
       });
 
-      // TODO: Generate PDF using ReportLab or similar
-      // const pdfUrl = await this.generatePDF(payment, receipt);
-      // await prisma.receipt.update({
-      //   where: { id: receipt.id },
-      //   data: { pdfUrl },
-      // });
+      // Generate PDF
+      const pdfUrl = await this.generatePDF(payment, receipt);
+      await prisma.receipt.update({
+        where: { id: receipt.id },
+        data: { pdfUrl },
+      });
 
       logger.info(`Receipt generated: ${receiptNumber}`);
       return receipt;
@@ -201,27 +205,68 @@ export class ReceiptService {
   }
 
   /**
-   * Generate PDF receipt (placeholder)
+   * Generate PDF receipt
    */
   private async generatePDF(payment: any, receipt: any): Promise<string> {
-    // TODO: Implement PDF generation
-    // This should generate a professional receipt PDF with:
-    // - Receipt Number
-    // - Provider
-    // - Payment Method
-    // - Transaction ID
-    // - Confirmation Code
-    // - Amount
-    // - Resident
-    // - Property
-    // - Bill Number
-    // - Billing Period
-    // - Payment Date
-    // - Payment Time
-    // - Timezone (Africa/Nairobi)
-    // - QR Code
-    // - Company Logo
-
-    return 'https://example.com/receipts/' + receipt.id + '.pdf';
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ margin: 50 });
+        const receiptsDir = path.join(process.cwd(), 'public', 'receipts');
+        
+        if (!fs.existsSync(receiptsDir)) {
+          fs.mkdirSync(receiptsDir, { recursive: true });
+        }
+        
+        const fileName = `${receipt.receiptNumber}.pdf`;
+        const filePath = path.join(receiptsDir, fileName);
+        
+        const stream = fs.createWriteStream(filePath);
+        doc.pipe(stream);
+        
+        // Header
+        doc.fontSize(20).text('LEGACY HOMES', { align: 'center' });
+        doc.fontSize(12).text('PAYMENT RECEIPT', { align: 'center' });
+        doc.moveDown();
+        
+        // Receipt Details
+        doc.fontSize(10);
+        doc.text(`Receipt Number: ${receipt.receiptNumber}`);
+        doc.text(`Date: ${formatDateInAppTimezone(receipt.generatedAt, 'dd MMM yyyy HH:mm z')}`);
+        doc.text(`Status: SUCCESSFUL`);
+        doc.moveDown();
+        
+        // Payment Details
+        doc.text(`Payment Provider: ${payment.provider}`);
+        doc.text(`Payment Method: ${payment.paymentMethod}`);
+        doc.text(`Transaction ID: ${payment.providerTransactionId || 'N/A'}`);
+        doc.text(`Confirmation Code: ${payment.confirmationCode || 'N/A'}`);
+        doc.moveDown();
+        
+        // Resident Details
+        doc.text(`Resident: ${payment.resident.fullName}`);
+        doc.text(`House: ${payment.bill.house.houseNumber}`);
+        doc.moveDown();
+        
+        // Bill Details
+        doc.text(`Bill Number: ${payment.bill.billNumber}`);
+        doc.text(`Billing Period: ${formatBillingPeriod(payment.bill.billingPeriodStart, payment.bill.billingPeriodEnd)}`);
+        doc.moveDown();
+        
+        // Amount
+        doc.fontSize(14).text(`Amount Paid: KES ${payment.amount.toLocaleString()}`, { underline: true });
+        
+        doc.end();
+        
+        stream.on('finish', () => {
+          resolve(`/receipts/${fileName}`);
+        });
+        
+        stream.on('error', (err) => {
+          reject(err);
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 }

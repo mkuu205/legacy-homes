@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { paymentService } from '../services/payment.service';
+import { PaymentEngineService } from '../services/payment-engine.service';
+
+const paymentEngineService = new PaymentEngineService();
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import { auditService } from '../services/audit.service';
@@ -7,21 +10,48 @@ import { auditService } from '../services/audit.service';
 export class PaymentController {
   async initiatePayment(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const result = await paymentService.initiateSTKPush({
-        ...req.body,
-        residentId: req.user!.userId,
-      });
+      const { billId, provider, paymentMethod, phoneNumber, amount } = req.body;
+      const result = await paymentEngineService.initiatePayment(
+        billId,
+        req.user!.userId,
+        provider,
+        paymentMethod,
+        phoneNumber,
+        amount
+      );
       res.status(201).json({ success: true, data: result });
     } catch (error) { next(error); }
   }
 
-  async handleCallback(req: Request, res: Response, next: NextFunction) {
+  async handleTumaCallback(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await paymentService.handleCallback(req.body, req.headers);
+      const result = await paymentEngineService.handleCallback('TUMA', req.body);
       res.json(result);
     } catch (error) {
-      logger.error('Callback error:', error);
+      logger.error('Tuma callback error:', error);
       res.status(200).json({ success: true, message: 'Callback received' });
+    }
+  }
+
+  async handlePayHeroCallback(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await paymentEngineService.handleCallback('PAYHERO', req.body);
+      res.json(result);
+    } catch (error) {
+      logger.error('PayHero callback error:', error);
+      res.status(200).json({ success: true, message: 'Callback received' });
+    }
+  }
+
+  async handlePesapalIpn(req: Request, res: Response, next: NextFunction) {
+    try {
+      // Pesapal IPN usually sends orderTrackingId in query params
+      const payload = Object.keys(req.body).length > 0 ? req.body : req.query;
+      const result = await paymentEngineService.handleCallback('PESAPAL', payload);
+      res.json(result);
+    } catch (error) {
+      logger.error('Pesapal IPN error:', error);
+      res.status(200).json({ success: true, message: 'IPN received' });
     }
   }
 

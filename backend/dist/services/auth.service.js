@@ -45,7 +45,7 @@ class AuthService {
                 fullName: data.fullName,
                 email: data.email,
                 phone: data.phone,
-                houseId: house.id,
+                assignedHouse: { connect: { id: house.id } },
                 passwordHash,
                 nationalId: data.nationalId,
                 profilePicture: data.profilePicture,
@@ -78,7 +78,7 @@ class AuthService {
         const expiresAt = (0, otp_1.getOTPExpiry)(10);
         await prisma_1.default.otpCode.create({
             data: {
-                userId,
+                user: { connect: { id: userId } },
                 otpHash,
                 expiresAt,
             },

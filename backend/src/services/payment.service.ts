@@ -546,6 +546,7 @@ export class PaymentService {
   }
 
   async exportPaymentsCSV(query: any) {
+    const { formatDateInAppTimezone } = require('../utils/timezone');
     const where: any = {};
     if (query.status) where.status = query.status;
     
@@ -560,7 +561,8 @@ export class PaymentService {
 
     const header = 'Date,Payment ID,Resident,Account,Bill,Amount,M-Pesa Receipt,Status\n';
     const rows = payments.map(p => {
-      return `${p.createdAt.toISOString()},${p.id},${p.resident.fullName},${p.resident.accountNumber},${p.bill.billNumber},${p.amount},${p.confirmationCode || ''},${p.status}`;
+      const dateStr = formatDateInAppTimezone(p.createdAt, 'yyyy-MM-dd HH:mm:ss');
+      return `${dateStr},${p.id},${p.resident.fullName},${p.resident.accountNumber},${p.bill.billNumber},${p.amount},${p.confirmationCode || ''},${p.status}`;
     }).join('\n');
 
     return header + rows;

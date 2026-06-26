@@ -51,4 +51,5 @@ class ReportController {
 }
 exports.ReportController = ReportController;
 exports.reportController = new ReportController();
+// Note: Export methods are handled directly in routes via service calls
 //# sourceMappingURL=report.controller.js.map

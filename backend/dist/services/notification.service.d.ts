@@ -22,8 +22,8 @@ export declare class NotificationService {
             id: string;
             createdAt: Date;
             title: string;
-            type: import(".prisma/client").$Enums.NotificationType;
-            channels: import(".prisma/client").$Enums.NotificationChannel[];
+            type: import("@prisma/client").$Enums.NotificationType;
+            channels: import("@prisma/client").$Enums.NotificationChannel[];
             sentBy: string | null;
             targetAll: boolean;
             targetGroup: string | null;
@@ -41,8 +41,8 @@ export declare class NotificationService {
                 id: string;
                 createdAt: Date;
                 title: string;
-                type: import(".prisma/client").$Enums.NotificationType;
-                channels: import(".prisma/client").$Enums.NotificationChannel[];
+                type: import("@prisma/client").$Enums.NotificationType;
+                channels: import("@prisma/client").$Enums.NotificationChannel[];
                 sentBy: string | null;
                 targetAll: boolean;
                 targetGroup: string | null;
@@ -50,10 +50,10 @@ export declare class NotificationService {
         } & {
             id: string;
             createdAt: Date;
-            status: import(".prisma/client").$Enums.NotificationStatus;
+            status: import("@prisma/client").$Enums.NotificationStatus;
             userId: string;
             notificationId: string;
-            channel: import(".prisma/client").$Enums.NotificationChannel;
+            channel: import("@prisma/client").$Enums.NotificationChannel;
             readAt: Date | null;
             deliveredAt: Date | null;
         })[];
@@ -84,8 +84,8 @@ export declare class NotificationService {
             id: string;
             createdAt: Date;
             title: string;
-            type: import(".prisma/client").$Enums.NotificationType;
-            channels: import(".prisma/client").$Enums.NotificationChannel[];
+            type: import("@prisma/client").$Enums.NotificationType;
+            channels: import("@prisma/client").$Enums.NotificationChannel[];
             sentBy: string | null;
             targetAll: boolean;
             targetGroup: string | null;
@@ -96,6 +96,7 @@ export declare class NotificationService {
             total: number;
             pages: number;
         };
+        unreadCount: number;
     }>;
     deleteAllResidentNotifications(userId: string): Promise<{
         message: string;
@@ -117,8 +118,8 @@ export declare class NotificationService {
             id: string;
             createdAt: Date;
             title: string;
-            type: import(".prisma/client").$Enums.NotificationType;
-            channels: import(".prisma/client").$Enums.NotificationChannel[];
+            type: import("@prisma/client").$Enums.NotificationType;
+            channels: import("@prisma/client").$Enums.NotificationChannel[];
             sentBy: string | null;
             targetAll: boolean;
             targetGroup: string | null;

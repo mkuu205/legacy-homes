@@ -7,11 +7,19 @@ export declare class MeterService {
     }): Promise<{
         meters: {
             houseNumber: string;
+            resident: {
+                id: string;
+                fullName: string;
+                email: string;
+                phone: string;
+                accountNumber: string;
+            };
             id: string;
             createdAt: Date;
             houseId: string;
+            previousReading: number;
             currentReading: number;
-            status: import(".prisma/client").$Enums.MeterStatus;
+            status: import("@prisma/client").$Enums.MeterStatus;
             meterNumber: string;
             meterSerial: string;
             installationDate: Date;
@@ -25,6 +33,13 @@ export declare class MeterService {
     }>;
     getMeterById(id: string): Promise<{
         houseNumber: string;
+        resident: {
+            id: string;
+            fullName: string;
+            email: string;
+            phone: string;
+            accountNumber: string;
+        };
         readings: {
             id: string;
             createdAt: Date;
@@ -40,7 +55,7 @@ export declare class MeterService {
         houseId: string;
         previousReading: number;
         currentReading: number;
-        status: import(".prisma/client").$Enums.MeterStatus;
+        status: import("@prisma/client").$Enums.MeterStatus;
         meterNumber: string;
         meterSerial: string;
         installationDate: Date;
@@ -60,7 +75,7 @@ export declare class MeterService {
         houseId: string;
         previousReading: number;
         currentReading: number;
-        status: import(".prisma/client").$Enums.MeterStatus;
+        status: import("@prisma/client").$Enums.MeterStatus;
         meterNumber: string;
         meterSerial: string;
         installationDate: Date;
@@ -78,10 +93,13 @@ export declare class MeterService {
         houseId: string;
         previousReading: number;
         currentReading: number;
-        status: import(".prisma/client").$Enums.MeterStatus;
+        status: import("@prisma/client").$Enums.MeterStatus;
         meterNumber: string;
         meterSerial: string;
         installationDate: Date;
+    }>;
+    deleteMeter(id: string): Promise<{
+        message: string;
     }>;
     addReading(data: {
         meterId: string;
@@ -133,10 +151,11 @@ export declare class MeterService {
         createdAt: Date;
         previousReading: number;
         currentReading: number;
-        status: import(".prisma/client").$Enums.MeterStatus;
+        status: import("@prisma/client").$Enums.MeterStatus;
         meterNumber: string;
         meterSerial: string;
     }>;
+    exportMetersCSV(): Promise<string>;
 }
 export declare const meterService: MeterService;
 //# sourceMappingURL=meter.service.d.ts.map

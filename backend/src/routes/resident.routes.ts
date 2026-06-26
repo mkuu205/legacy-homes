@@ -4,7 +4,7 @@ import { authenticate, authorize } from '../middleware/auth';
 import multer from 'multer';
 import path from 'path';
 
-const router = Router();
+const router: import("express").Router = Router();
 
 const upload = multer({
   dest: '/tmp/uploads/',

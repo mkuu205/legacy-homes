@@ -1,5 +1,5 @@
 export declare class BillingService {
-    generateMonthlyBills(billingMonth: string): Promise<{
+    generateMonthlyBills(billingMonth: string, force?: boolean): Promise<{
         generated: number;
         bills: any[];
     }>;
@@ -28,11 +28,11 @@ export declare class BillingService {
             houseId: string;
             meterId: string;
             billingMonth: string;
+            dueDate: Date;
             totalAmount: number;
             amountPaid: number;
             balance: number;
-            dueDate: Date;
-            status: import(".prisma/client").$Enums.BillStatus;
+            status: import("@prisma/client").$Enums.BillStatus;
         }[];
         pagination: {
             page: number;
@@ -59,16 +59,31 @@ export declare class BillingService {
             createdAt: Date;
             updatedAt: Date;
             residentId: string;
-            status: import(".prisma/client").$Enums.PaymentStatus;
-            paymentId: string;
+            status: import("@prisma/client").$Enums.PaymentStatus;
+            paymentMethod: import("@prisma/client").$Enums.PaymentMethodType;
+            provider: import("@prisma/client").$Enums.PaymentProviderType;
             billId: string;
+            merchantReference: string | null;
+            providerTransactionId: string | null;
+            providerReference: string | null;
+            providerOrderId: string | null;
+            providerStatus: string | null;
+            providerMessage: string | null;
+            receiptNumber: string | null;
+            confirmationCode: string | null;
+            phoneNumber: string | null;
+            maskedAccount: string | null;
+            cardBrand: string | null;
+            currency: string | null;
             amount: number;
-            phoneNumber: string;
-            mpesaReceiptCode: string | null;
-            payHeroReference: string | null;
+            reconciliationStatus: import("@prisma/client").$Enums.PaymentReconciliationStatus;
+            merchantRequestId: string | null;
             checkoutRequestId: string | null;
-            reconciliationStatus: import(".prisma/client").$Enums.PaymentReconciliationStatus;
+            callbackPayload: import("@prisma/client/runtime/library").JsonValue | null;
+            providerPayload: import("@prisma/client/runtime/library").JsonValue | null;
             failureReason: string | null;
+            verificationTimestamp: Date | null;
+            verifiedBy: string | null;
         }[];
         id: string;
         createdAt: Date;
@@ -77,6 +92,7 @@ export declare class BillingService {
         houseId: string;
         meterId: string;
         billingMonth: string;
+        dueDate: Date;
         previousReading: number;
         currentReading: number;
         unitsConsumed: number;
@@ -84,8 +100,7 @@ export declare class BillingService {
         totalAmount: number;
         amountPaid: number;
         balance: number;
-        dueDate: Date;
-        status: import(".prisma/client").$Enums.BillStatus;
+        status: import("@prisma/client").$Enums.BillStatus;
     }>;
     getResidentBills(residentId: string, query: {
         page?: number;
@@ -97,14 +112,20 @@ export declare class BillingService {
                 meterNumber: string;
             };
             id: string;
+            createdAt: Date;
             billNumber: string;
             meterId: string;
             billingMonth: string;
+            billingPeriodStart: Date;
+            billingPeriodEnd: Date;
+            generatedAt: Date;
+            dueDate: Date;
+            unitsConsumed: number;
+            unitRate: number;
             totalAmount: number;
             amountPaid: number;
             balance: number;
-            dueDate: Date;
-            status: import(".prisma/client").$Enums.BillStatus;
+            status: import("@prisma/client").$Enums.BillStatus;
         }[];
         pagination: {
             page: number;
@@ -113,7 +134,7 @@ export declare class BillingService {
             pages: number;
         };
     }>;
-    markOverdueBills(): Promise<import(".prisma/client").Prisma.BatchPayload>;
+    markOverdueBills(): Promise<import("@prisma/client").Prisma.BatchPayload>;
     getResidentStatement(residentId: string): Promise<{
         resident: {
             houseNumber: string;
@@ -136,16 +157,31 @@ export declare class BillingService {
             createdAt: Date;
             updatedAt: Date;
             residentId: string;
-            status: import(".prisma/client").$Enums.PaymentStatus;
-            paymentId: string;
+            status: import("@prisma/client").$Enums.PaymentStatus;
+            paymentMethod: import("@prisma/client").$Enums.PaymentMethodType;
+            provider: import("@prisma/client").$Enums.PaymentProviderType;
             billId: string;
+            merchantReference: string | null;
+            providerTransactionId: string | null;
+            providerReference: string | null;
+            providerOrderId: string | null;
+            providerStatus: string | null;
+            providerMessage: string | null;
+            receiptNumber: string | null;
+            confirmationCode: string | null;
+            phoneNumber: string | null;
+            maskedAccount: string | null;
+            cardBrand: string | null;
+            currency: string | null;
             amount: number;
-            phoneNumber: string;
-            mpesaReceiptCode: string | null;
-            payHeroReference: string | null;
+            reconciliationStatus: import("@prisma/client").$Enums.PaymentReconciliationStatus;
+            merchantRequestId: string | null;
             checkoutRequestId: string | null;
-            reconciliationStatus: import(".prisma/client").$Enums.PaymentReconciliationStatus;
+            callbackPayload: import("@prisma/client/runtime/library").JsonValue | null;
+            providerPayload: import("@prisma/client/runtime/library").JsonValue | null;
             failureReason: string | null;
+            verificationTimestamp: Date | null;
+            verifiedBy: string | null;
         }[];
         summary: {
             totalBilled: number;
@@ -163,6 +199,19 @@ export declare class BillingService {
     }>;
     generateInvoicePDF(billId: string): Promise<unknown>;
     generateReceiptPDF(paymentId: string): Promise<unknown>;
+    deleteBill(id: string): Promise<{
+        message: string;
+    }>;
+    deleteBills(ids: string[]): Promise<{
+        deleted: number;
+    }>;
+    deleteBillsByMonth(billingMonth: string): Promise<{
+        deleted: number;
+    }>;
+    deleteAllUnpaidBills(): Promise<{
+        deleted: number;
+    }>;
+    exportBillsCSV(query: any): Promise<string>;
 }
 export declare const billingService: BillingService;
 //# sourceMappingURL=billing.service.d.ts.map

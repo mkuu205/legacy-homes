@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { notificationController } from '../controllers/notification.controller';
 import { authenticate, authorize } from '../middleware/auth';
-const router = Router();
+const router: import("express").Router = Router();
 
 // ─── Admin routes ───────────────────────────────────────────────────────────
 

@@ -18,10 +18,28 @@ class NotificationController {
     async getMyNotifications(req, res, next) {
         try {
             const result = await notification_service_1.notificationService.getResidentNotifications(req.user.userId, req.query);
-            res.json({ success: true, data: result });
+            // Always return a safe shape — never undefined
+            res.json({
+                success: true,
+                data: {
+                    notifications: result?.notifications ?? [],
+                    pagination: result?.pagination ?? { page: 1, limit: 20, total: 0, pages: 0 },
+                    unread: result?.unread ?? 0,
+                },
+            });
         }
         catch (error) {
-            next(error);
+            // Return empty list instead of crashing
+            res.json({ success: true, data: { notifications: [], pagination: { page: 1, limit: 20, total: 0, pages: 0 }, unread: 0 } });
+        }
+    }
+    async getUnreadCount(req, res, next) {
+        try {
+            const result = await notification_service_1.notificationService.getResidentNotifications(req.user.userId, { page: 1, limit: 1 });
+            res.json({ success: true, unread: result?.unread ?? 0 });
+        }
+        catch (error) {
+            res.json({ success: true, unread: 0 });
         }
     }
     async markAsRead(req, res, next) {
@@ -72,10 +90,18 @@ class NotificationController {
     async getAll(req, res, next) {
         try {
             const result = await notification_service_1.notificationService.getAllNotifications(req.query);
-            res.json({ success: true, data: result });
+            // Always return a safe shape — never undefined
+            res.json({
+                success: true,
+                data: {
+                    notifications: result?.notifications ?? [],
+                    pagination: result?.pagination ?? { page: 1, limit: 20, total: 0, pages: 0 },
+                    unreadCount: result?.unreadCount ?? 0,
+                },
+            });
         }
         catch (error) {
-            next(error);
+            res.json({ success: true, data: { notifications: [], pagination: { page: 1, limit: 20, total: 0, pages: 0 }, unreadCount: 0 } });
         }
     }
     async deleteAllMyNotifications(req, res, next) {

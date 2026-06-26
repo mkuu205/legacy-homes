@@ -432,6 +432,16 @@ export class NotificationService {
       },
     });
 
+    // Get updated unread count and emit
+    const unreadCount = await prisma.userNotification.count({
+      where: {
+        userId,
+        channel: 'IN_APP',
+        status: { not: 'READ' }
+      }
+    });
+    io.to(`user_${userId}`).emit('unread_count_update', { unreadCount });
+
     return {
       message: 'Notification marked as read',
     };
@@ -451,6 +461,9 @@ export class NotificationService {
         readAt: new Date(),
       },
     });
+
+    // Emit updated count (0)
+    io.to(`user_${userId}`).emit('unread_count_update', { unreadCount: 0 });
 
     return {
       message: 'All notifications marked as read',
@@ -695,6 +708,16 @@ export class NotificationService {
     await prisma.userNotification.delete({
       where: { id: notificationId },
     });
+
+    // Get updated unread count and emit
+    const unreadCount = await prisma.userNotification.count({
+      where: {
+        userId,
+        channel: 'IN_APP',
+        status: { not: 'READ' }
+      }
+    });
+    io.to(`user_${userId}`).emit('unread_count_update', { unreadCount });
 
     return { message: 'Notification deleted' };
   }

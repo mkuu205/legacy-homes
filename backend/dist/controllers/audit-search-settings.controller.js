@@ -1,13 +1,10 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuditSearchSettingsController = void 0;
 const audit_service_1 = require("../services/audit.service");
 const search_service_1 = require("../services/search.service");
 const settings_service_1 = require("../services/settings.service");
-const logger_1 = __importDefault(require("../utils/logger"));
+const logger_1 = require("../utils/logger");
 class AuditSearchSettingsController {
     // ─── AUDIT LOGGING ───
     // Get audit logs
@@ -26,7 +23,7 @@ class AuditSearchSettingsController {
             res.json(logs);
         }
         catch (error) {
-            logger_1.default.error(`Error fetching audit logs: ${error}`);
+            logger_1.logger.error(`Error fetching audit logs: ${error}`);
             res.status(500).json({ error: "Failed to fetch audit logs" });
         }
     }
@@ -39,7 +36,7 @@ class AuditSearchSettingsController {
             res.json(logs);
         }
         catch (error) {
-            logger_1.default.error(`Error fetching user audit logs: ${error}`);
+            logger_1.logger.error(`Error fetching user audit logs: ${error}`);
             res.status(500).json({ error: "Failed to fetch logs" });
         }
     }
@@ -51,7 +48,7 @@ class AuditSearchSettingsController {
             res.json(trail);
         }
         catch (error) {
-            logger_1.default.error(`Error fetching resource audit trail: ${error}`);
+            logger_1.logger.error(`Error fetching resource audit trail: ${error}`);
             res.status(500).json({ error: "Failed to fetch trail" });
         }
     }
@@ -63,7 +60,7 @@ class AuditSearchSettingsController {
             res.json(stats);
         }
         catch (error) {
-            logger_1.default.error(`Error getting audit stats: ${error}`);
+            logger_1.logger.error(`Error getting audit stats: ${error}`);
             res.status(500).json({ error: "Failed to get stats" });
         }
     }
@@ -79,7 +76,7 @@ class AuditSearchSettingsController {
             res.json(logs);
         }
         catch (error) {
-            logger_1.default.error(`Error searching audit logs: ${error}`);
+            logger_1.logger.error(`Error searching audit logs: ${error}`);
             res.status(500).json({ error: "Failed to search logs" });
         }
     }
@@ -96,7 +93,7 @@ class AuditSearchSettingsController {
             res.json(results);
         }
         catch (error) {
-            logger_1.default.error(`Error performing global search: ${error}`);
+            logger_1.logger.error(`Error performing global search: ${error}`);
             res.status(500).json({ error: "Failed to search" });
         }
     }
@@ -120,7 +117,7 @@ class AuditSearchSettingsController {
             res.json(results);
         }
         catch (error) {
-            logger_1.default.error(`Error performing advanced search: ${error}`);
+            logger_1.logger.error(`Error performing advanced search: ${error}`);
             res.status(500).json({ error: "Failed to search" });
         }
     }
@@ -132,7 +129,7 @@ class AuditSearchSettingsController {
             res.json(settings);
         }
         catch (error) {
-            logger_1.default.error(`Error fetching settings: ${error}`);
+            logger_1.logger.error(`Error fetching settings: ${error}`);
             res.status(500).json({ error: "Failed to fetch settings" });
         }
     }
@@ -143,7 +140,7 @@ class AuditSearchSettingsController {
             res.json(settings);
         }
         catch (error) {
-            logger_1.default.error(`Error fetching billing settings: ${error}`);
+            logger_1.logger.error(`Error fetching billing settings: ${error}`);
             res.status(500).json({ error: "Failed to fetch settings" });
         }
     }
@@ -161,7 +158,7 @@ class AuditSearchSettingsController {
             res.json({ message: "Billing settings updated" });
         }
         catch (error) {
-            logger_1.default.error(`Error updating billing settings: ${error}`);
+            logger_1.logger.error(`Error updating billing settings: ${error}`);
             res.status(500).json({ error: "Failed to update settings" });
         }
     }
@@ -172,7 +169,7 @@ class AuditSearchSettingsController {
             res.json(settings);
         }
         catch (error) {
-            logger_1.default.error(`Error fetching notification settings: ${error}`);
+            logger_1.logger.error(`Error fetching notification settings: ${error}`);
             res.status(500).json({ error: "Failed to fetch settings" });
         }
     }
@@ -190,7 +187,7 @@ class AuditSearchSettingsController {
             res.json({ message: "Notification settings updated" });
         }
         catch (error) {
-            logger_1.default.error(`Error updating notification settings: ${error}`);
+            logger_1.logger.error(`Error updating notification settings: ${error}`);
             res.status(500).json({ error: "Failed to update settings" });
         }
     }
@@ -201,7 +198,7 @@ class AuditSearchSettingsController {
             res.json(settings);
         }
         catch (error) {
-            logger_1.default.error(`Error fetching security settings: ${error}`);
+            logger_1.logger.error(`Error fetching security settings: ${error}`);
             res.status(500).json({ error: "Failed to fetch settings" });
         }
     }
@@ -218,7 +215,7 @@ class AuditSearchSettingsController {
             res.json({ message: "Security settings updated" });
         }
         catch (error) {
-            logger_1.default.error(`Error updating security settings: ${error}`);
+            logger_1.logger.error(`Error updating security settings: ${error}`);
             res.status(500).json({ error: "Failed to update settings" });
         }
     }

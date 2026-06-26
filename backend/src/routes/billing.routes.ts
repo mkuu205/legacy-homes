@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { billingController } from '../controllers/billing.controller';
 import { authenticate, authorize } from '../middleware/auth';
 
-const router = Router();
+const router: import("express").Router = Router();
 
 // Resident routes
 router.get('/my-bills', authenticate, billingController.getMyBills.bind(billingController));

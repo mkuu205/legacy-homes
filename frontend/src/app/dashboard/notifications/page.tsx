@@ -26,6 +26,8 @@ export default function NotificationsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['unread-notifications-count'] });
+      queryClient.invalidateQueries({ queryKey: ['resident-dashboard'] });
       toast({ type: 'success', title: 'All notifications marked as read' });
     },
   });
@@ -36,6 +38,8 @@ export default function NotificationsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['unread-notifications-count'] });
+      queryClient.invalidateQueries({ queryKey: ['resident-dashboard'] });
     },
   });
 

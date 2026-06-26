@@ -3,7 +3,7 @@ import { authController } from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth';
 import rateLimit from 'express-rate-limit';
 
-const router = Router();
+const router: import("express").Router = Router();
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

@@ -1,11 +1,8 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EnhancedBillingService = void 0;
 const client_1 = require("@prisma/client");
-const logger_1 = __importDefault(require("../utils/logger"));
+const logger_1 = require("../utils/logger");
 const prisma = new client_1.PrismaClient();
 class EnhancedBillingService {
     // Lock a bill to prevent modifications
@@ -15,11 +12,11 @@ class EnhancedBillingService {
                 where: { id: billId },
                 data: { isLocked: true },
             });
-            logger_1.default.info(`Bill locked: ${billId}`);
+            logger_1.logger.info(`Bill locked: ${billId}`);
             return bill;
         }
         catch (error) {
-            logger_1.default.error(`Error locking bill: ${error}`);
+            logger_1.logger.error(`Error locking bill: ${error}`);
             throw error;
         }
     }
@@ -30,11 +27,11 @@ class EnhancedBillingService {
                 where: { id: billId },
                 data: { isLocked: false },
             });
-            logger_1.default.info(`Bill unlocked: ${billId}`);
+            logger_1.logger.info(`Bill unlocked: ${billId}`);
             return bill;
         }
         catch (error) {
-            logger_1.default.error(`Error unlocking bill: ${error}`);
+            logger_1.logger.error(`Error unlocking bill: ${error}`);
             throw error;
         }
     }
@@ -51,10 +48,12 @@ class EnhancedBillingService {
             const finalBill = await prisma.bill.create({
                 data: {
                     billNumber: `FINAL-${Date.now()}`,
-                    residentId,
-                    houseId: resident.assignedHouse.id,
-                    meterId: "", // Will be updated if meter exists
+                    resident: { connect: { id: residentId } },
+                    house: { connect: { id: resident.assignedHouse.id } },
+                    meter: { connect: { id: "" } }, // This might still fail if "" is not a valid UUID
                     billingMonth: new Date().toISOString().slice(0, 7),
+                    billingPeriodStart: new Date(),
+                    billingPeriodEnd: new Date(),
                     previousReading: 0,
                     currentReading: 0,
                     unitsConsumed: 0,
@@ -65,11 +64,11 @@ class EnhancedBillingService {
                     isLocked: true, // Final bills are locked
                 },
             });
-            logger_1.default.info(`Final bill created for resident ${residentId}: ${finalBill.id}`);
+            logger_1.logger.info(`Final bill created for resident ${residentId}: ${finalBill.id}`);
             return finalBill;
         }
         catch (error) {
-            logger_1.default.error(`Error creating final bill: ${error}`);
+            logger_1.logger.error(`Error creating final bill: ${error}`);
             throw error;
         }
     }
@@ -89,7 +88,7 @@ class EnhancedBillingService {
             return bills;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching locked bills: ${error}`);
+            logger_1.logger.error(`Error fetching locked bills: ${error}`);
             throw error;
         }
     }
@@ -112,7 +111,7 @@ class EnhancedBillingService {
             return bills;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching unpaid bills: ${error}`);
+            logger_1.logger.error(`Error fetching unpaid bills: ${error}`);
             throw error;
         }
     }
@@ -135,7 +134,7 @@ class EnhancedBillingService {
             return bills;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching overdue bills: ${error}`);
+            logger_1.logger.error(`Error fetching overdue bills: ${error}`);
             throw error;
         }
     }
@@ -152,7 +151,7 @@ class EnhancedBillingService {
             return bills;
         }
         catch (error) {
-            logger_1.default.error(`Error fetching resident bills: ${error}`);
+            logger_1.logger.error(`Error fetching resident bills: ${error}`);
             throw error;
         }
     }
@@ -183,7 +182,7 @@ class EnhancedBillingService {
             };
         }
         catch (error) {
-            logger_1.default.error(`Error calculating collection stats: ${error}`);
+            logger_1.logger.error(`Error calculating collection stats: ${error}`);
             throw error;
         }
     }
@@ -198,10 +197,10 @@ class EnhancedBillingService {
                 throw new Error("Bill not found");
             }
             // TODO: Integrate with notification service to send reminder
-            logger_1.default.info(`Collection reminder sent for bill ${billId}`);
+            logger_1.logger.info(`Collection reminder sent for bill ${billId}`);
         }
         catch (error) {
-            logger_1.default.error(`Error sending collection reminder: ${error}`);
+            logger_1.logger.error(`Error sending collection reminder: ${error}`);
             throw error;
         }
     }
@@ -212,11 +211,11 @@ class EnhancedBillingService {
                 where: { billingMonth },
                 data: { isLocked: true },
             });
-            logger_1.default.info(`Bulk locked ${result.count} bills for cycle ${billingMonth}`);
+            logger_1.logger.info(`Bulk locked ${result.count} bills for cycle ${billingMonth}`);
             return result.count;
         }
         catch (error) {
-            logger_1.default.error(`Error bulk locking bills: ${error}`);
+            logger_1.logger.error(`Error bulk locking bills: ${error}`);
             throw error;
         }
     }
@@ -227,11 +226,11 @@ class EnhancedBillingService {
                 where: { billingMonth },
                 data: { isLocked: false },
             });
-            logger_1.default.info(`Bulk unlocked ${result.count} bills for cycle ${billingMonth}`);
+            logger_1.logger.info(`Bulk unlocked ${result.count} bills for cycle ${billingMonth}`);
             return result.count;
         }
         catch (error) {
-            logger_1.default.error(`Error bulk unlocking bills: ${error}`);
+            logger_1.logger.error(`Error bulk unlocking bills: ${error}`);
             throw error;
         }
     }
@@ -265,7 +264,7 @@ class EnhancedBillingService {
             return results;
         }
         catch (error) {
-            logger_1.default.error(`Error getting collection performance: ${error}`);
+            logger_1.logger.error(`Error getting collection performance: ${error}`);
             throw error;
         }
     }

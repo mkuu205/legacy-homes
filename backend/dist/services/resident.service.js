@@ -8,6 +8,7 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma_1 = __importDefault(require("../config/prisma"));
 const errorHandler_1 = require("../middleware/errorHandler");
 const cloudinary_1 = require("../utils/cloudinary");
+const jwt_1 = require("../utils/jwt");
 class ResidentService {
     async getAllResidents(query) {
         const pageNum = Number.parseInt(String(query?.page || 1), 10);
@@ -162,8 +163,33 @@ class ResidentService {
         const resident = await prisma_1.default.user.findFirst({ where: { id, role: 'RESIDENT' } });
         if (!resident)
             throw new errorHandler_1.AppError('Resident not found', 404);
-        await prisma_1.default.user.delete({ where: { id } });
-        return { message: 'Resident deleted successfully' };
+        // Wrap in a transaction for full atomicity
+        await prisma_1.default.$transaction(async (tx) => {
+            // 1. Delete payments (reference bills)
+            await tx.payment.deleteMany({ where: { residentId: id } });
+            // 2. Unlink meter readings from bills (readingId is unique FK on Bill)
+            const bills = await tx.bill.findMany({ where: { residentId: id }, select: { id: true } });
+            const billIds = bills.map((b) => b.id);
+            if (billIds.length > 0) {
+                await tx.meterReading.updateMany({ where: { billId: { in: billIds } }, data: { billId: null } });
+            }
+            // 3. Delete bills
+            await tx.bill.deleteMany({ where: { residentId: id } });
+            // 4. Delete user notifications
+            await tx.userNotification.deleteMany({ where: { userId: id } });
+            // 5. Delete support ticket replies
+            await tx.ticketReply.deleteMany({ where: { userId: id } });
+            // 6. Delete support tickets
+            await tx.ticket.deleteMany({ where: { residentId: id } });
+            // 7. Delete audit logs
+            await tx.auditLog.deleteMany({ where: { userId: id } });
+            // 8. Delete OTP codes and refresh tokens
+            await tx.otpCode.deleteMany({ where: { userId: id } });
+            await tx.refreshToken.deleteMany({ where: { userId: id } });
+            // 9. Delete the user (houseId FK removed with user)
+            await tx.user.delete({ where: { id } });
+        });
+        return { message: 'Resident and all associated data deleted successfully' };
     }
     async adminResetPassword(id, newPassword) {
         const resident = await prisma_1.default.user.findFirst({ where: { id, role: 'RESIDENT' } });
@@ -219,6 +245,71 @@ class ResidentService {
             unreadNotifications,
             consumptionHistory,
         };
+    }
+    async createResident(data) {
+        // Check for existing email or phone
+        const existing = await prisma_1.default.user.findFirst({
+            where: { OR: [{ email: data.email }, { phone: data.phone }] },
+        });
+        if (existing)
+            throw new errorHandler_1.AppError('A user with this email or phone already exists', 409);
+        // Lookup house
+        const house = await prisma_1.default.house.findUnique({ where: { houseNumber: data.houseNumber } });
+        if (!house)
+            throw new errorHandler_1.AppError(`House number ${data.houseNumber} not found`, 400);
+        // Check house is not already occupied
+        const occupant = await prisma_1.default.user.findFirst({ where: { houseId: house.id } });
+        if (occupant)
+            throw new errorHandler_1.AppError(`House ${data.houseNumber} is already assigned to another resident`, 409);
+        const passwordHash = await bcryptjs_1.default.hash(data.password, 12);
+        const accountNumber = (0, jwt_1.generateAccountNumber)();
+        const resident = await prisma_1.default.user.create({
+            data: {
+                fullName: data.fullName,
+                email: data.email,
+                phone: data.phone,
+                passwordHash,
+                role: 'RESIDENT',
+                accountStatus: 'ACTIVE',
+                registrationStatus: 'APPROVED',
+                emailVerified: true,
+                accountNumber,
+                houseId: house.id,
+                nationalId: data.nationalId,
+            },
+            select: {
+                id: true,
+                fullName: true,
+                email: true,
+                phone: true,
+                accountNumber: true,
+                accountStatus: true,
+                houseId: true,
+                createdAt: true,
+            },
+        });
+        return { ...resident, houseNumber: house.houseNumber };
+    }
+    async exportResidentsCSV(query) {
+        const { residents } = await this.getAllResidents({ ...query, limit: 10000 });
+        const headers = [
+            'Account Number', 'Full Name', 'Email', 'Phone', 'House Number',
+            'National ID', 'Status', 'Email Verified', 'Created Date',
+        ];
+        const rows = residents.map((r) => [
+            r.accountNumber,
+            r.fullName,
+            r.email,
+            r.phone || '',
+            r.houseNumber || '',
+            r.nationalId || '',
+            r.accountStatus,
+            r.emailVerified ? 'Yes' : 'No',
+            new Date(r.createdAt).toLocaleDateString('en-KE'),
+        ]);
+        return [headers, ...rows]
+            .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+            .join('\n');
     }
 }
 exports.ResidentService = ResidentService;

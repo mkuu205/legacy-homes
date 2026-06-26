@@ -6,7 +6,7 @@ import { Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { generateAccountNumber } from '../utils/jwt';
 
-const router = Router();
+const router: import("express").Router = Router();
 
 // Get all admin/staff users
 router.get('/staff', authenticate, authorize('SUPER_ADMIN'), async (req: AuthRequest, res: Response, next: NextFunction) => {

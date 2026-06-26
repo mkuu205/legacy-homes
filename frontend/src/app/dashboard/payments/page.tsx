@@ -147,6 +147,8 @@ export default function PaymentsPage() {
     mutationFn: async (data: {
       billId: string;
       residentId: string;
+      provider?: string;
+      paymentMethod?: string;
       phoneNumber: string;
       amount: number;
     }) => {
@@ -212,6 +214,8 @@ export default function PaymentsPage() {
     initiateMutation.mutate({
       billId: selectedBillId,
       residentId: user.id,
+      provider: 'TUMA',
+      paymentMethod: 'MPESA_STK',
       phoneNumber: phone,
       amount: amountNum,
     });
@@ -501,17 +505,17 @@ export default function PaymentsPage() {
               </tr>
             </thead>
             <tbody>
-              {billsData?.bills && billsData.bills.length > 0 ? (
-                billsData.bills.slice(0, 10).map((bill: any) => (
-                  <tr key={bill.id} style={{ borderBottom: '1px solid var(--bd)' }}>
+              {myPaymentsData?.payments && myPaymentsData.payments.length > 0 ? (
+                myPaymentsData.payments.slice(0, 10).map((p: any) => (
+                  <tr key={p.id} style={{ borderBottom: '1px solid var(--bd)' }}>
                     <td style={{ padding: '12px 0', fontSize: '12px', color: 'var(--t1)' }}>
-                      {new Date(bill.createdAt).toLocaleDateString('en-KE')}
+                      {new Date(p.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </td>
                     <td style={{ padding: '12px 0', fontSize: '12px', color: 'var(--t1)' }}>
-                      {bill.billNumber}
+                      {p.bill?.billNumber || '-'}
                     </td>
                     <td style={{ padding: '12px 0', fontSize: '12px', color: 'var(--t1)', textAlign: 'right' }}>
-                      KES {bill.amountPaid.toLocaleString()}
+                      KES {p.amount?.toLocaleString()}
                     </td>
                     <td style={{ padding: '12px 0', fontSize: '12px' }}>
                       <span style={{
@@ -519,17 +523,15 @@ export default function PaymentsPage() {
                         borderRadius: '4px',
                         fontSize: '11px',
                         fontWeight: 600,
-                        background: bill.status === 'PAID' ? 'rgba(16, 185, 129, 0.14)' : bill.status === 'PARTIAL' ? 'rgba(245, 158, 11, 0.14)' : 'rgba(124, 154, 184, 0.14)',
-                        color: bill.status === 'PAID' ? '#10b981' : bill.status === 'PARTIAL' ? '#f59e0b' : '#7c9ab8',
+                        background: p.status === 'SUCCESSFUL' ? 'rgba(16, 185, 129, 0.14)' : p.status === 'PENDING' ? 'rgba(245, 158, 11, 0.14)' : 'rgba(239, 68, 68, 0.14)',
+                        color: p.status === 'SUCCESSFUL' ? '#10b981' : p.status === 'PENDING' ? '#f59e0b' : '#ef4444',
                       }}>
-                        {bill.status}
+                        {p.status}
                       </span>
                     </td>
                     <td style={{ padding: '12px 0', fontSize: '12px', color: 'var(--ac)', cursor: 'pointer' }}>
-                      {bill.mpesaReceiptCode ? (
-                        <a href={`/dashboard/billing?billId=${bill.id}`} style={{ textDecoration: 'none', color: 'var(--ac)' }}>
-                          View
-                        </a>
+                      {p.confirmationCode ? (
+                        <span style={{ color: 'var(--t1)', fontWeight: 600 }}>{p.confirmationCode}</span>
                       ) : (
                         <span style={{ color: 'var(--t3)' }}>-</span>
                       )}

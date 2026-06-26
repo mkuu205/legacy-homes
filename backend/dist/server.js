@@ -21,6 +21,7 @@ const resident_routes_1 = __importDefault(require("./routes/resident.routes"));
 const meter_routes_1 = __importDefault(require("./routes/meter.routes"));
 const billing_routes_1 = __importDefault(require("./routes/billing.routes"));
 const payment_routes_1 = __importDefault(require("./routes/payment.routes"));
+const payment_method_routes_1 = __importDefault(require("./routes/payment-method.routes"));
 const support_routes_1 = __importDefault(require("./routes/support.routes"));
 const notification_routes_1 = __importDefault(require("./routes/notification.routes"));
 const report_routes_1 = __importDefault(require("./routes/report.routes"));
@@ -56,6 +57,10 @@ exports.io = new socket_io_1.Server(httpServer, {
 // Socket.io connection handling
 exports.io.on('connection', (socket) => {
     logger_1.logger.info(`Socket connected: ${socket.id}`);
+    socket.on('join', (roomName) => {
+        socket.join(roomName);
+        logger_1.logger.info(`Socket ${socket.id} joined room: ${roomName}`);
+    });
     socket.on('join_room', (userId) => {
         socket.join(`user_${userId}`);
         logger_1.logger.info(`User ${userId} joined their room`);
@@ -112,12 +117,27 @@ app.use((0, morgan_1.default)('combined', {
 app.get('/health', (_req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString(), service: 'Legacy Homes API' });
 });
+app.get('/deployment-test', (_req, res) => {
+    res.json({
+        deployed: true,
+        timestamp: new Date().toISOString(),
+        commit: process.env.RENDER_GIT_COMMIT || 'unknown'
+    });
+});
+// Callback Debugging Middleware - MUST BE BEFORE ANY OTHER MIDDLEWARE FOR THIS ROUTE
+app.use('/api/payments/callback', (req, res, next) => {
+    logger_1.logger.info('🔥 CALLBACK HIT - RAW REQUEST');
+    logger_1.logger.info('HEADERS: ' + JSON.stringify(req.headers));
+    logger_1.logger.info('BODY: ' + JSON.stringify(req.body));
+    next();
+});
 // API Routes
 app.use('/api/auth', auth_routes_1.default);
 app.use('/api/residents', resident_routes_1.default);
 app.use('/api/meters', meter_routes_1.default);
 app.use('/api/billing', billing_routes_1.default);
 app.use('/api/payments', payment_routes_1.default);
+app.use('/api/payment-methods', payment_method_routes_1.default);
 app.use('/api/support', support_routes_1.default);
 app.use('/api/notifications', notification_routes_1.default);
 app.use('/api/reports', report_routes_1.default);
@@ -131,6 +151,7 @@ httpServer.listen(PORT, () => {
     logger_1.logger.info(`🚀 Legacy Homes API running on port ${PORT}`);
     logger_1.logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
     logger_1.logger.info(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
+    logger_1.logger.info(`PAYMENT_CALLBACK_URL=${process.env.PAYMENT_CALLBACK_URL}`);
 });
 exports.default = app;
 //# sourceMappingURL=server.js.map

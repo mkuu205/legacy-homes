@@ -64,7 +64,7 @@ router.get('/audit-logs', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMI
         next(error);
     }
 });
-// System settings
+// System settings — GET
 router.get('/settings', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), async (_req, res, next) => {
     try {
         const settings = await prisma_1.default.systemSetting.findMany({ where: { key: { not: { startsWith: 'reset_' } } } });
@@ -74,15 +74,54 @@ router.get('/settings', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'
         next(error);
     }
 });
+// System settings — PUT
+// The frontend sends { billing: { unitRate, standingCharge, vatRate, ... } }
+// A legacy { key, value } form is also supported for backwards compatibility.
 router.put('/settings', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), async (req, res, next) => {
     try {
-        const { key, value } = req.body;
-        const setting = await prisma_1.default.systemSetting.upsert({
-            where: { key },
-            update: { value },
-            create: { key, value },
-        });
-        res.json({ success: true, data: setting });
+        const body = req.body;
+        // Build a flat key→value map from the request body
+        const settingsMap = {};
+        if (body.billing && typeof body.billing === 'object') {
+            const b = body.billing;
+            if (b.unitRate !== undefined)
+                settingsMap['UNIT_RATE'] = String(b.unitRate);
+            if (b.standingCharge !== undefined)
+                settingsMap['STANDING_CHARGE'] = String(b.standingCharge);
+            if (b.vatRate !== undefined)
+                settingsMap['VAT_RATE'] = String(b.vatRate);
+            if (b.latePenaltyRate !== undefined)
+                settingsMap['LATE_PENALTY_RATE'] = String(b.latePenaltyRate);
+            if (b.gracePeriodDays !== undefined)
+                settingsMap['GRACE_PERIOD_DAYS'] = String(b.gracePeriodDays);
+            if (b.billingCycleDay !== undefined)
+                settingsMap['BILLING_CYCLE_DAY'] = String(b.billingCycleDay);
+        }
+        else if (body.key !== undefined) {
+            // Legacy single key-value form
+            settingsMap[String(body.key)] = String(body.value ?? '');
+        }
+        else {
+            // Generic flat object: treat every top-level key as a setting key
+            for (const [k, v] of Object.entries(body)) {
+                settingsMap[k] = String(v);
+            }
+        }
+        if (Object.keys(settingsMap).length === 0) {
+            res.status(400).json({ success: false, message: 'No settings provided' });
+            return;
+        }
+        // Upsert each setting (create if not exists, update if exists)
+        const updated = {};
+        for (const [key, value] of Object.entries(settingsMap)) {
+            await prisma_1.default.systemSetting.upsert({
+                where: { key },
+                update: { value },
+                create: { key, value },
+            });
+            updated[key] = value;
+        }
+        res.json({ success: true, message: 'Settings updated successfully', settings: updated });
     }
     catch (error) {
         next(error);

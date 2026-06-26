@@ -10,6 +10,7 @@ export declare class AuthController {
     forgotPassword(req: Request, res: Response, next: NextFunction): Promise<void>;
     resetPassword(req: Request, res: Response, next: NextFunction): Promise<void>;
     getMe(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
+    deleteAccount(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 }
 export declare const authController: AuthController;
 //# sourceMappingURL=auth.controller.d.ts.map

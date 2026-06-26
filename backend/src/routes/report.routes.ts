@@ -4,7 +4,7 @@ import { authenticate, authorize } from '../middleware/auth';
 import { reportService } from '../services/report.service';
 import { AuthRequest } from '../middleware/auth';
 
-const router = Router();
+const router: import("express").Router = Router();
 router.get('/dashboard', authenticate, authorize('SUPER_ADMIN'), reportController.getDashboardStats.bind(reportController));
 router.get('/billing', authenticate, authorize('SUPER_ADMIN'), reportController.getBillingReport.bind(reportController));
 router.get('/revenue', authenticate, authorize('SUPER_ADMIN'), reportController.getRevenueReport.bind(reportController));

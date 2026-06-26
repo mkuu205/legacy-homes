@@ -17,6 +17,7 @@ import residentRoutes from './routes/resident.routes';
 import meterRoutes from './routes/meter.routes';
 import billingRoutes from './routes/billing.routes';
 import paymentRoutes from './routes/payment.routes';
+import paymentMethodRoutes from './routes/payment-method.routes';
 import supportRoutes from './routes/support.routes';
 import notificationRoutes from './routes/notification.routes';
 import reportRoutes from './routes/report.routes';
@@ -25,7 +26,7 @@ import aiRoutes from './routes/ai.routes';
 
 dotenv.config();
 
-const app = express();
+const app: import("express").Application = express();
 app.set('trust proxy', 1);
 const httpServer = http.createServer(app);
 
@@ -149,6 +150,7 @@ app.use('/api/residents', residentRoutes);
 app.use('/api/meters', meterRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/payment-methods', paymentMethodRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
