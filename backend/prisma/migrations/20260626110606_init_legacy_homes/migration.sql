@@ -1,50 +1,71 @@
--- CreateEnum
-CREATE TYPE "Role" AS ENUM ('SUPER_ADMIN', 'BILLING_OFFICER', 'SUPPORT_AGENT', 'NOTIFICATION_MANAGER', 'READ_ONLY_MANAGER', 'RESIDENT');
+-- Fix for "type already exists" error during migration
+-- This script ensures that enums and tables are only created if they don't already exist.
 
--- CreateEnum
-CREATE TYPE "AccountStatus" AS ENUM ('ACTIVE', 'SUSPENDED', 'INACTIVE');
-
--- CreateEnum
-CREATE TYPE "RegistrationStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
-
--- CreateEnum
-CREATE TYPE "HouseStatus" AS ENUM ('OCCUPIED', 'VACANT', 'UNDER_CONSTRUCTION', 'SUSPENDED', 'MAINTENANCE');
-
--- CreateEnum
-CREATE TYPE "MeterStatus" AS ENUM ('ACTIVE', 'FAULTY', 'REPLACED');
-
--- CreateEnum
-CREATE TYPE "BillStatus" AS ENUM ('PAID', 'PARTIAL', 'UNPAID', 'OVERDUE');
-
--- CreateEnum
-CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'SUCCESSFUL', 'FAILED', 'CANCELLED', 'REFUNDED');
-
--- CreateEnum
-CREATE TYPE "PaymentReconciliationStatus" AS ENUM ('PENDING', 'RECONCILED', 'MISMATCH', 'ORPHANED');
-
--- CreateEnum
-CREATE TYPE "TicketStatus" AS ENUM ('OPEN', 'PENDING', 'RESOLVED', 'CLOSED');
-
--- CreateEnum
-CREATE TYPE "TicketCategory" AS ENUM ('BILLING', 'PAYMENT', 'METER', 'TECHNICAL', 'COMPLAINT', 'ACCOUNT');
-
--- CreateEnum
-CREATE TYPE "NotificationType" AS ENUM ('MAINTENANCE', 'WATER_OUTAGE', 'BILLING_REMINDER', 'PAYMENT_REMINDER', 'EMERGENCY', 'ESTATE_COMMUNICATION', 'PAYMENT_CONFIRMATION', 'BILLING_ALERT', 'BILL_GENERATED', 'BILL_DUE_SOON', 'BILL_OVERDUE', 'PAYMENT_PENDING', 'PAYMENT_SUCCESSFUL', 'PAYMENT_FAILED', 'PAYMENT_CANCELLED', 'PAYMENT_REFUNDED', 'RECEIPT_READY');
-
--- CreateEnum
-CREATE TYPE "NotificationChannel" AS ENUM ('IN_APP', 'EMAIL', 'SMS');
-
--- CreateEnum
-CREATE TYPE "NotificationStatus" AS ENUM ('PENDING', 'DELIVERED', 'FAILED', 'READ');
-
--- CreateEnum
-CREATE TYPE "PaymentProviderType" AS ENUM ('TUMA', 'PAYHERO', 'PESAPAL');
-
--- CreateEnum
-CREATE TYPE "PaymentMethodType" AS ENUM ('MPESA_STK_PUSH', 'BUY_GOODS_STK_PUSH', 'VISA', 'MASTERCARD', 'SAVED_CARD');
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'Role') THEN
+        CREATE TYPE "Role" AS ENUM ('SUPER_ADMIN', 'BILLING_OFFICER', 'SUPPORT_AGENT', 'NOTIFICATION_MANAGER', 'READ_ONLY_MANAGER', 'RESIDENT');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'AccountStatus') THEN
+        CREATE TYPE "AccountStatus" AS ENUM ('ACTIVE', 'SUSPENDED', 'INACTIVE');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RegistrationStatus') THEN
+        CREATE TYPE "RegistrationStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'HouseStatus') THEN
+        CREATE TYPE "HouseStatus" AS ENUM ('OCCUPIED', 'VACANT', 'UNDER_CONSTRUCTION', 'SUSPENDED', 'MAINTENANCE');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'MeterStatus') THEN
+        CREATE TYPE "MeterStatus" AS ENUM ('ACTIVE', 'FAULTY', 'REPLACED');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'BillStatus') THEN
+        CREATE TYPE "BillStatus" AS ENUM ('PAID', 'PARTIAL', 'UNPAID', 'OVERDUE');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PaymentStatus') THEN
+        CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'SUCCESSFUL', 'FAILED', 'CANCELLED', 'REFUNDED');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PaymentReconciliationStatus') THEN
+        CREATE TYPE "PaymentReconciliationStatus" AS ENUM ('PENDING', 'RECONCILED', 'MISMATCH', 'ORPHANED');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TicketStatus') THEN
+        CREATE TYPE "TicketStatus" AS ENUM ('OPEN', 'PENDING', 'RESOLVED', 'CLOSED');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TicketCategory') THEN
+        CREATE TYPE "TicketCategory" AS ENUM ('BILLING', 'PAYMENT', 'METER', 'TECHNICAL', 'COMPLAINT', 'ACCOUNT');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'NotificationType') THEN
+        CREATE TYPE "NotificationType" AS ENUM ('MAINTENANCE', 'WATER_OUTAGE', 'BILLING_REMINDER', 'PAYMENT_REMINDER', 'EMERGENCY', 'ESTATE_COMMUNICATION', 'PAYMENT_CONFIRMATION', 'BILLING_ALERT', 'BILL_GENERATED', 'BILL_DUE_SOON', 'BILL_OVERDUE', 'PAYMENT_PENDING', 'PAYMENT_SUCCESSFUL', 'PAYMENT_FAILED', 'PAYMENT_CANCELLED', 'PAYMENT_REFUNDED', 'RECEIPT_READY');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'NotificationChannel') THEN
+        CREATE TYPE "NotificationChannel" AS ENUM ('IN_APP', 'EMAIL', 'SMS');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'NotificationStatus') THEN
+        CREATE TYPE "NotificationStatus" AS ENUM ('PENDING', 'DELIVERED', 'FAILED', 'READ');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PaymentProviderType') THEN
+        CREATE TYPE "PaymentProviderType" AS ENUM ('TUMA', 'PAYHERO', 'PESAPAL');
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PaymentMethodType') THEN
+        CREATE TYPE "PaymentMethodType" AS ENUM ('MPESA_STK_PUSH', 'BUY_GOODS_STK_PUSH', 'VISA', 'MASTERCARD', 'SAVED_CARD');
+    END IF;
+END $$;
 
 -- CreateTable
-CREATE TABLE "houses" (
+CREATE TABLE IF NOT EXISTS "houses" (
     "id" TEXT NOT NULL,
     "houseNumber" TEXT NOT NULL,
     "occupancyStatus" "HouseStatus" NOT NULL DEFAULT 'UNDER_CONSTRUCTION',
@@ -58,7 +79,7 @@ CREATE TABLE "houses" (
 );
 
 -- CreateTable
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
     "id" TEXT NOT NULL,
     "fullName" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -79,7 +100,7 @@ CREATE TABLE "users" (
 );
 
 -- CreateTable
-CREATE TABLE "otp_codes" (
+CREATE TABLE IF NOT EXISTS "otp_codes" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "otpHash" TEXT NOT NULL,
@@ -92,7 +113,7 @@ CREATE TABLE "otp_codes" (
 );
 
 -- CreateTable
-CREATE TABLE "refresh_tokens" (
+CREATE TABLE IF NOT EXISTS "refresh_tokens" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "tokenHash" TEXT NOT NULL,
@@ -104,7 +125,7 @@ CREATE TABLE "refresh_tokens" (
 );
 
 -- CreateTable
-CREATE TABLE "meters" (
+CREATE TABLE IF NOT EXISTS "meters" (
     "id" TEXT NOT NULL,
     "meterNumber" TEXT NOT NULL,
     "meterSerial" TEXT NOT NULL,
@@ -121,7 +142,7 @@ CREATE TABLE "meters" (
 );
 
 -- CreateTable
-CREATE TABLE "meter_readings" (
+CREATE TABLE IF NOT EXISTS "meter_readings" (
     "id" TEXT NOT NULL,
     "meterId" TEXT NOT NULL,
     "readBy" TEXT NOT NULL,
@@ -139,7 +160,7 @@ CREATE TABLE "meter_readings" (
 );
 
 -- CreateTable
-CREATE TABLE "bills" (
+CREATE TABLE IF NOT EXISTS "bills" (
     "id" TEXT NOT NULL,
     "billNumber" TEXT NOT NULL,
     "residentId" TEXT NOT NULL,
@@ -174,7 +195,7 @@ CREATE TABLE "bills" (
 );
 
 -- CreateTable
-CREATE TABLE "payments" (
+CREATE TABLE IF NOT EXISTS "payments" (
     "id" TEXT NOT NULL,
     "provider" "PaymentProviderType" NOT NULL,
     "paymentMethod" "PaymentMethodType" NOT NULL,
@@ -209,7 +230,7 @@ CREATE TABLE "payments" (
 );
 
 -- CreateTable
-CREATE TABLE "receipts" (
+CREATE TABLE IF NOT EXISTS "receipts" (
     "id" TEXT NOT NULL,
     "receiptNumber" TEXT NOT NULL,
     "paymentId" TEXT NOT NULL,
@@ -226,7 +247,7 @@ CREATE TABLE "receipts" (
 );
 
 -- CreateTable
-CREATE TABLE "payment_methods" (
+CREATE TABLE IF NOT EXISTS "payment_methods" (
     "id" TEXT NOT NULL,
     "residentId" TEXT NOT NULL,
     "provider" "PaymentProviderType" NOT NULL,
@@ -247,7 +268,7 @@ CREATE TABLE "payment_methods" (
 );
 
 -- CreateTable
-CREATE TABLE "tickets" (
+CREATE TABLE IF NOT EXISTS "tickets" (
     "id" TEXT NOT NULL,
     "ticketId" TEXT NOT NULL,
     "residentId" TEXT NOT NULL,
@@ -264,7 +285,7 @@ CREATE TABLE "tickets" (
 );
 
 -- CreateTable
-CREATE TABLE "ticket_replies" (
+CREATE TABLE IF NOT EXISTS "ticket_replies" (
     "id" TEXT NOT NULL,
     "ticketId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -277,7 +298,7 @@ CREATE TABLE "ticket_replies" (
 );
 
 -- CreateTable
-CREATE TABLE "notifications" (
+CREATE TABLE IF NOT EXISTS "notifications" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "message" TEXT NOT NULL,
@@ -292,7 +313,7 @@ CREATE TABLE "notifications" (
 );
 
 -- CreateTable
-CREATE TABLE "user_notifications" (
+CREATE TABLE IF NOT EXISTS "user_notifications" (
     "id" TEXT NOT NULL,
     "notificationId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -306,7 +327,7 @@ CREATE TABLE "user_notifications" (
 );
 
 -- CreateTable
-CREATE TABLE "audit_logs" (
+CREATE TABLE IF NOT EXISTS "audit_logs" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "action" TEXT NOT NULL,
@@ -321,7 +342,7 @@ CREATE TABLE "audit_logs" (
 );
 
 -- CreateTable
-CREATE TABLE "system_settings" (
+CREATE TABLE IF NOT EXISTS "system_settings" (
     "id" TEXT NOT NULL,
     "key" TEXT NOT NULL,
     "value" TEXT NOT NULL,
@@ -331,7 +352,7 @@ CREATE TABLE "system_settings" (
 );
 
 -- CreateTable
-CREATE TABLE "callback_audits" (
+CREATE TABLE IF NOT EXISTS "callback_audits" (
     "id" TEXT NOT NULL,
     "headers" JSONB,
     "payload" JSONB NOT NULL,
@@ -346,115 +367,136 @@ CREATE TABLE "callback_audits" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "houses_houseNumber_key" ON "houses"("houseNumber");
+CREATE UNIQUE INDEX IF NOT EXISTS "houses_houseNumber_key" ON "houses"("houseNumber");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+CREATE UNIQUE INDEX IF NOT EXISTS "users_email_key" ON "users"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_phone_key" ON "users"("phone");
+CREATE UNIQUE INDEX IF NOT EXISTS "users_phone_key" ON "users"("phone");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_accountNumber_key" ON "users"("accountNumber");
+CREATE UNIQUE INDEX IF NOT EXISTS "users_accountNumber_key" ON "users"("accountNumber");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "users_houseId_key" ON "users"("houseId");
+CREATE UNIQUE INDEX IF NOT EXISTS "users_houseId_key" ON "users"("houseId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "refresh_tokens_tokenHash_key" ON "refresh_tokens"("tokenHash");
+CREATE UNIQUE INDEX IF NOT EXISTS "refresh_tokens_tokenHash_key" ON "refresh_tokens"("tokenHash");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "meters_meterNumber_key" ON "meters"("meterNumber");
+CREATE UNIQUE INDEX IF NOT EXISTS "meters_meterNumber_key" ON "meters"("meterNumber");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "meters_meterSerial_key" ON "meters"("meterSerial");
+CREATE UNIQUE INDEX IF NOT EXISTS "meters_meterSerial_key" ON "meters"("meterSerial");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "meters_houseId_key" ON "meters"("houseId");
+CREATE UNIQUE INDEX IF NOT EXISTS "meters_houseId_key" ON "meters"("houseId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "meter_readings_billId_key" ON "meter_readings"("billId");
+CREATE UNIQUE INDEX IF NOT EXISTS "meter_readings_billId_key" ON "meter_readings"("billId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "meter_readings_meterId_billingMonth_key" ON "meter_readings"("meterId", "billingMonth");
+CREATE UNIQUE INDEX IF NOT EXISTS "meter_readings_meterId_billingMonth_key" ON "meter_readings"("meterId", "billingMonth");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "bills_billNumber_key" ON "bills"("billNumber");
+CREATE UNIQUE INDEX IF NOT EXISTS "bills_billNumber_key" ON "bills"("billNumber");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "bills_readingId_key" ON "bills"("readingId");
+CREATE UNIQUE INDEX IF NOT EXISTS "bills_readingId_key" ON "bills"("readingId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "receipts_receiptNumber_key" ON "receipts"("receiptNumber");
+CREATE UNIQUE INDEX IF NOT EXISTS "receipts_receiptNumber_key" ON "receipts"("receiptNumber");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "receipts_paymentId_key" ON "receipts"("paymentId");
+CREATE UNIQUE INDEX IF NOT EXISTS "receipts_paymentId_key" ON "receipts"("paymentId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "tickets_ticketId_key" ON "tickets"("ticketId");
+CREATE UNIQUE INDEX IF NOT EXISTS "tickets_ticketId_key" ON "tickets"("ticketId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "system_settings_key_key" ON "system_settings"("key");
+CREATE UNIQUE INDEX IF NOT EXISTS "system_settings_key_key" ON "system_settings"("key");
 
 -- AddForeignKey
-ALTER TABLE "users" ADD CONSTRAINT "users_houseId_fkey" FOREIGN KEY ("houseId") REFERENCES "houses"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "otp_codes" ADD CONSTRAINT "otp_codes_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "meters" ADD CONSTRAINT "meters_houseId_fkey" FOREIGN KEY ("houseId") REFERENCES "houses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "meter_readings" ADD CONSTRAINT "meter_readings_meterId_fkey" FOREIGN KEY ("meterId") REFERENCES "meters"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "meter_readings" ADD CONSTRAINT "meter_readings_readBy_fkey" FOREIGN KEY ("readBy") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "bills" ADD CONSTRAINT "bills_residentId_fkey" FOREIGN KEY ("residentId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "bills" ADD CONSTRAINT "bills_houseId_fkey" FOREIGN KEY ("houseId") REFERENCES "houses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "bills" ADD CONSTRAINT "bills_meterId_fkey" FOREIGN KEY ("meterId") REFERENCES "meters"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "bills" ADD CONSTRAINT "bills_readingId_fkey" FOREIGN KEY ("readingId") REFERENCES "meter_readings"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "payments" ADD CONSTRAINT "payments_billId_fkey" FOREIGN KEY ("billId") REFERENCES "bills"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "payments" ADD CONSTRAINT "payments_residentId_fkey" FOREIGN KEY ("residentId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "receipts" ADD CONSTRAINT "receipts_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "payments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "payment_methods" ADD CONSTRAINT "payment_methods_residentId_fkey" FOREIGN KEY ("residentId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "tickets" ADD CONSTRAINT "tickets_residentId_fkey" FOREIGN KEY ("residentId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "tickets" ADD CONSTRAINT "tickets_assignedTo_fkey" FOREIGN KEY ("assignedTo") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ticket_replies" ADD CONSTRAINT "ticket_replies_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "tickets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ticket_replies" ADD CONSTRAINT "ticket_replies_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "user_notifications" ADD CONSTRAINT "user_notifications_notificationId_fkey" FOREIGN KEY ("notificationId") REFERENCES "notifications"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "user_notifications" ADD CONSTRAINT "user_notifications_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_houseId_fkey') THEN
+        ALTER TABLE "users" ADD CONSTRAINT "users_houseId_fkey" FOREIGN KEY ("houseId") REFERENCES "houses"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'otp_codes_userId_fkey') THEN
+        ALTER TABLE "otp_codes" ADD CONSTRAINT "otp_codes_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'refresh_tokens_userId_fkey') THEN
+        ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'meters_houseId_fkey') THEN
+        ALTER TABLE "meters" ADD CONSTRAINT "meters_houseId_fkey" FOREIGN KEY ("houseId") REFERENCES "houses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'meter_readings_meterId_fkey') THEN
+        ALTER TABLE "meter_readings" ADD CONSTRAINT "meter_readings_meterId_fkey" FOREIGN KEY ("meterId") REFERENCES "meters"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'meter_readings_readBy_fkey') THEN
+        ALTER TABLE "meter_readings" ADD CONSTRAINT "meter_readings_readBy_fkey" FOREIGN KEY ("readBy") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'bills_residentId_fkey') THEN
+        ALTER TABLE "bills" ADD CONSTRAINT "bills_residentId_fkey" FOREIGN KEY ("residentId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'bills_houseId_fkey') THEN
+        ALTER TABLE "bills" ADD CONSTRAINT "bills_houseId_fkey" FOREIGN KEY ("houseId") REFERENCES "houses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'bills_meterId_fkey') THEN
+        ALTER TABLE "bills" ADD CONSTRAINT "bills_meterId_fkey" FOREIGN KEY ("meterId") REFERENCES "meters"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'bills_readingId_fkey') THEN
+        ALTER TABLE "bills" ADD CONSTRAINT "bills_readingId_fkey" FOREIGN KEY ("readingId") REFERENCES "meter_readings"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_billId_fkey') THEN
+        ALTER TABLE "payments" ADD CONSTRAINT "payments_billId_fkey" FOREIGN KEY ("billId") REFERENCES "bills"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_residentId_fkey') THEN
+        ALTER TABLE "payments" ADD CONSTRAINT "payments_residentId_fkey" FOREIGN KEY ("residentId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'receipts_paymentId_fkey') THEN
+        ALTER TABLE "receipts" ADD CONSTRAINT "receipts_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "payments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payment_methods_residentId_fkey') THEN
+        ALTER TABLE "payment_methods" ADD CONSTRAINT "payment_methods_residentId_fkey" FOREIGN KEY ("residentId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tickets_residentId_fkey') THEN
+        ALTER TABLE "tickets" ADD CONSTRAINT "tickets_residentId_fkey" FOREIGN KEY ("residentId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tickets_assignedTo_fkey') THEN
+        ALTER TABLE "tickets" ADD CONSTRAINT "tickets_assignedTo_fkey" FOREIGN KEY ("assignedTo") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ticket_replies_ticketId_fkey') THEN
+        ALTER TABLE "ticket_replies" ADD CONSTRAINT "ticket_replies_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "tickets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ticket_replies_userId_fkey') THEN
+        ALTER TABLE "ticket_replies" ADD CONSTRAINT "ticket_replies_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_notifications_notificationId_fkey') THEN
+        ALTER TABLE "user_notifications" ADD CONSTRAINT "user_notifications_notificationId_fkey" FOREIGN KEY ("notificationId") REFERENCES "notifications"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_notifications_userId_fkey') THEN
+        ALTER TABLE "user_notifications" ADD CONSTRAINT "user_notifications_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END $$;
