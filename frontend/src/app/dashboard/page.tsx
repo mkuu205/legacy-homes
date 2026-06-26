@@ -48,7 +48,20 @@ export default function DashboardPage() {
 
   const { currentBill, recentPayments, unreadNotifications, consumptionHistory } = data || {};
 
-  const chartData = (consumptionHistory || []).reverse().map((r: any) => ({
+  // FIX: Sort consumption history chronologically (ascending order)
+  const sortedConsumptionHistory = (consumptionHistory || [])
+    .sort((a: any, b: any) => {
+      const [yearA, monthA] = a.billingMonth.split('-');
+      const [yearB, monthB] = b.billingMonth.split('-');
+
+      if (yearA !== yearB) {
+        return parseInt(yearA) - parseInt(yearB);
+      }
+
+      return parseInt(monthA) - parseInt(monthB);
+    });
+
+  const chartData = sortedConsumptionHistory.map((r: any) => ({
     month: r.billingMonth,
     units: r.unitsConsumed,
     amount: r.unitsConsumed * 250,
@@ -181,7 +194,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Consumption Chart */}
+      {/* Consumption Chart - FIXED */}
       {chartData.length > 0 && (
         <div className="card">
           <div className="s-hd" style={{ marginBottom: '20px' }}>
@@ -189,7 +202,7 @@ export default function DashboardPage() {
               <h2 className="pg-h" style={{ fontSize: '18px', marginBottom: '4px' }}>
                 Water Consumption
               </h2>
-              <p className="pg-sh">Last 6 months</p>
+              <p className="pg-sh">Last 6 months (chronological order)</p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--ok)', fontWeight: 600 }}>
               <TrendingUp size={16} />

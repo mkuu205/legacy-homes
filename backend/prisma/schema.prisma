@@ -60,6 +60,8 @@ enum PaymentStatus {
   PENDING
   SUCCESSFUL
   FAILED
+  CANCELLED
+  REFUNDED
 }
 
 enum PaymentReconciliationStatus {
@@ -94,6 +96,15 @@ enum NotificationType {
   ESTATE_COMMUNICATION
   PAYMENT_CONFIRMATION
   BILLING_ALERT
+  BILL_GENERATED
+  BILL_DUE_SOON
+  BILL_OVERDUE
+  PAYMENT_PENDING
+  PAYMENT_SUCCESSFUL
+  PAYMENT_FAILED
+  PAYMENT_CANCELLED
+  PAYMENT_REFUNDED
+  RECEIPT_READY
 }
 
 enum NotificationChannel {
@@ -107,6 +118,20 @@ enum NotificationStatus {
   DELIVERED
   FAILED
   READ
+}
+
+enum PaymentProviderType {
+  TUMA
+  PAYHERO
+  PESAPAL
+}
+
+enum PaymentMethodType {
+  MPESA_STK_PUSH
+  BUY_GOODS_STK_PUSH
+  VISA
+  MASTERCARD
+  SAVED_CARD
 }
 
 // ─────────────────────────────────────────────
@@ -162,6 +187,7 @@ model User {
   auditLogs         AuditLog[]
   meterReadings     MeterReading[]
   assignedTickets   Ticket[]           @relation("AssignedTickets")
+  paymentMethods    PaymentMethod[]
 
   @@map("users")
 }
@@ -256,31 +282,41 @@ model MeterReading {
 // ─────────────────────────────────────────────
 
 model Bill {
-  id              String     @id @default(uuid())
-  billNumber      String     @unique
-  residentId      String
-  houseId         String
-  meterId         String
-  readingId       String?    @unique // Foreign key for MeterReading
-  billingMonth    String
-  previousReading Float
-  currentReading  Float
-  unitsConsumed   Float
-  unitRate        Float      @default(250)
-  totalAmount     Float
-  amountPaid      Float      @default(0)
-  balance         Float
-  dueDate         DateTime
-  status          BillStatus @default(UNPAID)
-  isLocked        Boolean    @default(false)
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  id                 String     @id @default(uuid())
+  billNumber         String     @unique
+  residentId         String
+  houseId            String
+  meterId            String
+  readingId          String?    @unique // Foreign key for MeterReading
+  billingMonth       String
+  billingPeriodStart DateTime
+  billingPeriodEnd   DateTime
+  generatedAt        DateTime   @default(now())
+  dueDate            DateTime
+  paidAt             DateTime?
+  previousReading    Float
+  currentReading     Float
+  unitsConsumed      Float
+  unitRate           Float      @default(250)
+  totalAmount        Float
+  amountPaid         Float      @default(0)
+  balance            Float
+  status             BillStatus @default(UNPAID)
+  isLocked           Boolean    @default(false)
+  paymentProvider    PaymentProviderType?
+  paymentMethod      PaymentMethodType?
+  paymentId          String?
+  daysUntilDue       Int?
+  overdueDays        Int?
+  isOverdue          Boolean?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
-  resident        User          @relation(fields: [residentId], references: [id])
-  house           House         @relation(fields: [houseId], references: [id])
-  meter           Meter         @relation(fields: [meterId], references: [id])
-  reading         MeterReading? @relation("MeterReadingToBill", fields: [readingId], references: [id])
-  payments        Payment[]
+  resident           User          @relation(fields: [residentId], references: [id])
+  house              House         @relation(fields: [houseId], references: [id])
+  meter              Meter         @relation(fields: [meterId], references: [id])
+  reading            MeterReading? @relation("MeterReadingToBill", fields: [readingId], references: [id])
+  payments           Payment[]
 
   @@map("bills")
 }
@@ -290,29 +326,86 @@ model Bill {
 // ─────────────────────────────────────────────
 
 model Payment {
-  id                String                    @id @default(uuid())
-  paymentId         String                    @unique
-  billId            String
-  residentId        String
-  amount            Float
-  phoneNumber       String
-  mpesaReceiptCode  String?
-  payHeroReference  String? // Deprecated after PayHero removal
-  merchantRequestId String?
-  checkoutRequestId String?
-  provider          String                    @default("TUMA") // Defaults to TUMA for new, but existing will be PAYHERO
-  callbackPayload   Json?
+  id                    String                    @id @default(uuid())
+  provider              PaymentProviderType
+  paymentMethod         PaymentMethodType
+  residentId            String
+  billId                String
+  merchantReference     String?
+  providerTransactionId String?
+  providerReference     String?
+  providerOrderId       String?
+  providerStatus        String?
+  providerMessage       String?
+  receiptNumber         String?
+  confirmationCode      String?
+  phoneNumber           String?
+  maskedAccount         String?
+  cardBrand             String?
+  currency              String?
+  amount                Float
+  status                PaymentStatus             @default(PENDING)
+  callbackPayload       Json?
+  providerPayload       Json?
+  failureReason         String?
   verificationTimestamp DateTime?
-  status            PaymentStatus             @default(PENDING)
-  reconciliationStatus PaymentReconciliationStatus @default(PENDING)
-  failureReason     String?
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  verifiedBy            String?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
 
-  bill              Bill                      @relation(fields: [billId], references: [id])
-  resident          User                      @relation(fields: [residentId], references: [id])
+  bill                  Bill                      @relation(fields: [billId], references: [id])
+  resident              User                      @relation(fields: [residentId], references: [id])
+  receipt               Receipt?                  @relation("PaymentToReceipt")
 
   @@map("payments")
+}
+
+// ─────────────────────────────────────────────
+// RECEIPTS
+// ─────────────────────────────────────────────
+
+model Receipt {
+  id          String   @id @default(uuid())
+  receiptNumber String   @unique
+  paymentId   String   @unique
+  provider    PaymentProviderType
+  pdfUrl      String?
+  generatedAt DateTime @default(now())
+  emailed     Boolean  @default(false)
+  smsSent     Boolean  @default(false)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  payment     Payment  @relation("PaymentToReceipt", fields: [paymentId], references: [id])
+
+  @@map("receipts")
+}
+
+// ─────────────────────────────────────────────
+// PAYMENT METHODS
+// ─────────────────────────────────────────────
+
+model PaymentMethod {
+  id            String            @id @default(uuid())
+  residentId    String
+  provider      PaymentProviderType
+  methodType    PaymentMethodType
+  displayName   String
+  lastFour      String?
+  cardBrand     String?
+  expiryMonth   Int?
+  expiryYear    Int?
+  providerToken String?
+  phoneNumber   String?
+  isDefault     Boolean           @default(false)
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  resident      User              @relation(fields: [residentId], references: [id])
+
+  @@map("payment_methods")
 }
 
 // ─────────────────────────────────────────────
