@@ -34,6 +34,7 @@ router.get('/callback-health', (_req, res) => {
 });
 
 // Admin routes
+router.get('/system-check', authenticate, authorize('SUPER_ADMIN'), paymentController.systemCheck.bind(paymentController));
 router.get('/stats', authenticate, authorize('SUPER_ADMIN'), paymentController.getStats.bind(paymentController));
 router.get('/export/csv', authenticate, authorize('SUPER_ADMIN'), paymentController.exportCSV.bind(paymentController));
 router.get('/', authenticate, authorize('SUPER_ADMIN'), paymentController.getAll.bind(paymentController));

@@ -131,6 +131,13 @@ export class PaymentController {
       res.send(csv);
     } catch (error) { next(error); }
   }
+
+  async systemCheck(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const health = await paymentEngineService.checkSystemHealth();
+      res.json({ success: true, data: health });
+    } catch (error) { next(error); }
+  }
 }
 
 export const paymentController = new PaymentController();
