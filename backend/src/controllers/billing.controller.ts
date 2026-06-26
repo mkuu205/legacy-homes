@@ -6,14 +6,15 @@ import { auditService } from '../services/audit.service';
 export class BillingController {
   async generateMonthlyBills(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { billingMonth, force } = req.body;
-      const result = await billingService.generateMonthlyBills(billingMonth, force === true || force === 'true');
+      const { billingMonth, force, dueDate, waterUnitRate, lateFee, billingPeriodStart, billingPeriodEnd } = req.body;
+      const options = { dueDate, waterUnitRate: waterUnitRate ? Number(waterUnitRate) : undefined, lateFee: lateFee ? Number(lateFee) : undefined, billingPeriodStart, billingPeriodEnd };
+      const result = await billingService.generateMonthlyBills(billingMonth, force === true || force === 'true', options);
       // Audit log
       await auditService.logAction({
         userId: req.user!.userId,
         action: 'GENERATE_BILLS',
         resource: 'Bill',
-        details: { billingMonth, generated: result.generated, force },
+        details: { billingMonth, generated: result.generated, force, dueDate, waterUnitRate, lateFee },
         ipAddress: req.ip,
       }).catch(() => {});
       res.status(201).json({ success: true, data: result });

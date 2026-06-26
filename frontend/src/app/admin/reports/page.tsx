@@ -80,7 +80,9 @@ export default function AdminReportsPage() {
   ];
 
   const revenueChartData = revenueData
-    ? Object.entries(revenueData.byMonth).map(([month, revenue]) => ({ month: month.slice(5), revenue }))
+    ? Object.entries(revenueData.byMonth)
+        .sort(([a], [b]) => a.localeCompare(b)) // chronological sort by YYYY-MM
+        .map(([month, revenue]) => ({ month: month.slice(5), revenue }))
     : [];
 
   return (

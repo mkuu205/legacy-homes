@@ -27,6 +27,7 @@ const navItems = [
   { href: '/dashboard/notifications', icon: Bell, label: 'Notifications' },
   { href: '/dashboard/support', icon: MessageSquare, label: 'Support' },
   { href: '/dashboard/profile', icon: User, label: 'Profile' },
+  { href: '/dashboard/settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function DashboardLayout({

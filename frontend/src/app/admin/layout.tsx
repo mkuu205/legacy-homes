@@ -350,16 +350,26 @@ export default function AdminLayout({
               </p>
             </div>
 
-            <Link
-              href="/admin/notifications"
-              className="notif-wrap"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', borderRadius: '9px', cursor: 'pointer', position: 'relative' }}
-            >
-              <Bell size={18} style={{ color: 'var(--t2)' }} />
-              {unreadCount > 0 && (
-                <div className="notif-dot" />
-              )}
-            </Link>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Link
+                href="/admin/notifications"
+                className="notif-wrap"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', borderRadius: '9px', cursor: 'pointer', position: 'relative' }}
+              >
+                <Bell size={18} style={{ color: 'var(--t2)' }} />
+                {unreadCount > 0 && (
+                  <div className="notif-dot" />
+                )}
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="btn-icon bg"
+                title="Sign Out"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
 
           <div className="pg">{children}</div>

@@ -1,6 +1,6 @@
 /**
  * PaymentProvider Interface
- * Defines the contract for all payment providers (Tuma, PayHero, Pesapal)
+ * Defines the contract for all payment providers (Tuma, Pesapal)
  */
 
 export interface PaymentInitiationRequest {

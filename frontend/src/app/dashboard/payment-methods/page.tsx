@@ -57,10 +57,9 @@ export default function PaymentMethodsPage() {
   });
 
   const availableMethods = [
-    { id: 'mpesa-stk', name: 'MPESA STK Push', description: 'Pay directly from your M-Pesa account', provider: 'Tuma', processingTime: '1-2 minutes', icon: Smartphone, color: '#00C9A7', badge: '📱' },
-    { id: 'buy-goods', name: 'Buy Goods STK Push', description: 'Alternative M-Pesa payment method', provider: 'PayHero', processingTime: '1-2 minutes', icon: Smartphone, color: '#FF6B35', badge: '📱' },
-    { id: 'visa', name: 'Visa', description: 'Pay using your Visa card', provider: 'Pesapal', processingTime: '2-5 minutes', icon: CreditCard, color: '#1434CB', badge: '💳' },
-    { id: 'mastercard', name: 'Mastercard', description: 'Pay using your Mastercard', provider: 'Pesapal', processingTime: '2-5 minutes', icon: CreditCard, color: '#EB001B', badge: '💳' },
+    { id: 'mpesa-stk', name: 'MPESA STK Push', description: 'Pay directly from your M-Pesa account via Tuma', provider: 'Tuma', processingTime: '1-2 minutes', icon: Smartphone, color: '#00C9A7', badge: '📱' },
+    { id: 'visa', name: 'Visa', description: 'Pay using your Visa card via Pesapal', provider: 'Pesapal', processingTime: '2-5 minutes', icon: CreditCard, color: '#1434CB', badge: '💳' },
+    { id: 'mastercard', name: 'Mastercard', description: 'Pay using your Mastercard via Pesapal', provider: 'Pesapal', processingTime: '2-5 minutes', icon: CreditCard, color: '#EB001B', badge: '💳' },
   ];
 
   return (
@@ -123,7 +122,6 @@ export default function PaymentMethodsPage() {
                 <label className="lbl">Provider</label>
                 <select className="sel" value={newMethod.provider} onChange={e => setNewMethod(p => ({ ...p, provider: e.target.value }))}>
                   <option value="TUMA">Tuma (M-Pesa STK)</option>
-                  <option value="PAYHERO">PayHero (Buy Goods)</option>
                   <option value="PESAPAL">Pesapal (Card)</option>
                 </select>
               </div>
@@ -131,7 +129,6 @@ export default function PaymentMethodsPage() {
                 <label className="lbl">Method Type</label>
                 <select className="sel" value={newMethod.methodType} onChange={e => setNewMethod(p => ({ ...p, methodType: e.target.value }))}>
                   <option value="MPESA_STK">M-Pesa STK Push</option>
-                  <option value="MPESA_BUY_GOODS">Buy Goods</option>
                   <option value="CARD">Card</option>
                 </select>
               </div>

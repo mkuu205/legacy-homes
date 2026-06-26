@@ -13,7 +13,6 @@ router.delete('/my-history', authenticate, paymentController.clearMyPaymentHisto
 
 // Provider Webhooks / Callbacks
 router.post('/tuma/callback', paymentController.handleTumaCallback.bind(paymentController));
-router.post('/payhero/callback', paymentController.handlePayHeroCallback.bind(paymentController));
 router.post('/pesapal/ipn', paymentController.handlePesapalIpn.bind(paymentController));
 router.get('/pesapal/ipn', paymentController.handlePesapalIpn.bind(paymentController));
 

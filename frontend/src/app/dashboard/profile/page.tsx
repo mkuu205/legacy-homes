@@ -213,6 +213,34 @@ export default function ProfilePage() {
                     {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+                {/* Password Strength Indicator */}
+                {passwordData.newPassword && (() => {
+                  const pw = passwordData.newPassword;
+                  let score = 0;
+                  if (pw.length >= 8) score++;
+                  if (pw.length >= 12) score++;
+                  if (/[A-Z]/.test(pw)) score++;
+                  if (/[0-9]/.test(pw)) score++;
+                  if (/[^A-Za-z0-9]/.test(pw)) score++;
+                  const levels = [
+                    { label: 'Very Weak', color: '#ef4444' },
+                    { label: 'Weak', color: '#f97316' },
+                    { label: 'Fair', color: '#eab308' },
+                    { label: 'Good', color: '#22c55e' },
+                    { label: 'Strong', color: '#10b981' },
+                  ];
+                  const level = levels[Math.min(score, 4)];
+                  return (
+                    <div style={{ marginTop: '8px' }}>
+                      <div style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+                        {levels.map((l, i) => (
+                          <div key={i} style={{ flex: 1, height: '4px', borderRadius: '2px', background: i <= score - 1 ? level.color : 'var(--bd)', transition: 'background 0.2s' }} />
+                        ))}
+                      </div>
+                      <p style={{ fontSize: '11px', color: level.color, fontWeight: 600 }}>{level.label}</p>
+                    </div>
+                  );
+                })()}
               </div>
               <div className="fg">
                 <label className="lbl">Confirm New Password</label>

@@ -1,7 +1,6 @@
 import { prisma } from '../config/prisma';
 import { PaymentProvider } from '../providers/payment-provider.interface';
 import { TumaProvider } from '../providers/tuma.provider';
-import { PayHeroProvider } from '../providers/payhero.provider';
 import { PesapalProvider } from '../providers/pesapal.provider';
 import { logger } from '../utils/logger';
 import { PaymentProviderType, PaymentStatus, PaymentMethodType } from '@prisma/client';
@@ -15,7 +14,6 @@ export class PaymentEngineService {
 
   private initializeProviders(): void {
     this.providers.set('TUMA', new TumaProvider());
-    this.providers.set('PAYHERO', new PayHeroProvider());
     this.providers.set('PESAPAL', new PesapalProvider());
   }
 

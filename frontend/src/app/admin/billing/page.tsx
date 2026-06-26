@@ -15,6 +15,12 @@ export default function AdminBillingPage() {
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [generateMonth, setGenerateMonth] = useState(new Date().toISOString().slice(0, 7));
   const [forceGenerate, setForceGenerate] = useState(false);
+  const [generateDueDate, setGenerateDueDate] = useState('');
+  const [generateWaterUnitRate, setGenerateWaterUnitRate] = useState('');
+  const [generateLateFee, setGenerateLateFee] = useState('');
+  const [generatePeriodStart, setGeneratePeriodStart] = useState('');
+  const [generatePeriodEnd, setGeneratePeriodEnd] = useState('');
+  const [showPreviewSummary, setShowPreviewSummary] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState<{ type: 'single' | 'bulk' | 'month' | 'unpaid'; id?: string } | null>(null);
   const [deleteMonth, setDeleteMonth] = useState('');
 
@@ -35,7 +41,13 @@ export default function AdminBillingPage() {
 
   const generateBillsMutation = useMutation({
     mutationFn: async ({ billingMonth, force }: { billingMonth: string; force: boolean }) => {
-      const res = await api.post('/billing/generate', { billingMonth, force });
+      const payload: any = { billingMonth, force };
+      if (generateDueDate) payload.dueDate = generateDueDate;
+      if (generateWaterUnitRate) payload.waterUnitRate = Number(generateWaterUnitRate);
+      if (generateLateFee) payload.lateFee = Number(generateLateFee);
+      if (generatePeriodStart) payload.billingPeriodStart = generatePeriodStart;
+      if (generatePeriodEnd) payload.billingPeriodEnd = generatePeriodEnd;
+      const res = await api.post('/billing/generate', payload);
       return res.data.data;
     },
     onSuccess: (data) => {
@@ -43,6 +55,12 @@ export default function AdminBillingPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-bills'] });
       setShowGenerateModal(false);
       setForceGenerate(false);
+      setShowPreviewSummary(false);
+      setGenerateDueDate('');
+      setGenerateWaterUnitRate('');
+      setGenerateLateFee('');
+      setGeneratePeriodStart('');
+      setGeneratePeriodEnd('');
     },
     onError: (error: any) => {
       const msg = getErrorMessage(error);
@@ -255,19 +273,51 @@ export default function AdminBillingPage() {
 
       {/* Generate Bills Modal */}
       {showGenerateModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
-          <div className="card" style={{ maxWidth: '400px', width: '100%' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)', marginBottom: '16px' }}>Generate Monthly Bills</h3>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px', overflowY: 'auto' }}>
+          <div className="card" style={{ maxWidth: '480px', width: '100%', margin: 'auto' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)', marginBottom: '4px' }}>Generate Monthly Bills</h3>
+            <p style={{ fontSize: '12px', color: 'var(--t2)', marginBottom: '16px' }}>Configure billing parameters. Fields marked optional use system defaults if left blank.</p>
+
+            {/* Required */}
             <div className="fg" style={{ marginBottom: '12px' }}>
-              <label className="lbl">Billing Month</label>
+              <label className="lbl">Billing Month *</label>
               <input type="month" value={generateMonth} onChange={e => setGenerateMonth(e.target.value)} className="inp" />
             </div>
+
+            {/* Optional overrides */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+              <div className="fg">
+                <label className="lbl">Due Date <span style={{ fontSize: '10px', color: 'var(--t3)' }}>(optional)</span></label>
+                <input type="date" value={generateDueDate} onChange={e => setGenerateDueDate(e.target.value)} className="inp" />
+              </div>
+              <div className="fg">
+                <label className="lbl">Water Unit Rate (KES) <span style={{ fontSize: '10px', color: 'var(--t3)' }}>(optional)</span></label>
+                <input type="number" min="0" step="0.01" placeholder="e.g. 250" value={generateWaterUnitRate} onChange={e => setGenerateWaterUnitRate(e.target.value)} className="inp" />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+              <div className="fg">
+                <label className="lbl">Period Start <span style={{ fontSize: '10px', color: 'var(--t3)' }}>(optional)</span></label>
+                <input type="date" value={generatePeriodStart} onChange={e => setGeneratePeriodStart(e.target.value)} className="inp" />
+              </div>
+              <div className="fg">
+                <label className="lbl">Period End <span style={{ fontSize: '10px', color: 'var(--t3)' }}>(optional)</span></label>
+                <input type="date" value={generatePeriodEnd} onChange={e => setGeneratePeriodEnd(e.target.value)} className="inp" />
+              </div>
+            </div>
+
+            <div className="fg" style={{ marginBottom: '12px' }}>
+              <label className="lbl">Late Fee (KES) <span style={{ fontSize: '10px', color: 'var(--t3)' }}>(optional)</span></label>
+              <input type="number" min="0" step="0.01" placeholder="e.g. 500" value={generateLateFee} onChange={e => setGenerateLateFee(e.target.value)} className="inp" />
+            </div>
+
             {forceGenerate && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px', marginBottom: '12px' }}>
                 <AlertTriangle size={16} style={{ color: '#fbbf24', flexShrink: 0, marginTop: '1px' }} />
                 <div>
                   <p style={{ fontSize: '12px', fontWeight: 600, color: '#fbbf24' }}>Bills already exist for this month</p>
-                  <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '2px' }}>Force regeneration will delete existing unpaid bills for this month and replace them with fresh ones based on current meter readings.</p>
+                  <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '2px' }}>Force regeneration will delete existing unpaid bills and replace them with fresh ones based on current meter readings.</p>
                 </div>
               </div>
             )}
@@ -278,10 +328,10 @@ export default function AdminBillingPage() {
               </label>
             )}
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => setShowGenerateModal(false)} className="btn bs" style={{ flex: 1 }}>Cancel</button>
-              <button onClick={() => generateBillsMutation.mutate({ billingMonth: generateMonth, force: forceGenerate })} disabled={generateBillsMutation.isPending} className="btn bp" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <button onClick={() => { setShowGenerateModal(false); setForceGenerate(false); setGenerateDueDate(''); setGenerateWaterUnitRate(''); setGenerateLateFee(''); setGeneratePeriodStart(''); setGeneratePeriodEnd(''); }} className="btn bs" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={() => generateBillsMutation.mutate({ billingMonth: generateMonth, force: forceGenerate })} disabled={generateBillsMutation.isPending || !generateMonth} className="btn bp" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                 {generateBillsMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} />}
-                Generate
+                Generate Bills
               </button>
             </div>
           </div>

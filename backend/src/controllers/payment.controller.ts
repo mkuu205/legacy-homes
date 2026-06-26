@@ -33,16 +33,6 @@ export class PaymentController {
     }
   }
 
-  async handlePayHeroCallback(req: Request, res: Response, next: NextFunction) {
-    try {
-      const result = await paymentEngineService.handleCallback('PAYHERO', req.body);
-      res.json(result);
-    } catch (error) {
-      logger.error('PayHero callback error:', error);
-      res.status(200).json({ success: true, message: 'Callback received' });
-    }
-  }
-
   async handlePesapalIpn(req: Request, res: Response, next: NextFunction) {
     try {
       // Pesapal IPN usually sends orderTrackingId in query params

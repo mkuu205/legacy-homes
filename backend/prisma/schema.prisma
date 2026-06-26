@@ -122,7 +122,6 @@ enum NotificationStatus {
 
 enum PaymentProviderType {
   TUMA
-  PAYHERO
   PESAPAL
 }
 

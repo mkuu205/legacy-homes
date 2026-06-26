@@ -27,7 +27,6 @@ const schema = z.object({
     .min(8, 'Password must be at least 8 characters')
     .regex(/(?=.*[A-Z])(?=.*\d)/, 'Must include uppercase letter and number'),
   confirmPassword: z.string(),
-  nationalId: z.string().optional(),
 }).refine((d) => d.password === d.confirmPassword, {
   message: 'Passwords do not match',
   path: ['confirmPassword'],
@@ -61,7 +60,6 @@ export default function RegisterPage() {
         phone: data.phone,
         houseNumber: data.houseNumber,
         password: data.password,
-        nationalId: data.nationalId || null,
       };
 
       const res = await api.post('/auth/register', payload);
@@ -204,42 +202,19 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <div className="g2">
-            <div className="fg">
-              <label className="lbl">House Number *</label>
-              <input
-                {...register('houseNumber')}
-                type="text"
-                placeholder="e.g. A1, B2"
-                className="inp"
-              />
-              {errors.houseNumber && (
-                <p style={{ fontSize: '12px', color: '#f87171', marginTop: '5px' }}>
-                  {errors.houseNumber.message}
-                </p>
-              )}
-            </div>
-
-            <div className="fg">
-              <label className="lbl">
-                National ID{' '}
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 400,
-                    color: 'var(--t3)',
-                  }}
-                >
-                  (optional)
-                </span>
-              </label>
-              <input
-                {...register('nationalId')}
-                type="text"
-                placeholder="12345678"
-                className="inp"
-              />
-            </div>
+          <div className="fg">
+            <label className="lbl">House Number *</label>
+            <input
+              {...register('houseNumber')}
+              type="text"
+              placeholder="e.g. A1, B2"
+              className="inp"
+            />
+            {errors.houseNumber && (
+              <p style={{ fontSize: '12px', color: '#f87171', marginTop: '5px' }}>
+                {errors.houseNumber.message}
+              </p>
+            )}
           </div>
 
           <div className="g2">

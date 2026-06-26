@@ -17,9 +17,11 @@ export class AuthService {
     phone: string;
     houseNumber: string;
     password: string;
-    nationalId?: string;
     profilePicture?: string;
   }) {
+    // Normalise house number: trim whitespace and convert to uppercase
+    const houseNumber = data.houseNumber.trim().toUpperCase();
+
     const existingEmail = await prisma.user.findUnique({
       where: { email: data.email },
     });
@@ -37,11 +39,11 @@ export class AuthService {
     }
 
     const house = await prisma.house.findUnique({
-      where: { houseNumber: data.houseNumber },
+      where: { houseNumber },
     });
 
     if (!house) {
-      throw new AppError('Invalid house number', 400);
+      throw new AppError(`House ${houseNumber} not found. Please check your house number and try again.`, 400);
     }
 
     const existingResident = await prisma.user.findUnique({
@@ -62,7 +64,6 @@ export class AuthService {
         phone: data.phone,
         assignedHouse: { connect: { id: house.id } },
         passwordHash,
-        nationalId: data.nationalId,
         profilePicture: data.profilePicture,
         accountNumber,
         role: 'RESIDENT',

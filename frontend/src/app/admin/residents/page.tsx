@@ -11,7 +11,7 @@ export default function AdminResidentsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newResident, setNewResident] = useState({ fullName: '', email: '', phone: '', houseNumber: '', password: 'Resident@2024!', nationalId: '' });
+  const [newResident, setNewResident] = useState({ fullName: '', email: '', phone: '', houseNumber: '', password: 'Resident@2024!' });
   const [selectedResident, setSelectedResident] = useState<any>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -59,7 +59,7 @@ export default function AdminResidentsPage() {
     onSuccess: () => {
       toast({ type: 'success', title: 'Resident added successfully!' });
       setShowAddModal(false);
-      setNewResident({ fullName: '', email: '', phone: '', houseNumber: '', password: 'Resident@2024!', nationalId: '' });
+      setNewResident({ fullName: '', email: '', phone: '', houseNumber: '', password: 'Resident@2024!' });
       queryClient.invalidateQueries({ queryKey: ['admin-residents'] });
     },
     onError: (error) => toast({ type: 'error', title: 'Failed to add resident', description: getErrorMessage(error) }),
@@ -275,7 +275,6 @@ export default function AdminResidentsPage() {
                 { label: 'Email', key: 'email', type: 'email' },
                 { label: 'Phone', key: 'phone', type: 'tel' },
                 { label: 'House Number', key: 'houseNumber', type: 'text' },
-                { label: 'National ID', key: 'nationalId', type: 'text' },
                 { label: 'Initial Password', key: 'password', type: 'text' },
               ].map(({ label, key, type }) => (
                 <div key={key} className="fg">
@@ -310,7 +309,6 @@ export default function AdminResidentsPage() {
                 ['Phone', selectedResident.phone || '—'],
                 ['Account Number', selectedResident.accountNumber],
                 ['House Number', selectedResident.houseNumber || '—'],
-                ['National ID', selectedResident.nationalId || '—'],
                 ['Status', selectedResident.accountStatus],
                 ['Email Verified', selectedResident.emailVerified ? 'Yes' : 'No'],
                 ['Joined', new Date(selectedResident.createdAt).toLocaleDateString('en-KE')],

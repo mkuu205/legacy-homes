@@ -31,7 +31,17 @@ const generateBillNumber = (): string => {
 };
 
 export class BillingService {
-  async generateMonthlyBills(billingMonth: string, force = false) {
+  async generateMonthlyBills(
+    billingMonth: string,
+    force = false,
+    options?: {
+      dueDate?: string;          // ISO date string e.g. '2026-07-31'
+      waterUnitRate?: number;    // override unit rate for this batch
+      lateFee?: number;          // late fee amount (stored for reference, not yet a schema field)
+      billingPeriodStart?: string; // ISO date string override
+      billingPeriodEnd?: string;   // ISO date string override
+    }
+  ) {
     // Duplicate prevention: check if bills already exist for this month
     const existingCount = await prisma.bill.count({ where: { billingMonth } });
     if (existingCount > 0 && !force) {
@@ -73,15 +83,24 @@ export class BillingService {
     }
 
     const bills = [];
-    const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + 30);
+
+    // Resolve due date: use provided value or default to 30 days from now
+    const dueDate = options?.dueDate ? new Date(options.dueDate) : (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 30);
+      return d;
+    })();
 
     // Parse billingMonth (format: 'YYYY-MM') to get actual period boundaries
     const [yearStr, monthStr] = billingMonth.split('-');
     const year = parseInt(yearStr, 10);
     const month = parseInt(monthStr, 10) - 1; // 0-indexed
-    const periodStart = new Date(year, month, 1, 0, 0, 0, 0);
-    const periodEnd = new Date(year, month + 1, 0, 23, 59, 59, 999); // last day of month
+    const periodStart = options?.billingPeriodStart
+      ? new Date(options.billingPeriodStart)
+      : new Date(year, month, 1, 0, 0, 0, 0);
+    const periodEnd = options?.billingPeriodEnd
+      ? new Date(options.billingPeriodEnd)
+      : new Date(year, month + 1, 0, 23, 59, 59, 999); // last day of month
 
     for (const reading of readings) {
       const meter = await prisma.meter.findUnique({
@@ -106,7 +125,10 @@ export class BillingService {
 
       if (!house || !house.resident) continue;
 
-      const UNIT_RATE = await getUnitRate();
+      // Use provided waterUnitRate, or fall back to DB/default
+      const UNIT_RATE = options?.waterUnitRate && options.waterUnitRate > 0
+        ? options.waterUnitRate
+        : await getUnitRate();
       const totalAmount = reading.unitsConsumed * UNIT_RATE;
       const billNumber = generateBillNumber();
 
