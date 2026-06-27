@@ -44,7 +44,7 @@ if (process.env.FRONTEND_URL) {
 export const io = new SocketIOServer(httpServer, {
   cors: {
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || (origin && origin.endsWith('.vercel.app'))) {
         callback(null, true);
       } else {
         callback(new Error('CORS not allowed'));
@@ -82,7 +82,8 @@ app.use(helmet({
 // Express CORS
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Check if origin is in allowed list or matches vercel.app
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
       callback(null, true);
     } else {
       callback(new Error('CORS not allowed'));
@@ -123,6 +124,10 @@ app.use(morgan('combined', {
 }));
 
 // Health check
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString(), service: 'Legacy Homes API' });
+});
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString(), service: 'Legacy Homes API' });
 });
