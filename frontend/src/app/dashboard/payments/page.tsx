@@ -173,13 +173,17 @@ export default function PaymentsPage() {
     },
     onSuccess: (data) => {
       if ((paymentMethod === 'CARD' || paymentMethod === 'SAVED_CARD') && data.redirectUrl) {
-        // Redirect to Pesapal as per spec
-        window.location.href = data.redirectUrl;
+        // Show a loading state before redirecting
+        toast({ type: 'success', title: 'Secure connection established', description: 'Redirecting to secure payment page...' });
+        // Use a small timeout to let the toast show up briefly before redirecting
+        setTimeout(() => {
+          window.location.href = data.redirectUrl;
+        }, 800);
         return;
       }
       setPendingPaymentId(data.paymentId);
       setPaymentStartedAt(Date.now());
-      toast({ type: 'success', title: 'Payment initiated', description: paymentMethod === 'MPESA_STK_PUSH' ? 'Please check your phone for the M-Pesa prompt' : 'Redirecting to payment page...' });
+      toast({ type: 'success', title: 'Payment initiated', description: paymentMethod === 'MPESA_STK_PUSH' ? 'Please check your phone for the M-Pesa prompt' : 'Processing...' });
     },
     onError: (err) => {
       toast({ type: 'error', title: 'Payment failed', description: getErrorMessage(err) });

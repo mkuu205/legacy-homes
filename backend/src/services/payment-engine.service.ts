@@ -130,7 +130,12 @@ export class PaymentEngineService {
         residentId,
         externalReference: payment.id,
         // @ts-ignore - Pesapal 3.0 supports account_value for tokenized payments
-        account_value: accountToken
+        account_value: accountToken,
+        // Pass resident details for a better checkout experience on provider page
+        // @ts-ignore
+        residentName: bill.resident.fullName,
+        // @ts-ignore
+        residentEmail: bill.resident.email,
       });
 
       if (!result.success) {

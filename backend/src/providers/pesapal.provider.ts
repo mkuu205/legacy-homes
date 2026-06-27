@@ -70,6 +70,11 @@ export class PesapalProvider implements PaymentProvider {
 
       // We should ideally pass resident details from the service layer, 
       // but for now we use the phone and try to infer or use placeholders that are more professional.
+      const residentName = (request as any).residentName || 'Resident';
+      const nameParts = residentName.split(' ');
+      const firstName = nameParts[0];
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Legacy Homes';
+
       const payload: any = {
         id: request.externalReference,
         currency: 'KES',
@@ -79,9 +84,9 @@ export class PesapalProvider implements PaymentProvider {
         notification_id: this.ipnId,
         billing_address: {
           phone_number: request.phoneNumber,
-          email_address: 'resident@legacyhomes.co.ke', // Use a more appropriate placeholder
-          first_name: 'Resident',
-          last_name: 'Legacy Homes'
+          email_address: (request as any).residentEmail || 'resident@legacyhomes.co.ke',
+          first_name: firstName,
+          last_name: lastName
         },
       };
 
