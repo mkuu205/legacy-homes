@@ -20,7 +20,6 @@ export function ReconnectToast() {
         title: 'Connection Lost',
         description: 'Attempting to reconnect...',
         variant: 'destructive',
-        duration: Infinity,
       });
       offlineToastId.current = id;
     }
@@ -36,8 +35,7 @@ export function ReconnectToast() {
       toast({
         title: 'Connection Restored',
         description: 'You are back online.',
-        variant: 'success', // ✅ Using success variant instead of className
-        duration: 4000,
+        variant: 'success', // ✅ Using success variant
       });
     }
 
@@ -47,7 +45,6 @@ export function ReconnectToast() {
         title: 'Checking Connection...',
         description: 'Verifying system status.',
         variant: 'default',
-        duration: 3000,
       });
     }
 
@@ -57,7 +54,6 @@ export function ReconnectToast() {
         title: 'Connection Error',
         description: 'Unable to connect to the system.',
         variant: 'destructive',
-        duration: 5000,
       });
     }
 
