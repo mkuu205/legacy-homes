@@ -68,17 +68,20 @@ export class PesapalProvider implements PaymentProvider {
 
       const token = await this.getAccessToken();
 
+      // We should ideally pass resident details from the service layer, 
+      // but for now we use the phone and try to infer or use placeholders that are more professional.
       const payload = {
         id: request.externalReference,
         currency: 'KES',
         amount: request.amount,
-        description: 'Legacy Homes Water Bill',
+        description: `Legacy Homes Water Bill - ${request.billId}`,
         callback_url: this.callbackUrl,
         notification_id: this.ipnId,
         billing_address: {
           phone_number: request.phoneNumber,
-          email_address: 'resident@legacyhomes.local', // Placeholder as required by API
-          first_name: 'Resident', // Placeholder
+          email_address: 'resident@legacyhomes.co.ke', // Use a more appropriate placeholder
+          first_name: 'Resident',
+          last_name: 'Legacy Homes'
         },
       };
 

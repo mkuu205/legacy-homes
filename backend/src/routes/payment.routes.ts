@@ -9,6 +9,7 @@ const router: import("express").Router = Router();
 router.post('/initiate', authenticate, paymentController.initiatePayment.bind(paymentController));
 router.get('/my-payments', authenticate, paymentController.getMyPayments.bind(paymentController));
 router.get('/status/:paymentId', authenticate, paymentController.checkStatus.bind(paymentController));
+router.post('/verify/:paymentId', authenticate, paymentController.retryVerification.bind(paymentController));
 router.delete('/my-history', authenticate, paymentController.clearMyPaymentHistory.bind(paymentController));
 
 // Provider Webhooks / Callbacks

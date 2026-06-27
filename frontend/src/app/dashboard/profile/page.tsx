@@ -20,6 +20,7 @@ export default function ProfilePage() {
   const [profileData, setProfileData] = useState({
     fullName: user?.fullName || '',
     phone: user?.phone || '',
+    email: user?.email || '',
     houseNumber: user?.houseNumber || '',
   });
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -173,6 +174,10 @@ export default function ProfilePage() {
             <div className="fg">
               <label className="lbl">Full Name</label>
               <input value={profileData.fullName} onChange={e => setProfileData(d => ({ ...d, fullName: e.target.value }))} className="inp" />
+            </div>
+            <div className="fg">
+              <label className="lbl">Email Address</label>
+              <input value={profileData.email} onChange={e => setProfileData(d => ({ ...d, email: e.target.value }))} className="inp" />
             </div>
             <div className="fg">
               <label className="lbl">Phone Number</label>

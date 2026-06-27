@@ -131,6 +131,7 @@ enum PaymentMethodType {
   VISA
   MASTERCARD
   SAVED_CARD
+  CARD
 }
 
 // ─────────────────────────────────────────────

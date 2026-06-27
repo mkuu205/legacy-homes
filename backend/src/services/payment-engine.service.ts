@@ -142,7 +142,7 @@ export class PaymentEngineService {
           providerTransactionId: result.transactionId,
           providerOrderId: result.orderId,
           providerPayload: result as any,
-          // Store these specifically for Tuma as per spec
+          // Store these specifically for Tuma/Pesapal as per spec
           merchantRequestId: result.orderId,
           checkoutRequestId: result.transactionId,
         },
@@ -156,6 +156,7 @@ export class PaymentEngineService {
         transactionId: result.transactionId,
         orderId: result.orderId,
         checkoutUrl: result.checkoutUrl,
+        redirectUrl: result.checkoutUrl, // Support both names for frontend
         message: result.message,
       };
     } catch (error) {

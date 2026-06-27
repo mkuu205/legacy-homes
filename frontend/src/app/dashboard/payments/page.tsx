@@ -18,6 +18,8 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
+  Lock,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function PaymentsPage() {
@@ -29,14 +31,54 @@ export default function PaymentsPage() {
   const billIdParam = params.get('billId');
   const paymentIdParam = params.get('paymentId');
   const statusParam = params.get('status');
+  const orderTrackingId = params.get('OrderTrackingId'); // Pesapal redirect param
 
   const [selectedBillId, setSelectedBillId] = useState(billIdParam || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [amount, setAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'MPESA_STK_PUSH' | 'CARD_PAYMENT'>('MPESA_STK_PUSH');
+  const [paymentMethod, setPaymentMethod] = useState<'MPESA_STK_PUSH' | 'CARD'>('MPESA_STK_PUSH');
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(paymentIdParam || null);
   const [paymentStartedAt, setPaymentStartedAt] = useState<number | null>(null);
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(!!orderTrackingId);
+
+  // 0. Handle Pesapal Redirect Back
+  useEffect(() => {
+    if (orderTrackingId) {
+      handlePesapalReturn(orderTrackingId);
+    }
+  }, [orderTrackingId]);
+
+  const handlePesapalReturn = async (trackingId: string) => {
+    setIsVerifying(true);
+    try {
+      // Find the payment record with this order tracking ID
+      const res = await api.get(`/payments/my-payments?providerOrderId=${trackingId}`);
+      const payments = res.data.data?.payments || [];
+      if (payments.length > 0) {
+        const payment = payments[0];
+        setPendingPaymentId(payment.id);
+        
+        // If not already successful, trigger a verification
+        if (payment.status !== 'SUCCESSFUL') {
+          try {
+            await api.post(`/payments/verify/${payment.id}`);
+            queryClient.invalidateQueries({ queryKey: ['payment-status', payment.id] });
+          } catch (err) {
+            console.error('Verification failed:', err);
+          }
+        }
+      } else {
+        toast({ type: 'error', title: 'Payment not found', description: 'We could not find a record for this transaction.' });
+      }
+    } catch (err) {
+      console.error('Error handling Pesapal return:', err);
+    } finally {
+      setIsVerifying(false);
+      // Clean up URL
+      router.replace('/dashboard/payments');
+    }
+  };
 
   // 1. Resident Phone Number - Automatically load saved phone number
   useEffect(() => {
@@ -98,9 +140,14 @@ export default function PaymentsPage() {
         throw new Error('Please select a bill and enter amount');
       }
 
-      // Validate phone for M-Pesa
-      if (paymentMethod === 'MPESA_STK_PUSH' && !validatePhone(phone)) {
+      // Validate phone
+      if (!validatePhone(phone)) {
         throw new Error('Invalid Safaricom phone number.');
+      }
+
+      // Validate email for Card
+      if (paymentMethod === 'CARD' && !user?.email) {
+        throw new Error('Resident email is required for card payments.');
       }
 
       const res = await api.post('/payments/initiate', {
@@ -114,9 +161,9 @@ export default function PaymentsPage() {
       return res.data.data;
     },
     onSuccess: (data) => {
-      if (paymentMethod === 'CARD_PAYMENT' && data.checkoutUrl) {
+      if (paymentMethod === 'CARD' && data.redirectUrl) {
         // Redirect to Pesapal as per spec
-        window.location.href = data.checkoutUrl;
+        window.location.href = data.redirectUrl;
         return;
       }
       setPendingPaymentId(data.paymentId);
@@ -146,6 +193,7 @@ export default function PaymentsPage() {
   const selectedBill = billsData?.find((b: any) => b.id === selectedBillId);
   const maxAmount = selectedBill?.balance || 0;
   const isAmountValid = amount && parseFloat(amount) > 0 && parseFloat(amount) <= maxAmount;
+  const isFormValid = selectedBillId && user?.email && validatePhone(phone) && isAmountValid;
 
   // Handle payment status updates
   useEffect(() => {
@@ -246,7 +294,8 @@ export default function PaymentsPage() {
 
       {/* Payment Form */}
       <div style={{ padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
           {/* Bill Selection */}
           <div>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t1)', marginBottom: '6px' }}>Select Bill</label>
@@ -254,10 +303,11 @@ export default function PaymentsPage() {
               value={selectedBillId}
               onChange={(e) => {
                 setSelectedBillId(e.target.value);
-                setAmount('');
+                const bill = billsData?.find((b: any) => b.id === e.target.value);
+                if (bill) setAmount(bill.balance.toString());
               }}
               disabled={billsLoading}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c1)', color: 'var(--t1)', fontSize: '13px', boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c1)', color: 'var(--t1)', fontSize: '14px', boxSizing: 'border-box' }}
             >
               <option value="">Choose a bill...</option>
               {billsData?.map((bill: any) => (
@@ -268,45 +318,7 @@ export default function PaymentsPage() {
             </select>
           </div>
 
-          {/* Bill Details Summary */}
-          {selectedBill && (
-            <div style={{ background: 'var(--c1)', padding: '16px', borderRadius: '8px', border: '1px solid var(--bd)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0' }}>Bill Number</p>
-                <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{selectedBill.billNumber}</p>
-              </div>
-              <div>
-                <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0' }}>Amount Due</p>
-                <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>KES {selectedBill.balance}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Amount */}
-          {selectedBill && (
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t1)', marginBottom: '6px' }}>Amount to Pay (KES)</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  max={maxAmount}
-                  min="1"
-                  style={{ flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c1)', color: 'var(--t1)', fontSize: '13px', boxSizing: 'border-box' }}
-                />
-                <button
-                  onClick={() => setAmount(maxAmount.toString())}
-                  style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t1)', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
-                >
-                  Full Amount
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Payment Method */}
+          {/* Payment Method Toggle */}
           <div>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>Payment Method</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
@@ -320,84 +332,157 @@ export default function PaymentsPage() {
                   color: 'var(--t1)',
                   cursor: 'pointer',
                   fontSize: '13px',
-                  fontWeight: 500,
+                  fontWeight: 600,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
+                  gap: '8px',
                 }}
               >
-                <Smartphone size={16} />
+                <Smartphone size={18} />
                 M-Pesa
               </button>
               <button
-                onClick={() => setPaymentMethod('CARD_PAYMENT')}
+                onClick={() => setPaymentMethod('CARD')}
                 style={{
                   padding: '12px',
                   borderRadius: '8px',
-                  border: paymentMethod === 'CARD_PAYMENT' ? '2px solid #1434CB' : '1px solid var(--bd)',
-                  background: paymentMethod === 'CARD_PAYMENT' ? 'rgba(20, 52, 203, 0.1)' : 'var(--c1)',
+                  border: paymentMethod === 'CARD' ? '2px solid #1434CB' : '1px solid var(--bd)',
+                  background: paymentMethod === 'CARD' ? 'rgba(20, 52, 203, 0.1)' : 'var(--c1)',
                   color: 'var(--t1)',
                   cursor: 'pointer',
                   fontSize: '13px',
-                  fontWeight: 500,
+                  fontWeight: 600,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
+                  gap: '8px',
                 }}
               >
-                <CreditCard size={16} />
+                <CreditCard size={18} />
                 Card
               </button>
             </div>
           </div>
 
-          {/* Phone Number (Editable, defaults to saved number) */}
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t1)', marginBottom: '6px' }}>Resident Phone Number</label>
-            <input
-              type="tel"
-              placeholder="0712345678"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c1)', color: 'var(--t1)', fontSize: '13px', boxSizing: 'border-box' }}
-            />
-            <p style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '6px' }}>
-              {paymentMethod === 'MPESA_STK_PUSH' 
-                ? 'You will receive an M-Pesa prompt on this number.' 
-                : 'Used for payment notifications.'}
-            </p>
+          {/* Form Fields Based on Method */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px', borderRadius: '12px', background: 'var(--c1)', border: '1px solid var(--bd)' }}>
+            
+            {paymentMethod === 'CARD' && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1434CB', marginBottom: '4px' }}>
+                  <ShieldCheck size={18} />
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>Secure Card Payment</span>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: 'var(--t3)', marginBottom: '4px' }}>Resident Name</label>
+                    <input type="text" value={user?.fullName || ''} readOnly style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', color: 'var(--t2)', fontSize: '13px', cursor: 'not-allowed' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: 'var(--t3)', marginBottom: '4px' }}>Resident Email</label>
+                    <input type="text" value={user?.email || ''} readOnly style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', color: 'var(--t2)', fontSize: '13px', cursor: 'not-allowed' }} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', color: 'var(--t3)', marginBottom: '4px' }}>Resident Phone Number</label>
+              <input
+                type="tel"
+                placeholder="0712345678"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', color: 'var(--t1)', fontSize: '13px' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', color: 'var(--t3)', marginBottom: '4px' }}>Amount to Pay (KES)</label>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                max={maxAmount}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', color: 'var(--t1)', fontSize: '13px', fontWeight: 600 }}
+              />
+            </div>
+
+            {selectedBill && (
+              <div style={{ marginTop: '8px', padding: '12px', borderRadius: '8px', background: 'var(--c2)', border: '1px dashed var(--bd)' }}>
+                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px', borderBottom: '1px solid var(--bd)', paddingBottom: '4px' }}>Payment Summary</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                  <span style={{ color: 'var(--t3)' }}>Bill Number:</span>
+                  <span style={{ color: 'var(--t1)', fontWeight: 500, textAlign: 'right' }}>{selectedBill.billNumber}</span>
+                  <span style={{ color: 'var(--t3)' }}>Billing Period:</span>
+                  <span style={{ color: 'var(--t1)', fontWeight: 500, textAlign: 'right' }}>{selectedBill.billingMonth}</span>
+                  <span style={{ color: 'var(--t3)' }}>Amount Due:</span>
+                  <span style={{ color: 'var(--t1)', fontWeight: 500, textAlign: 'right' }}>KES {selectedBill.balance}</span>
+                  <span style={{ color: 'var(--t3)', fontWeight: 600 }}>Amount Being Paid:</span>
+                  <span style={{ color: paymentMethod === 'CARD' ? '#1434CB' : '#00C9A7', fontWeight: 700, textAlign: 'right' }}>KES {amount || 0}</span>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Pay Button */}
+          {paymentMethod === 'CARD' && (
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: '11px', color: 'var(--t3)', marginBottom: '8px' }}>Accepted cards: Visa & Mastercard</p>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '12px' }}>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg" alt="Visa" style={{ height: '16px', opacity: 0.7 }} />
+                <img src="https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg" alt="Mastercard" style={{ height: '20px', opacity: 0.7 }} />
+              </div>
+              <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(20, 52, 203, 0.05)', border: '1px solid rgba(20, 52, 203, 0.1)' }}>
+                <p style={{ fontSize: '11px', color: '#1434CB', margin: 0, lineHeight: 1.4 }}>
+                  Your card details are entered securely on Pesapal. Legacy Homes never stores or processes your card information.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Action Button */}
           <button
             onClick={() => initiatePaymentMutation.mutate()}
-            disabled={!isAmountValid || initiatePaymentMutation.isPending}
+            disabled={!isFormValid || initiatePaymentMutation.isPending}
             style={{
-              padding: '14px 24px',
-              borderRadius: '8px',
-              background: isAmountValid ? (paymentMethod === 'MPESA_STK_PUSH' ? '#00C9A7' : '#1434CB') : '#999',
+              padding: '16px',
+              borderRadius: '10px',
+              background: isFormValid ? (paymentMethod === 'CARD' ? '#1434CB' : '#00C9A7') : '#cbd5e1',
               color: 'white',
               border: 'none',
-              cursor: isAmountValid ? 'pointer' : 'not-allowed',
+              cursor: isFormValid ? 'pointer' : 'not-allowed',
               fontSize: '15px',
-              fontWeight: 600,
-              marginTop: '8px',
+              fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '8px',
+              gap: '10px',
+              transition: 'all 0.2s ease',
             }}
           >
             {initiatePaymentMutation.isPending ? (
-              <Loader2 size={18} className="animate-spin" />
+              <Loader2 size={20} className="animate-spin" />
             ) : (
               <>
-                {paymentMethod === 'MPESA_STK_PUSH' ? 'Initiate M-Pesa Payment' : 'Pay with Card'}
+                {paymentMethod === 'CARD' ? (
+                  <>
+                    <Lock size={18} />
+                    Continue to Secure Payment
+                  </>
+                ) : (
+                  'Initiate M-Pesa Payment'
+                )}
               </>
             )}
           </button>
+          
+          {!user?.email && paymentMethod === 'CARD' && (
+            <p style={{ fontSize: '11px', color: '#ef4444', textAlign: 'center', margin: 0 }}>
+              Please update your email in your profile to use card payments.
+            </p>
+          )}
         </div>
       </div>
 

@@ -25,6 +25,7 @@ export class PaymentService {
     const where: any = { residentId };
     if (query.status) where.status = query.status;
     if (query.billId) where.billId = query.billId;
+    if (query.providerOrderId) where.providerOrderId = query.providerOrderId;
 
     const [payments, total] = await Promise.all([
       prisma.payment.findMany({

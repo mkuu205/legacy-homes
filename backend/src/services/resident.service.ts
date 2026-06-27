@@ -120,6 +120,7 @@ export class ResidentService {
   async updateProfile(userId: string, data: {
     fullName?: string;
     phone?: string;
+    email?: string;
     nationalId?: string;
   }) {
     const updated = await prisma.user.update({
