@@ -344,6 +344,35 @@ export default function PaymentsPage() {
           <ArrowLeft size={20} />
         </button>
         <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>Make Payment</h1>
+        <button
+          onClick={() => router.push('/dashboard/payments/history')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginLeft: 'auto',
+            background: 'none',
+            border: 'none',
+            color: 'var(--t2)',
+            fontSize: '13px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            padding: '6px 12px',
+            borderRadius: '6px',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'var(--ac)';
+            e.currentTarget.style.background = 'rgba(0, 198, 167, 0.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--t2)';
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          <History size={16} />
+          History
+        </button>
       </div>
 
       {/* Select Bill */}
@@ -420,52 +449,47 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      {/* Payment Methods */}
+      {/* Payment Methods - Reduced size */}
       <div style={{ marginBottom: '16px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '12px' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '10px' }}>
           Payment Method
         </label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {/* M-Pesa Card */}
           <div
             onClick={() => setPaymentMethod('MPESA_STK_PUSH')}
             style={{
-              padding: '16px',
-              borderRadius: '12px',
+              padding: '12px 14px',
+              borderRadius: '10px',
               border: paymentMethod === 'MPESA_STK_PUSH' ? '2px solid var(--ac)' : '1px solid var(--bd)',
               background: paymentMethod === 'MPESA_STK_PUSH' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
               cursor: 'pointer',
               transition: 'all 0.2s',
               display: 'flex',
-              gap: '16px',
-              alignItems: 'flex-start'
+              gap: '12px',
+              alignItems: 'center'
             }}
           >
             <div style={{ 
-              width: '40px', 
-              height: '40px', 
-              borderRadius: '8px', 
+              width: '32px', 
+              height: '32px', 
+              borderRadius: '6px', 
               background: paymentMethod === 'MPESA_STK_PUSH' ? 'var(--ac)' : 'var(--bd)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0
             }}>
-              <Smartphone size={20} color={paymentMethod === 'MPESA_STK_PUSH' ? 'white' : 'var(--t3)'} />
+              <Smartphone size={16} color={paymentMethod === 'MPESA_STK_PUSH' ? 'white' : 'var(--t3)'} />
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>M-Pesa</span>
-                <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--t3)', background: 'var(--bd)', padding: '2px 8px', borderRadius: '4px' }}>
-                  Powered by Tuma
-                </span>
-                {paymentMethod === 'MPESA_STK_PUSH' && (
-                  <ChevronRight size={16} style={{ color: 'var(--ac)', marginLeft: 'auto' }} />
-                )}
-              </div>
-              <p style={{ fontSize: '13px', color: 'var(--t2)', margin: 0 }}>
-                Pay instantly using Safaricom STK Push.
-              </p>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>M-Pesa</span>
+              <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--t3)', background: 'var(--bd)', padding: '2px 6px', borderRadius: '3px' }}>
+                Tuma
+              </span>
+              {paymentMethod === 'MPESA_STK_PUSH' && (
+                <ChevronRight size={14} style={{ color: 'var(--ac)', marginLeft: 'auto' }} />
+              )}
             </div>
           </div>
 
@@ -473,42 +497,37 @@ export default function PaymentsPage() {
           <div
             onClick={() => setPaymentMethod('CARD')}
             style={{
-              padding: '16px',
-              borderRadius: '12px',
+              padding: '12px 14px',
+              borderRadius: '10px',
               border: paymentMethod === 'CARD' ? '2px solid var(--ac)' : '1px solid var(--bd)',
               background: paymentMethod === 'CARD' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
               cursor: 'pointer',
               transition: 'all 0.2s',
               display: 'flex',
-              gap: '16px',
-              alignItems: 'flex-start'
+              gap: '12px',
+              alignItems: 'center'
             }}
           >
             <div style={{ 
-              width: '40px', 
-              height: '40px', 
-              borderRadius: '8px', 
+              width: '32px', 
+              height: '32px', 
+              borderRadius: '6px', 
               background: paymentMethod === 'CARD' ? 'var(--ac)' : 'var(--bd)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0
             }}>
-              <CreditCard size={20} color={paymentMethod === 'CARD' ? 'white' : 'var(--t3)'} />
+              <CreditCard size={16} color={paymentMethod === 'CARD' ? 'white' : 'var(--t3)'} />
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>Debit / Credit Card</span>
-                <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--t3)', background: 'var(--bd)', padding: '2px 8px', borderRadius: '4px' }}>
-                  Powered by Pesapal
-                </span>
-                {paymentMethod === 'CARD' && (
-                  <ChevronRight size={16} style={{ color: 'var(--ac)', marginLeft: 'auto' }} />
-                )}
-              </div>
-              <p style={{ fontSize: '13px', color: 'var(--t2)', margin: 0 }}>
-                Visa • Mastercard • Secure online payment.
-              </p>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>Card</span>
+              <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--t3)', background: 'var(--bd)', padding: '2px 6px', borderRadius: '3px' }}>
+                Pesapal
+              </span>
+              {paymentMethod === 'CARD' && (
+                <ChevronRight size={14} style={{ color: 'var(--ac)', marginLeft: 'auto' }} />
+              )}
             </div>
           </div>
         </div>
@@ -536,9 +555,9 @@ export default function PaymentsPage() {
                 </span>
                 <button 
                   onClick={() => setShowPhoneInput(true)}
-                  style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ac)', background: 'none', border: 'none', cursor: 'pointer' }}
+                  style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ac)', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
-                  Use another number
+                  Change
                 </button>
               </>
             ) : (
@@ -570,7 +589,7 @@ export default function PaymentsPage() {
                     setPhone(user?.phone || '');
                     setPhoneError('');
                   }}
-                  style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t3)', background: 'none', border: 'none', cursor: 'pointer', marginLeft: '12px' }}
+                  style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t3)', background: 'none', border: 'none', cursor: 'pointer', marginLeft: '12px' }}
                 >
                   Use default
                 </button>
@@ -589,26 +608,23 @@ export default function PaymentsPage() {
       {paymentMethod === 'CARD' && (
         <div style={{ 
           marginBottom: '20px', 
-          padding: '16px', 
-          borderRadius: '12px', 
+          padding: '12px 14px', 
+          borderRadius: '10px', 
           background: 'rgba(0, 198, 167, 0.05)', 
           border: '1px solid rgba(0, 198, 167, 0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <Shield size={20} style={{ color: 'var(--ac)' }} />
-            <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>Secure Card Payment</span>
+          <Shield size={18} style={{ color: 'var(--ac)', flexShrink: 0 }} />
+          <div>
+            <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>
+              Secure Card Payment
+            </p>
+            <p style={{ fontSize: '12px', color: 'var(--t2)', margin: '2px 0 0 0' }}>
+              Visa • Mastercard • Secured by Pesapal
+            </p>
           </div>
-          <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t2)' }}>Visa</span>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t2)' }}>Mastercard</span>
-          </div>
-          <p style={{ fontSize: '13px', color: 'var(--t2)', margin: '0 0 8px 0' }}>
-            Your payment will be securely processed by Pesapal.
-          </p>
-          <p style={{ fontSize: '12px', color: 'var(--t3)', margin: 0 }}>
-            <Lock size={12} style={{ display: 'inline', marginRight: '6px' }} />
-            Legacy Homes never stores or processes your card information.
-          </p>
         </div>
       )}
 
@@ -632,12 +648,12 @@ export default function PaymentsPage() {
         disabled={initiatePaymentMutation.isPending}
         style={{ 
           width: '100%', 
-          padding: '16px', 
-          borderRadius: '12px', 
+          padding: '14px', 
+          borderRadius: '10px', 
           background: isFormValid ? 'var(--ac)' : 'var(--bd)', 
           color: isFormValid ? 'white' : 'var(--t3)', 
           border: 'none', 
-          fontSize: '16px', 
+          fontSize: '15px', 
           fontWeight: 700, 
           cursor: isFormValid ? 'pointer' : 'not-allowed',
           display: 'flex',
@@ -649,45 +665,13 @@ export default function PaymentsPage() {
       >
         {initiatePaymentMutation.isPending ? (
           <>
-            <Loader2 size={20} className="animate-spin" />
+            <Loader2 size={18} className="animate-spin" />
             {paymentMethod === 'CARD' ? 'Redirecting to Pesapal...' : 'Processing Payment...'}
           </>
         ) : (
           paymentMethod === 'CARD' ? 'Pay with Card' : 'Pay with M-Pesa'
         )}
       </button>
-
-      {/* Payment History Link */}
-      <div style={{ marginTop: '20px', textAlign: 'center' }}>
-        <button
-          onClick={() => router.push('/dashboard/payments/history')}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'none',
-            border: 'none',
-            color: 'var(--t2)',
-            fontSize: '14px',
-            fontWeight: 500,
-            cursor: 'pointer',
-            padding: '8px 16px',
-            borderRadius: '8px',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = 'var(--ac)';
-            e.currentTarget.style.background = 'rgba(0, 198, 167, 0.05)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'var(--t2)';
-            e.currentTarget.style.background = 'transparent';
-          }}
-        >
-          <History size={16} />
-          View Payment History
-        </button>
-      </div>
     </div>
   );
 }
