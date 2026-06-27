@@ -139,7 +139,7 @@ export default function PaymentsPage() {
 
       const payload: any = {
         billId: selectedBillId,
-        amount: selectedBill.balance, // Include the amount from the selected bill
+        amount: selectedBill.balance,
         provider: paymentMethod === 'MPESA_STK_PUSH' ? 'TUMA' : 'PESAPAL',
         paymentMethod: paymentMethod,
       };
@@ -369,6 +369,25 @@ export default function PaymentsPage() {
           </div>
         )}
       </div>
+
+      {/* Amount Display - Show when bill is selected */}
+      {selectedBill && (
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '16px', 
+          borderRadius: '12px', 
+          border: '1px solid var(--bd)', 
+          background: 'var(--c1)',
+          textAlign: 'center'
+        }}>
+          <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Amount to Pay
+          </p>
+          <p style={{ fontSize: '28px', fontWeight: 800, color: 'var(--ac)', margin: 0 }}>
+            KES {selectedBill.balance?.toLocaleString()}
+          </p>
+        </div>
+      )}
 
       {/* Payment Methods */}
       <div style={{ marginBottom: '16px' }}>
