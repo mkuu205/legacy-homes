@@ -356,12 +356,11 @@ export class PaymentEngineService {
 
         // Send notification
         try {
-          await notificationService.createNotification({
-            userId: payment.residentId,
-            type: 'PAYMENT_SUCCESSFUL',
-            title: 'Payment Successful',
-            message: `Your payment of KES ${payment.amount} for bill ${payment.bill.billNumber} has been confirmed.`,
-          });
+          await notificationService.sendPaymentSuccessNotification(
+            payment.residentId,
+            payment.amount,
+            payment.confirmationCode || undefined
+          );
           logger.info(`[CALLBACK] Notification sent to resident`, { residentId: payment.residentId, auditId });
         } catch (notificationError) {
           logger.error(`[CALLBACK] Failed to send notification: ${notificationError}`, { residentId: payment.residentId, auditId });
