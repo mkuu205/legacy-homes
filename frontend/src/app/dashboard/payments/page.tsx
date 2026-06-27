@@ -125,6 +125,11 @@ export default function PaymentsPage() {
         throw new Error('Please select a bill');
       }
 
+      const selectedBill = billsData?.find((b: any) => b.id === selectedBillId);
+      if (!selectedBill) {
+        throw new Error('Selected bill not found');
+      }
+
       if (paymentMethod === 'MPESA_STK_PUSH') {
         if (!phone) throw new Error('Phone number is required');
         if (!validatePhone(phone)) {
@@ -134,6 +139,7 @@ export default function PaymentsPage() {
 
       const payload: any = {
         billId: selectedBillId,
+        amount: selectedBill.balance, // Include the amount from the selected bill
         provider: paymentMethod === 'MPESA_STK_PUSH' ? 'TUMA' : 'PESAPAL',
         paymentMethod: paymentMethod,
       };
@@ -172,6 +178,7 @@ export default function PaymentsPage() {
     },
   });
 
+  const selectedBill = billsData?.find((b: any) => b.id === selectedBillId);
   const isFormValid = selectedBillId && (paymentMethod === 'CARD' || (paymentMethod === 'MPESA_STK_PUSH' && phone && validatePhone(phone)));
 
   useEffect(() => {
