@@ -31,6 +31,7 @@ export default function PaymentsPage() {
   const orderTrackingId = params.get('OrderTrackingId');
 
   const [selectedBillId, setSelectedBillId] = useState('');
+  const [amount, setAmount] = useState('');
   const [phone, setPhone] = useState(user?.phone || '');
   const [showPhoneInput, setShowPhoneInput] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'MPESA_STK_PUSH' | 'CARD'>('MPESA_STK_PUSH');
@@ -88,9 +89,20 @@ export default function PaymentsPage() {
       const bill = billsData.find((b: any) => b.id === billIdParam);
       if (bill) {
         setSelectedBillId(bill.id);
+        setAmount(bill.balance.toString());
       }
     }
   }, [billIdParam, billsData]);
+
+  // Auto-set amount when bill is selected
+  useEffect(() => {
+    if (selectedBillId && billsData) {
+      const bill = billsData.find((b: any) => b.id === selectedBillId);
+      if (bill) {
+        setAmount(bill.balance.toString());
+      }
+    }
+  }, [selectedBillId, billsData]);
 
   // Fetch payment status
   const { data: statusData } = useQuery({
@@ -125,9 +137,17 @@ export default function PaymentsPage() {
         throw new Error('Please select a bill');
       }
 
+      if (!amount || parseFloat(amount) <= 0) {
+        throw new Error('Please enter a valid amount');
+      }
+
       const selectedBill = billsData?.find((b: any) => b.id === selectedBillId);
       if (!selectedBill) {
         throw new Error('Selected bill not found');
+      }
+
+      if (parseFloat(amount) > selectedBill.balance) {
+        throw new Error('Amount cannot exceed the outstanding balance');
       }
 
       if (paymentMethod === 'MPESA_STK_PUSH') {
@@ -139,7 +159,7 @@ export default function PaymentsPage() {
 
       const payload: any = {
         billId: selectedBillId,
-        amount: selectedBill.balance,
+        amount: parseFloat(amount),
         provider: paymentMethod === 'MPESA_STK_PUSH' ? 'TUMA' : 'PESAPAL',
         paymentMethod: paymentMethod,
       };
@@ -179,7 +199,8 @@ export default function PaymentsPage() {
   });
 
   const selectedBill = billsData?.find((b: any) => b.id === selectedBillId);
-  const isFormValid = selectedBillId && (paymentMethod === 'CARD' || (paymentMethod === 'MPESA_STK_PUSH' && phone && validatePhone(phone)));
+  const isFormValid = selectedBillId && amount && parseFloat(amount) > 0 && 
+    (paymentMethod === 'CARD' || (paymentMethod === 'MPESA_STK_PUSH' && phone && validatePhone(phone)));
 
   useEffect(() => {
     if (statusData?.status === 'SUCCESSFUL') {
@@ -325,7 +346,7 @@ export default function PaymentsPage() {
         <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>Make Payment</h1>
       </div>
 
-      {/* Select Bill - Dropdown */}
+      {/* Select Bill */}
       <div style={{ marginBottom: '20px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
           Select Bill
@@ -370,24 +391,34 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      {/* Amount Display - Show when bill is selected */}
-      {selectedBill && (
-        <div style={{ 
-          marginBottom: '20px', 
-          padding: '16px', 
-          borderRadius: '12px', 
-          border: '1px solid var(--bd)', 
-          background: 'var(--c1)',
-          textAlign: 'center'
-        }}>
-          <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Amount to Pay
+      {/* Amount Input */}
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
+          Amount (KES) <span style={{ color: '#ef4444' }}>*</span>
+        </label>
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="Enter amount"
+          style={{
+            width: '100%',
+            padding: '12px',
+            borderRadius: '8px',
+            border: '1px solid var(--bd)',
+            background: 'var(--c1)',
+            color: 'var(--t1)',
+            fontSize: '14px',
+            outline: 'none',
+            fontFamily: 'inherit'
+          }}
+        />
+        {selectedBill && (
+          <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '4px 0 0 0' }}>
+            Outstanding balance: KES {selectedBill.balance?.toLocaleString()}
           </p>
-          <p style={{ fontSize: '28px', fontWeight: 800, color: 'var(--ac)', margin: 0 }}>
-            KES {selectedBill.balance?.toLocaleString()}
-          </p>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Payment Methods */}
       <div style={{ marginBottom: '16px' }}>
@@ -487,11 +518,11 @@ export default function PaymentsPage() {
       {paymentMethod === 'MPESA_STK_PUSH' && (
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
-            Pay Using
+            Phone Number <span style={{ color: '#ef4444' }}>*</span>
           </label>
           <div style={{ 
-            padding: '14px', 
-            borderRadius: '12px', 
+            padding: '12px', 
+            borderRadius: '8px', 
             border: phoneError ? '2px solid #ef4444' : '1px solid var(--bd)', 
             background: 'var(--c1)',
             display: 'flex',
@@ -500,7 +531,7 @@ export default function PaymentsPage() {
           }}>
             {!showPhoneInput ? (
               <>
-                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>
+                <span style={{ fontSize: '14px', color: 'var(--t1)' }}>
                   {phone || 'Not set'}
                 </span>
                 <button 
@@ -528,8 +559,7 @@ export default function PaymentsPage() {
                     borderBottom: '2px solid var(--ac)', 
                     background: 'transparent', 
                     color: 'var(--t1)', 
-                    fontSize: '15px', 
-                    fontWeight: 600,
+                    fontSize: '14px',
                     outline: 'none',
                     fontFamily: 'inherit'
                   }}
@@ -542,7 +572,7 @@ export default function PaymentsPage() {
                   }}
                   style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t3)', background: 'none', border: 'none', cursor: 'pointer', marginLeft: '12px' }}
                 >
-                  Use default number
+                  Use default
                 </button>
               </>
             )}
@@ -589,6 +619,10 @@ export default function PaymentsPage() {
             toast({ type: 'error', title: 'Please select a bill', description: 'Choose a bill to pay from the dropdown above.' });
             return;
           }
+          if (!amount || parseFloat(amount) <= 0) {
+            toast({ type: 'error', title: 'Invalid amount', description: 'Please enter a valid amount to pay.' });
+            return;
+          }
           if (paymentMethod === 'MPESA_STK_PUSH' && !validatePhone(phone)) {
             setPhoneError('Please enter a valid Safaricom number (e.g., 0712345678)');
             return;
@@ -600,12 +634,12 @@ export default function PaymentsPage() {
           width: '100%', 
           padding: '16px', 
           borderRadius: '12px', 
-          background: selectedBillId ? 'var(--ac)' : 'var(--bd)', 
-          color: selectedBillId ? 'white' : 'var(--t3)', 
+          background: isFormValid ? 'var(--ac)' : 'var(--bd)', 
+          color: isFormValid ? 'white' : 'var(--t3)', 
           border: 'none', 
           fontSize: '16px', 
           fontWeight: 700, 
-          cursor: selectedBillId ? 'pointer' : 'not-allowed',
+          cursor: isFormValid ? 'pointer' : 'not-allowed',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -623,7 +657,7 @@ export default function PaymentsPage() {
         )}
       </button>
 
-      {/* Payment History Link - Below payment button */}
+      {/* Payment History Link */}
       <div style={{ marginTop: '20px', textAlign: 'center' }}>
         <button
           onClick={() => router.push('/dashboard/payments/history')}
