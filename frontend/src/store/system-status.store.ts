@@ -435,14 +435,28 @@ export const useSystemStatusSelectors = () => {
     },
     
     getConnectionQualityLabel: (): string => {
-      const quality = get().getConnectionQuality();
-      if (!quality) return 'Unknown';
+      const { healthLatency } = store;
+      if (healthLatency === null) return 'Unknown';
+      
+      let quality: ConnectionQuality;
+      if (healthLatency < 100) quality = 'EXCELLENT';
+      else if (healthLatency < 300) quality = 'GOOD';
+      else if (healthLatency < 800) quality = 'FAIR';
+      else quality = 'POOR';
+      
       return quality.charAt(0) + quality.slice(1).toLowerCase();
     },
     
     getConnectionQualityColor: (): string => {
-      const quality = get().getConnectionQuality();
-      if (!quality) return 'text-gray-400';
+      const { healthLatency } = store;
+      if (healthLatency === null) return 'text-gray-400';
+      
+      let quality: ConnectionQuality;
+      if (healthLatency < 100) quality = 'EXCELLENT';
+      else if (healthLatency < 300) quality = 'GOOD';
+      else if (healthLatency < 800) quality = 'FAIR';
+      else quality = 'POOR';
+      
       switch (quality) {
         case 'EXCELLENT': return 'text-green-600';
         case 'GOOD': return 'text-blue-600';
