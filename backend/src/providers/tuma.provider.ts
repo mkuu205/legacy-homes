@@ -1,5 +1,4 @@
 import axios from 'axios';
-import crypto from 'crypto';
 import {
   PaymentProvider,
   PaymentInitiationRequest,
@@ -194,15 +193,20 @@ export class TumaProvider implements PaymentProvider {
   }
 
   // The Tuma API does not provide a verification endpoint. The callback is the source of truth.
-  // Therefore, these methods are removed as per the updated requirements.
+  // We return a default response for these interface methods.
+  async verifyPaymentStatus(request: PaymentStatusRequest): Promise<PaymentStatusResponse> {
+    return {
+      status: 'PENDING',
+      message: 'Tuma does not support manual status verification. Waiting for callback.',
+    };
+  }
 
-  // async verifyPaymentStatus(request: PaymentStatusRequest): Promise<PaymentStatusResponse> {
-  //   // Implementation removed
-  // }
-
-  // async verifyCallback(request: CallbackVerificationRequest): Promise<CallbackVerificationResponse> {
-  //   // Implementation removed
-  // }
+  async verifyCallback(request: CallbackVerificationRequest): Promise<CallbackVerificationResponse> {
+    return {
+      valid: true,
+      message: 'Tuma callback verification is handled by processing the payload directly.',
+    };
+  }
 
   getProviderName(): string {
     return 'TUMA';

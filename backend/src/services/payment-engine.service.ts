@@ -3,9 +3,10 @@ import { PaymentProvider } from '../providers/payment-provider.interface';
 import { TumaProvider } from '../providers/tuma.provider';
 import { PesapalProvider } from '../providers/pesapal.provider';
 import { logger } from '../utils/logger';
-import { PaymentProviderType, PaymentStatus, PaymentMethodType } from '@prisma/client';
+import { PaymentProviderType, PaymentStatus, PaymentMethodType, BillStatus } from '@prisma/client';
 import { notificationService } from './notification.service';
 import { receiptService } from './receipt.service';
+import { io } from '../server';
 
 export class PaymentEngineService {
   private providers: Map<string, PaymentProvider> = new Map();
@@ -52,7 +53,7 @@ export class PaymentEngineService {
     residentId: string,
     provider: PaymentProviderType,
     paymentMethod: PaymentMethodType,
-    phoneNumber: string,
+    phoneNumber: string | undefined,
     amount: number
   ) {
     try {
@@ -78,6 +79,16 @@ export class PaymentEngineService {
         throw new Error(`Amount exceeds outstanding balance of KES ${bill.balance}`);
       }
 
+      // 2. Backend Phone Resolution
+      let finalPhoneNumber = phoneNumber;
+      if (!finalPhoneNumber) {
+        finalPhoneNumber = bill.resident.phone;
+      }
+
+      if (!finalPhoneNumber) {
+        throw new Error('Phone number not found for resident.');
+      }
+
       // Create payment record
       const payment = await prisma.payment.create({
         data: {
@@ -85,7 +96,7 @@ export class PaymentEngineService {
           paymentMethod,
           residentId,
           billId,
-          phoneNumber,
+          phoneNumber: finalPhoneNumber,
           amount,
           status: PaymentStatus.PENDING,
           merchantReference: `${bill.billNumber}-${Date.now()}`,
@@ -103,7 +114,7 @@ export class PaymentEngineService {
       // Initiate payment through provider
       const result = await paymentProvider.initiatePayment({
         amount,
-        phoneNumber,
+        phoneNumber: finalPhoneNumber,
         billId,
         residentId,
         externalReference: payment.id,
@@ -131,6 +142,9 @@ export class PaymentEngineService {
           providerTransactionId: result.transactionId,
           providerOrderId: result.orderId,
           providerPayload: result as any,
+          // Store these specifically for Tuma as per spec
+          merchantRequestId: result.orderId,
+          checkoutRequestId: result.transactionId,
         },
       });
 
@@ -167,13 +181,7 @@ export class PaymentEngineService {
         throw new Error('Payment not found');
       }
 
-      const provider = this.getProvider(payment.provider);
-      if (!provider) {
-        throw new Error(`Provider ${payment.provider} not configured`);
-      }
-
       // For Tuma, the callback is the source of truth, so we don't re-verify with the provider.
-      // We return the current status of the payment from our database.
       if (payment.provider === 'TUMA') {
         return {
           status: payment.status,
@@ -182,7 +190,12 @@ export class PaymentEngineService {
         };
       }
 
-      // For other providers, proceed with verification (if applicable)
+      const provider = this.getProvider(payment.provider);
+      if (!provider) {
+        throw new Error(`Provider ${payment.provider} not configured`);
+      }
+
+      // For other providers (Pesapal), proceed with verification
       const result = await provider.verifyPaymentStatus({
         transactionId: payment.providerTransactionId || undefined,
         orderId: payment.providerOrderId || undefined,
@@ -203,17 +216,21 @@ export class PaymentEngineService {
           status = PaymentStatus.PENDING;
       }
 
-      await prisma.payment.update({
-        where: { id: paymentId },
-        data: {
-          status,
-          providerStatus: result.status,
-          providerMessage: result.message,
-          verificationTimestamp: result.timestamp,
-          verifiedBy: 'SYSTEM',
-          providerPayload: result.providerData as any,
-        },
-      });
+      // If status changed to SUCCESSFUL, we need to update the bill etc.
+      if (status === PaymentStatus.SUCCESSFUL && payment.status !== PaymentStatus.SUCCESSFUL) {
+        await this.processSuccessfulPayment(payment.id, result.providerData);
+      } else if (status !== payment.status) {
+        await prisma.payment.update({
+          where: { id: paymentId },
+          data: {
+            status,
+            providerStatus: result.status,
+            providerMessage: result.message,
+            verificationTimestamp: result.timestamp || new Date(),
+            providerPayload: result.providerData as any,
+          },
+        });
+      }
 
       return {
         status,
@@ -256,164 +273,13 @@ export class PaymentEngineService {
         throw new Error(`Provider ${provider} not configured`);
       }
 
-      // 2. Process callback payload directly as the authoritative source
-      // The Tuma API does not provide a verification endpoint, so the callback is the source of truth.
-
-      const { status, result_code, merchant_request_id, checkout_request_id, mpesa_receipt_number, amount, result_desc, failure_reason } = payload;
-
-      // 3. Check for idempotency first
-      const existingPayment = await prisma.payment.findFirst({
-        where: {
-          OR: [
-            { providerOrderId: checkout_request_id },
-            { confirmationCode: mpesa_receipt_number },
-          ],
-        },
-      });
-
-      if (existingPayment && existingPayment.status === PaymentStatus.SUCCESSFUL) {
-        logger.info(`[TUMA CALLBACK] Payment already processed (idempotent) for checkout_request_id: ${checkout_request_id} or mpesa_receipt_number: ${mpesa_receipt_number}`, { auditId });
-        await prisma.callbackAudit.update({
-          where: { id: auditId },
-          data: {
-            processed: true,
-            paymentId: existingPayment.id,
-            processingResult: JSON.stringify({ duplicate: true, status: 'SUCCESSFUL' }),
-          },
-        });
-        return {
-          success: true,
-          message: 'Payment already processed',
-          paymentId: existingPayment.id,
-          status: PaymentStatus.SUCCESSFUL,
-        };
+      if (provider === 'TUMA') {
+        return await this.handleTumaCallback(payload, auditId);
+      } else if (provider === 'PESAPAL') {
+        return await this.handlePesapalCallback(payload, auditId);
       }
 
-      // 4. Find the payment record using merchant_request_id (from initiatePayment)
-      const payment = await prisma.payment.findFirst({
-        where: {
-          providerOrderId: merchant_request_id, // This is the merchant_request_id from initiatePayment
-        },
-        include: { bill: true, resident: true },
-      });
-
-      if (!payment) {
-        logger.warn(`[TUMA CALLBACK] Payment not found for merchant_request_id: ${merchant_request_id}`, { auditId, payload });
-        await prisma.callbackAudit.update({
-          where: { id: auditId },
-          data: {
-            processed: true,
-            processingResult: JSON.stringify({ found: false, merchant_request_id }),
-          },
-        });
-        return {
-          success: false,
-          message: 'Payment not found for this request',
-        };
-      }
-
-      let paymentStatus: PaymentStatus;
-      let logMessage: string;
-
-      if (status === 'completed' && result_code === 0) {
-        paymentStatus = PaymentStatus.SUCCESSFUL;
-        logMessage = '[TUMA CALLBACK] Payment completed successfully';
-
-        // Update payment record
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: paymentStatus,
-            providerStatus: status,
-            providerMessage: result_desc || 'Payment successful',
-            providerTransactionId: checkout_request_id, // Tuma's checkout_request_id is the transaction ID
-            confirmationCode: mpesa_receipt_number,
-            providerPayload: payload as any,
-            verificationTimestamp: new Date(),
-            verifiedBy: 'TUMA_CALLBACK',
-          },
-        });
-
-        // Update bill
-        const updatedAmountPaid = payment.bill.amountPaid + (amount || 0);
-        const newBalance = payment.bill.totalAmount - updatedAmountPaid;
-        const newBillStatus = newBalance <= 0 ? 'PAID' : 'PARTIAL';
-
-        await prisma.bill.update({
-          where: { id: payment.billId },
-          data: {
-            status: newBillStatus,
-            amountPaid: updatedAmountPaid,
-            balance: newBalance,
-            paidAt: new Date(),
-          },
-        });
-
-        logger.info(`[TUMA CALLBACK] Bill ${payment.billId} updated to status: ${newBillStatus}`, { auditId, paymentId: payment.id });
-
-        // Generate receipt
-        try {
-          const receipt = await receiptService.generateReceipt(payment.id);
-          logger.info(`[TUMA CALLBACK] Receipt generated: ${receipt.id}`, { paymentId: payment.id, auditId });
-        } catch (receiptError) {
-          logger.error(`[TUMA CALLBACK] Failed to generate receipt: ${receiptError}`, { paymentId: payment.id, auditId });
-        }
-
-        // Send notification
-        try {
-          await notificationService.sendPaymentSuccessNotification(
-            payment.residentId,
-            amount || payment.amount,
-            mpesa_receipt_number || undefined
-          );
-          logger.info(`[TUMA CALLBACK] Notification sent to resident ${payment.residentId}`, { auditId, paymentId: payment.id });
-        } catch (notificationError) {
-          logger.error(`[TUMA CALLBACK] Failed to send notification: ${notificationError}`, { residentId: payment.residentId, auditId });
-        }
-
-        // TODO: Broadcast payment update through Socket.IO (not implemented yet)
-        // For now, just log that it needs to be done.
-        logger.info(`[TUMA CALLBACK] Socket.IO broadcast for payment ${payment.id} is pending implementation.`, { auditId });
-
-      } else {
-        paymentStatus = PaymentStatus.FAILED;
-        logMessage = '[TUMA CALLBACK] Payment failed';
-
-        // Update payment record as failed
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: paymentStatus,
-            providerStatus: status,
-            providerMessage: result_desc || failure_reason || 'Payment failed',
-            failureReason: result_desc || failure_reason || 'Provider reported failure',
-            providerPayload: payload as any,
-            verificationTimestamp: new Date(),
-            verifiedBy: 'TUMA_CALLBACK',
-          },
-        });
-
-        logger.warn(`[TUMA CALLBACK] Payment ${payment.id} marked as FAILED. Reason: ${result_desc || failure_reason}`, { auditId, paymentId: payment.id });
-      }
-
-      // 5. Update callback audit with final processing result
-      await prisma.callbackAudit.update({
-        where: { id: auditId },
-        data: {
-          processed: true,
-          paymentId: payment.id,
-          processingResult: JSON.stringify({ status: paymentStatus, message: logMessage, payload }),
-        },
-      });
-
-      logger.info(`${logMessage} for payment ${payment.id}`, { auditId });
-
-      return {
-        success: paymentStatus === PaymentStatus.SUCCESSFUL,
-        paymentId: payment.id,
-        status: paymentStatus,
-        message: logMessage,
-      };
+      throw new Error(`Unsupported provider for callback: ${provider}`);
     } catch (error) {
       logger.error('Callback handling error:', error);
 
@@ -436,161 +302,255 @@ export class PaymentEngineService {
     }
   }
 
-  /**
-   * Get payment history for a resident
-   */
-  async getPaymentHistory(residentId: string, limit: number = 10) {
-    try {
-      const payments = await prisma.payment.findMany({
-        where: { residentId },
-        include: { bill: true },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
+  private async handleTumaCallback(payload: Record<string, any>, auditId: string) {
+    const { status, result_code, merchant_request_id, checkout_request_id, mpesa_receipt_number, amount, result_desc, failure_reason } = payload;
+
+    // 3. Check for idempotency first
+    const existingPayment = await prisma.payment.findFirst({
+      where: {
+        OR: [
+          { checkoutRequestId: checkout_request_id },
+          { confirmationCode: mpesa_receipt_number },
+        ],
+      },
+    });
+
+    if (existingPayment && existingPayment.status === PaymentStatus.SUCCESSFUL) {
+      logger.info(`[TUMA CALLBACK] Payment already processed (idempotent) for checkout_request_id: ${checkout_request_id} or mpesa_receipt_number: ${mpesa_receipt_number}`, { auditId });
+      await prisma.callbackAudit.update({
+        where: { id: auditId },
+        data: {
+          processed: true,
+          paymentId: existingPayment.id,
+          processingResult: JSON.stringify({ duplicate: true, status: 'SUCCESSFUL' }),
+        },
+      });
+      return {
+        success: true,
+        message: 'Tuma callback processed successfully',
+        paymentId: existingPayment.id,
+        status: PaymentStatus.SUCCESSFUL,
+      };
+    }
+
+    // 4. Find the payment record using merchant_request_id
+    const payment = await prisma.payment.findFirst({
+      where: {
+        merchantRequestId: merchant_request_id,
+      },
+      include: { bill: true, resident: true },
+    });
+
+    if (!payment) {
+      logger.warn(`[TUMA CALLBACK] Payment not found for merchant_request_id: ${merchant_request_id}`, { auditId, payload });
+      await prisma.callbackAudit.update({
+        where: { id: auditId },
+        data: {
+          processed: true,
+          processingResult: JSON.stringify({ found: false, merchant_request_id }),
+        },
+      });
+      return {
+        success: false,
+        message: 'Payment not found for this request',
+      };
+    }
+
+    if (status === 'completed' && result_code === 0) {
+      await this.processSuccessfulPayment(payment.id, payload);
+      
+      await prisma.callbackAudit.update({
+        where: { id: auditId },
+        data: {
+          processed: true,
+          paymentId: payment.id,
+          processingResult: JSON.stringify({ status: PaymentStatus.SUCCESSFUL, message: 'Tuma callback processed successfully', payload }),
+        },
       });
 
-      return payments;
-    } catch (error) {
-      logger.error('Error fetching payment history:', error);
-      throw error;
+      return {
+        success: true,
+        paymentId: payment.id,
+        status: PaymentStatus.SUCCESSFUL,
+        message: 'Tuma callback processed successfully',
+      };
+    } else {
+      // Mark payment FAILED
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: PaymentStatus.FAILED,
+          providerStatus: status,
+          providerMessage: result_desc || failure_reason || 'Payment failed',
+          failureReason: result_desc || failure_reason || 'Provider reported failure',
+          providerPayload: payload as any,
+          verificationTimestamp: new Date(),
+          verifiedBy: 'TUMA_CALLBACK',
+        },
+      });
+
+      logger.warn(`[TUMA CALLBACK] Tuma callback reported payment failure for payment ${payment.id}. Reason: ${result_desc || failure_reason}`, { auditId });
+
+      await prisma.callbackAudit.update({
+        where: { id: auditId },
+        data: {
+          processed: true,
+          paymentId: payment.id,
+          processingResult: JSON.stringify({ status: PaymentStatus.FAILED, message: 'Tuma callback reported payment failure', payload }),
+        },
+      });
+
+      return {
+        success: false,
+        paymentId: payment.id,
+        status: PaymentStatus.FAILED,
+        message: 'Tuma callback reported payment failure',
+      };
     }
   }
 
-  /**
-   * Get payment by ID
-   */
-  async getPayment(paymentId: string) {
-    try {
-      const payment = await prisma.payment.findUnique({
-        where: { id: paymentId },
-        include: { bill: true, resident: true },
+  private async handlePesapalCallback(payload: Record<string, any>, auditId: string) {
+    const orderTrackingId = payload.OrderTrackingId || payload.order_tracking_id;
+
+    if (!orderTrackingId) {
+      throw new Error('Missing OrderTrackingId in Pesapal callback');
+    }
+
+    // Check idempotency
+    const existingPayment = await prisma.payment.findFirst({
+      where: { providerOrderId: orderTrackingId },
+    });
+
+    if (existingPayment && existingPayment.status === PaymentStatus.SUCCESSFUL) {
+      return { success: true, message: 'Payment already processed', paymentId: existingPayment.id };
+    }
+
+    // Always verify status with Pesapal API
+    const provider = this.getProvider('PESAPAL');
+    const result = await provider!.verifyPaymentStatus({ orderId: orderTrackingId });
+
+    if (result.status === 'SUCCESSFUL') {
+      const payment = existingPayment || await prisma.payment.findFirst({
+        where: { providerOrderId: orderTrackingId }
       });
 
-      return payment;
-    } catch (error) {
-      logger.error('Error fetching payment:', error);
-      throw error;
+      if (payment) {
+        await this.processSuccessfulPayment(payment.id, result.providerData);
+        
+        await prisma.callbackAudit.update({
+          where: { id: auditId },
+          data: {
+            processed: true,
+            paymentId: payment.id,
+            processingResult: JSON.stringify({ status: PaymentStatus.SUCCESSFUL, result }),
+          },
+        });
+
+        return { success: true, paymentId: payment.id, status: PaymentStatus.SUCCESSFUL };
+      }
     }
+
+    return { success: false, message: 'Payment not successful' };
+  }
+
+  private async processSuccessfulPayment(paymentId: string, providerPayload: any) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { bill: true, resident: true },
+    });
+
+    if (!payment || payment.status === PaymentStatus.SUCCESSFUL) return;
+
+    const { 
+      checkout_request_id, 
+      mpesa_receipt_number, 
+      amount, 
+      result_desc,
+      confirmation_code,
+      payment_status_description
+    } = providerPayload;
+
+    const finalAmount = amount || payment.amount;
+    const confirmationCode = mpesa_receipt_number || confirmation_code || payment.confirmationCode;
+
+    // 1. Update Payment record
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: PaymentStatus.SUCCESSFUL,
+        providerStatus: providerPayload.status || payment_status_description || 'completed',
+        providerMessage: result_desc || 'Payment successful',
+        providerTransactionId: checkout_request_id || confirmationCode || payment.providerTransactionId,
+        confirmationCode: confirmationCode,
+        providerPayload: providerPayload as any,
+        verificationTimestamp: new Date(),
+        verifiedBy: payment.provider === 'TUMA' ? 'TUMA_CALLBACK' : 'PESAPAL_VERIFY',
+        receiptNumber: confirmationCode, // Use confirmation code as receipt number if not provided
+      },
+    });
+
+    // 2. Update Bill record
+    const updatedAmountPaid = payment.bill.amountPaid + finalAmount;
+    const newBalance = Math.max(0, payment.bill.totalAmount - updatedAmountPaid);
+    const newBillStatus = newBalance <= 0 ? BillStatus.PAID : BillStatus.PARTIAL;
+
+    await prisma.bill.update({
+      where: { id: payment.billId },
+      data: {
+        status: newBillStatus,
+        amountPaid: updatedAmountPaid,
+        balance: newBalance,
+        paidAt: newBillStatus === BillStatus.PAID ? new Date() : payment.bill.paidAt,
+      },
+    });
+
+    logger.info(`[PAYMENT ENGINE] Bill ${payment.billId} updated to status: ${newBillStatus}`);
+
+    // 3. Generate Receipt
+    try {
+      const receipt = await receiptService.generateReceipt(payment.id);
+      logger.info(`[PAYMENT ENGINE] Receipt generated: ${receipt.id}`);
+    } catch (error) {
+      logger.error(`[PAYMENT ENGINE] Failed to generate receipt: ${error}`);
+    }
+
+    // 4. Send Notification
+    try {
+      await notificationService.sendPaymentSuccessNotification(
+        payment.residentId,
+        finalAmount,
+        confirmationCode
+      );
+    } catch (error) {
+      logger.error(`[PAYMENT ENGINE] Failed to send notification: ${error}`);
+    }
+
+    // 5. Socket.IO Broadcast
+    this.broadcastUpdates(payment.residentId, payment.billId, payment.id);
+  }
+
+  private broadcastUpdates(residentId: string, billId: string, paymentId: string) {
+    const room = `user_${residentId}`;
+    io.to(room).emit('payment_completed', { paymentId, billId });
+    io.to(room).emit('bill_updated', { billId });
+    io.to(room).emit('dashboard_updated');
+    io.to('admin_room').emit('payment_received', { paymentId, residentId });
+    io.to('admin_room').emit('dashboard_updated');
+    
+    logger.info(`[PAYMENT ENGINE] Broadcasted updates for resident ${residentId}`);
   }
 
   /**
    * Check system health
    */
   async checkSystemHealth() {
-    const start = Date.now();
-    const health: Record<string, any> = {
-      timestamp: new Date(),
-      serverTime: new Date().toISOString(),
-      timezone: process.env.TZ || 'Africa/Nairobi',
-      services: {},
-    };
-
-    // 1. Backend API
-    health.services.backendApi = {
-      status: 'ONLINE',
-      message: 'Backend API is running',
-      responseTime: `${Date.now() - start}ms`
-    };
-
-    // 2. Database
-    const dbStart = Date.now();
-    try {
-      await prisma.$queryRaw`SELECT 1`;
-      health.services.database = { 
-        status: 'ONLINE', 
-        message: 'Database connection successful',
-        responseTime: `${Date.now() - dbStart}ms`
-      };
-    } catch (error) {
-      health.services.database = { 
-        status: 'OFFLINE', 
-        message: error instanceof Error ? error.message : 'Unknown error',
-        responseTime: `${Date.now() - dbStart}ms`
+    const results: Record<string, any> = {};
+    for (const [name, provider] of this.providers) {
+      results[name] = {
+        configured: provider.isConfigured(),
+        healthy: await provider.validateCredentials(),
       };
     }
-
-    // 3. Tuma API
-    const tumaStart = Date.now();
-    try {
-      const tumaProvider = this.getProvider('TUMA');
-      if (tumaProvider) {
-        const isValid = await tumaProvider.validateCredentials();
-        health.services.tumaApi = {
-          status: isValid ? 'ONLINE' : 'OFFLINE',
-          message: isValid ? 'Tuma API credentials valid' : 'Tuma API credentials invalid',
-          responseTime: `${Date.now() - tumaStart}ms`
-        };
-      } else {
-        health.services.tumaApi = { status: 'OFFLINE', message: 'Tuma provider not initialized' };
-      }
-    } catch (error) {
-      health.services.tumaApi = { status: 'OFFLINE', message: error instanceof Error ? error.message : 'Unknown error' };
-    }
-
-    // 4. Pesapal API
-    const pesapalStart = Date.now();
-    try {
-      const pesapalProvider = this.getProvider('PESAPAL');
-      if (pesapalProvider) {
-        const isValid = await pesapalProvider.validateCredentials();
-        health.services.pesapalApi = {
-          status: isValid ? 'ONLINE' : 'OFFLINE',
-          message: isValid ? 'Pesapal API credentials valid' : 'Pesapal API credentials invalid',
-          responseTime: `${Date.now() - pesapalStart}ms`
-        };
-      } else {
-        health.services.pesapalApi = { status: 'OFFLINE', message: 'Pesapal provider not initialized' };
-      }
-    } catch (error) {
-      health.services.pesapalApi = { status: 'OFFLINE', message: error instanceof Error ? error.message : 'Unknown error' };
-    }
-
-    // 5. Payment Callback Endpoint
-    try {
-      const lastCallback = await prisma.auditLog.findFirst({
-        where: { action: { contains: 'CALLBACK' } },
-        orderBy: { createdAt: 'desc' }
-      });
-      health.services.callbackEndpoint = {
-        status: 'ONLINE',
-        message: 'https://legacy-homes.onrender.com/api/payments/callback',
-        lastCallbackReceived: lastCallback ? lastCallback.createdAt : 'Never'
-      };
-    } catch (error) {
-      health.services.callbackEndpoint = { status: 'WARNING', message: 'Could not fetch last callback info' };
-    }
-
-    // 6. Email Service (SMTP)
-    // Based on email.service.ts, it's currently a stub logging to console
-    health.services.emailService = {
-      status: 'WARNING',
-      message: 'Email service is in LOG-ONLY mode (No SMTP configured)',
-    };
-
-    // 7. Environment Variables
-    const requiredEnvVars = [
-      'DATABASE_URL',
-      'TUMA_API_URL',
-      'TUMA_AUTH_URL',
-      'TUMA_BUSINESS_EMAIL',
-      'TUMA_API_KEY',
-      'TUMA_CALLBACK_URL',
-      'PESAPAL_API_URL',
-      'PESAPAL_CONSUMER_KEY',
-      'PESAPAL_CONSUMER_SECRET',
-    ];
-
-    const missingEnvVars = requiredEnvVars.filter((v) => !process.env[v]);
-    health.services.environmentVariables = {
-      status: missingEnvVars.length === 0 ? 'ONLINE' : 'WARNING',
-      message: missingEnvVars.length === 0 ? 'All critical environment variables configured' : `Missing: ${missingEnvVars.join(', ')}`,
-      missing: missingEnvVars,
-      configSummary: {
-        tumaConfigured: !!process.env.TUMA_API_KEY,
-        pesapalConfigured: !!process.env.PESAPAL_CONSUMER_KEY,
-        databaseConfigured: !!process.env.DATABASE_URL
-      }
-    };
-
-    return health;
+    return results;
   }
 }

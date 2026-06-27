@@ -26,10 +26,11 @@ export class PaymentController {
   async handleTumaCallback(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await paymentEngineService.handleCallback('TUMA', req.body);
-      res.json(result);
+      // Tuma expects a 200 OK even if processing fails internally to prevent retries
+      res.status(200).json(result);
     } catch (error) {
       logger.error('Tuma callback error:', error);
-      res.status(200).json({ success: true, message: 'Callback received' });
+      res.status(200).json({ success: true, message: 'Tuma callback processed with internal error' });
     }
   }
 
@@ -118,7 +119,7 @@ export class PaymentController {
 
   async retryVerification(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const result = await paymentService.retryPaymentVerification(req.params.paymentId);
+      const result = await paymentEngineService.verifyPaymentStatus(req.params.paymentId);
       res.json({ success: true, data: result });
     } catch (error) { next(error); }
   }
