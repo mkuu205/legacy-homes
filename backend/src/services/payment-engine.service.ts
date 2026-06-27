@@ -113,7 +113,7 @@ export class PaymentEngineService {
 
       // Check if paying with a saved card
       let accountToken = undefined;
-      if (method === 'SAVED_CARD') {
+      if (paymentMethod === 'SAVED_CARD') {
         const savedMethod = await prisma.paymentMethod.findFirst({
           where: { residentId, isActive: true, methodType: 'SAVED_CARD' }
         });
