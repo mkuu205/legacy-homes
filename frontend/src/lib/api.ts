@@ -192,8 +192,8 @@ const isMaintenanceMode = (error: AxiosError): boolean => {
 
 const isGenuine401 = (error: AxiosError): boolean => {
   if (error.response?.status !== 401) return false;
-  
-  const message = error.response?.data?.message || '';
+  const data = error.response?.data as any;
+  const message = data?.message || '';
   return message.includes('Invalid') || message.includes('expired');
 };
 
