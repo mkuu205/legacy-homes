@@ -74,50 +74,36 @@ export default function PaymentsPage() {
     }
   };
 
-  // Fetch unpaid bills - expanded status filters
-  const { data: billsData, isLoading: billsLoading, refetch: refetchBills } = useQuery({
+  // Fetch unpaid bills
+  const { data: billsData, isLoading: billsLoading } = useQuery({
     queryKey: ['unpaid-bills'],
     queryFn: async () => {
-      try {
-        // Try with expanded statuses
-        const res = await api.get('/billing/my-bills?status=UNPAID,PARTIAL,OVERDUE,PAST_DUE');
-        console.log('Bills response:', res.data);
-        const bills = res.data.data?.bills || [];
-        console.log('Bills found:', bills.length);
-        return bills;
-      } catch (error) {
-        console.error('Error fetching bills:', error);
-        return [];
-      }
+      const res = await api.get('/billing/my-bills?status=UNPAID,PARTIAL,OVERDUE');
+      return res.data.data?.bills || [];
     },
   });
 
-  // Set bill from URL param or auto-select first bill
+  // Set bill from URL param only - no auto-selection
   useEffect(() => {
-    if (billsData && billsData.length > 0) {
-      console.log('Setting bill from billsData:', billsData);
-      if (billIdParam) {
-        const bill = billsData.find((b: any) => b.id === billIdParam);
-        if (bill) {
-          setSelectedBillId(bill.id);
-          setAmount(bill.balance?.toString() || bill.amountDue?.toString() || '');
-        }
-      } else if (!selectedBillId) {
-        // Auto-select first bill if available
-        const bill = billsData[0];
+    if (billIdParam && billsData) {
+      const bill = billsData.find((b: any) => b.id === billIdParam);
+      if (bill) {
         setSelectedBillId(bill.id);
-        setAmount(bill.balance?.toString() || bill.amountDue?.toString() || '');
+        setAmount(bill.balance?.toString() || '');
       }
     }
-  }, [billsData, billIdParam]);
+  }, [billIdParam, billsData]);
 
-  // Auto-set amount when bill is selected
+  // Auto-set amount when bill is selected by user
   useEffect(() => {
     if (selectedBillId && billsData) {
       const bill = billsData.find((b: any) => b.id === selectedBillId);
       if (bill) {
-        setAmount(bill.balance?.toString() || bill.amountDue?.toString() || '');
+        setAmount(bill.balance?.toString() || '');
       }
+    } else {
+      // Clear amount when no bill is selected
+      setAmount('');
     }
   }, [selectedBillId, billsData]);
 
@@ -163,8 +149,7 @@ export default function PaymentsPage() {
         throw new Error('Selected bill not found');
       }
 
-      const billBalance = selectedBill.balance || selectedBill.amountDue || 0;
-      if (parseFloat(amount) > billBalance) {
+      if (parseFloat(amount) > (selectedBill.balance || 0)) {
         throw new Error('Amount cannot exceed the outstanding balance');
       }
 
@@ -217,7 +202,6 @@ export default function PaymentsPage() {
   });
 
   const selectedBill = billsData?.find((b: any) => b.id === selectedBillId);
-  const billBalance = selectedBill?.balance || selectedBill?.amountDue || 0;
   const isFormValid = selectedBillId && amount && parseFloat(amount) > 0 && 
     (paymentMethod === 'CARD' || (paymentMethod === 'MPESA_STK_PUSH' && phone && validatePhone(phone)));
 
@@ -394,7 +378,7 @@ export default function PaymentsPage() {
         </button>
       </div>
 
-      {/* Select Bill */}
+      {/* Select Bill - User selects manually */}
       <div style={{ marginBottom: '20px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
           Select Bill
@@ -422,7 +406,7 @@ export default function PaymentsPage() {
             <option value="">Select a bill...</option>
             {billsData.map((bill: any) => (
               <option key={bill.id} value={bill.id}>
-                Bill #{bill.billNumber} - KES {(bill.balance || bill.amountDue || 0).toLocaleString()}
+                Bill #{bill.billNumber} - KES {(bill.balance || 0).toLocaleString()}
               </option>
             ))}
           </select>
@@ -439,7 +423,7 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      {/* Amount Input */}
+      {/* Amount Input - Auto-populated when bill is selected */}
       <div style={{ marginBottom: '20px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
           Amount (KES) <span style={{ color: '#ef4444' }}>*</span>
@@ -448,7 +432,7 @@ export default function PaymentsPage() {
           type="number"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          placeholder="Enter amount"
+          placeholder={selectedBillId ? "Amount will auto-fill" : "Select a bill first"}
           style={{
             width: '100%',
             padding: '12px',
@@ -463,7 +447,7 @@ export default function PaymentsPage() {
         />
         {selectedBill && (
           <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '4px 0 0 0' }}>
-            Outstanding balance: KES {billBalance.toLocaleString()}
+            Outstanding balance: KES {(selectedBill.balance || 0).toLocaleString()}
           </p>
         )}
       </div>
@@ -476,18 +460,17 @@ export default function PaymentsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {/* M-Pesa Card */}
           <div
-            onClick={() => selectedBillId && setPaymentMethod('MPESA_STK_PUSH')}
+            onClick={() => setPaymentMethod('MPESA_STK_PUSH')}
             style={{
               padding: '12px 14px',
               borderRadius: '10px',
               border: paymentMethod === 'MPESA_STK_PUSH' ? '2px solid var(--ac)' : '1px solid var(--bd)',
               background: paymentMethod === 'MPESA_STK_PUSH' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
-              cursor: selectedBillId ? 'pointer' : 'not-allowed',
+              cursor: 'pointer',
               transition: 'all 0.2s',
               display: 'flex',
               gap: '12px',
-              alignItems: 'center',
-              opacity: selectedBillId ? 1 : 0.5
+              alignItems: 'center'
             }}
           >
             <div style={{ 
@@ -515,18 +498,17 @@ export default function PaymentsPage() {
 
           {/* Card Payment Card */}
           <div
-            onClick={() => selectedBillId && setPaymentMethod('CARD')}
+            onClick={() => setPaymentMethod('CARD')}
             style={{
               padding: '12px 14px',
               borderRadius: '10px',
               border: paymentMethod === 'CARD' ? '2px solid var(--ac)' : '1px solid var(--bd)',
               background: paymentMethod === 'CARD' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
-              cursor: selectedBillId ? 'pointer' : 'not-allowed',
+              cursor: 'pointer',
               transition: 'all 0.2s',
               display: 'flex',
               gap: '12px',
-              alignItems: 'center',
-              opacity: selectedBillId ? 1 : 0.5
+              alignItems: 'center'
             }}
           >
             <div style={{ 
@@ -555,7 +537,7 @@ export default function PaymentsPage() {
       </div>
 
       {/* M-Pesa Section */}
-      {paymentMethod === 'MPESA_STK_PUSH' && selectedBillId && (
+      {paymentMethod === 'MPESA_STK_PUSH' && (
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
             Phone Number <span style={{ color: '#ef4444' }}>*</span>
@@ -626,7 +608,7 @@ export default function PaymentsPage() {
       )}
 
       {/* Card Section */}
-      {paymentMethod === 'CARD' && selectedBillId && (
+      {paymentMethod === 'CARD' && (
         <div style={{ 
           marginBottom: '20px', 
           padding: '12px 14px', 
