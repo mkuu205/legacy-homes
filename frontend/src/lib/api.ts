@@ -112,7 +112,8 @@ const EXCLUDED_ENDPOINTS = [
 ];
 
 const isReplayableRequest = (config: any): boolean => {
-  if (!config?.method?.toLowerCase() === 'get') return false;
+  // ✅ FIXED: Removed the ! (not) operator
+  if (config?.method?.toLowerCase() === 'get') return false;
   if (!config?.url) return false;
   
   // Check excluded endpoints
