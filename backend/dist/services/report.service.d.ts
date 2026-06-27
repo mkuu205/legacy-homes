@@ -21,7 +21,7 @@ export declare class ReportService {
             totalAmount: number;
             amountPaid: number;
             balance: number;
-            status: import(".prisma/client").$Enums.BillStatus;
+            status: import("@prisma/client").$Enums.BillStatus;
         }[];
         summary: {
             total: number;
@@ -47,7 +47,7 @@ export declare class ReportService {
             id: string;
             createdAt: Date;
             residentId: string;
-            status: import(".prisma/client").$Enums.PaymentStatus;
+            status: import("@prisma/client").$Enums.PaymentStatus;
             amount: number;
         }[];
         byMonth: Record<string, number>;

@@ -3,7 +3,7 @@ export declare class ResidentApprovalService {
         assignedHouse: {
             id: string;
             houseNumber: string;
-            occupancyStatus: import(".prisma/client").$Enums.HouseStatus;
+            occupancyStatus: import("@prisma/client").$Enums.HouseStatus;
         };
         id: string;
         createdAt: Date;
@@ -11,8 +11,8 @@ export declare class ResidentApprovalService {
         fullName: string;
         email: string;
         phone: string;
-        accountStatus: import(".prisma/client").$Enums.AccountStatus;
-        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+        accountStatus: import("@prisma/client").$Enums.AccountStatus;
+        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
         profilePicture: string;
         nationalId: string;
         accountNumber: string;
@@ -21,7 +21,7 @@ export declare class ResidentApprovalService {
         assignedHouse: {
             id: string;
             houseNumber: string;
-            occupancyStatus: import(".prisma/client").$Enums.HouseStatus;
+            occupancyStatus: import("@prisma/client").$Enums.HouseStatus;
             creationDate: Date;
             notes: string | null;
             isLocked: boolean;
@@ -34,7 +34,7 @@ export declare class ResidentApprovalService {
         fullName: string;
         email: string;
         phone: string;
-        accountStatus: import(".prisma/client").$Enums.AccountStatus;
+        accountStatus: import("@prisma/client").$Enums.AccountStatus;
         accountNumber: string;
     }[]>;
     getRejectedResidents(skip?: number, take?: number): Promise<{
@@ -43,7 +43,7 @@ export declare class ResidentApprovalService {
         fullName: string;
         email: string;
         phone: string;
-        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
         accountNumber: string;
     }[]>;
     approveResident(residentId: string, assignedHouseId?: string): Promise<{
@@ -55,9 +55,9 @@ export declare class ResidentApprovalService {
         email: string;
         phone: string;
         passwordHash: string;
-        role: import(".prisma/client").$Enums.Role;
-        accountStatus: import(".prisma/client").$Enums.AccountStatus;
-        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+        role: import("@prisma/client").$Enums.Role;
+        accountStatus: import("@prisma/client").$Enums.AccountStatus;
+        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
         profilePicture: string | null;
         nationalId: string | null;
         accountNumber: string;
@@ -80,9 +80,9 @@ export declare class ResidentApprovalService {
         email: string;
         phone: string;
         passwordHash: string;
-        role: import(".prisma/client").$Enums.Role;
-        accountStatus: import(".prisma/client").$Enums.AccountStatus;
-        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+        role: import("@prisma/client").$Enums.Role;
+        accountStatus: import("@prisma/client").$Enums.AccountStatus;
+        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
         profilePicture: string | null;
         nationalId: string | null;
         accountNumber: string;
@@ -97,9 +97,9 @@ export declare class ResidentApprovalService {
         email: string;
         phone: string;
         passwordHash: string;
-        role: import(".prisma/client").$Enums.Role;
-        accountStatus: import(".prisma/client").$Enums.AccountStatus;
-        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+        role: import("@prisma/client").$Enums.Role;
+        accountStatus: import("@prisma/client").$Enums.AccountStatus;
+        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
         profilePicture: string | null;
         nationalId: string | null;
         accountNumber: string;
@@ -114,9 +114,9 @@ export declare class ResidentApprovalService {
         email: string;
         phone: string;
         passwordHash: string;
-        role: import(".prisma/client").$Enums.Role;
-        accountStatus: import(".prisma/client").$Enums.AccountStatus;
-        registrationStatus: import(".prisma/client").$Enums.RegistrationStatus;
+        role: import("@prisma/client").$Enums.Role;
+        accountStatus: import("@prisma/client").$Enums.AccountStatus;
+        registrationStatus: import("@prisma/client").$Enums.RegistrationStatus;
         profilePicture: string | null;
         nationalId: string | null;
         accountNumber: string;

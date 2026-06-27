@@ -12,7 +12,6 @@ router.get('/status/:paymentId', auth_1.authenticate, payment_controller_1.payme
 router.delete('/my-history', auth_1.authenticate, payment_controller_1.paymentController.clearMyPaymentHistory.bind(payment_controller_1.paymentController));
 // Provider Webhooks / Callbacks
 router.post('/tuma/callback', payment_controller_1.paymentController.handleTumaCallback.bind(payment_controller_1.paymentController));
-router.post('/payhero/callback', payment_controller_1.paymentController.handlePayHeroCallback.bind(payment_controller_1.paymentController));
 router.post('/pesapal/ipn', payment_controller_1.paymentController.handlePesapalIpn.bind(payment_controller_1.paymentController));
 router.get('/pesapal/ipn', payment_controller_1.paymentController.handlePesapalIpn.bind(payment_controller_1.paymentController));
 // Diagnostic Routes
@@ -30,6 +29,7 @@ router.get('/callback-health', (_req, res) => {
     });
 });
 // Admin routes
+router.get('/system-check', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), payment_controller_1.paymentController.systemCheck.bind(payment_controller_1.paymentController));
 router.get('/stats', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), payment_controller_1.paymentController.getStats.bind(payment_controller_1.paymentController));
 router.get('/export/csv', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), payment_controller_1.paymentController.exportCSV.bind(payment_controller_1.paymentController));
 router.get('/', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), payment_controller_1.paymentController.getAll.bind(payment_controller_1.paymentController));

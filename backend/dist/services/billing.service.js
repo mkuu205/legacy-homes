@@ -34,7 +34,7 @@ const generateBillNumber = () => {
     return `${prefix}-${timestamp}-${random}`;
 };
 class BillingService {
-    async generateMonthlyBills(billingMonth, force = false) {
+    async generateMonthlyBills(billingMonth, force = false, options) {
         // Duplicate prevention: check if bills already exist for this month
         const existingCount = await prisma_1.default.bill.count({ where: { billingMonth } });
         if (existingCount > 0 && !force) {
@@ -72,14 +72,22 @@ class BillingService {
             throw new errorHandler_1.AppError(`No unprocessed readings found for ${billingMonth}`, 400);
         }
         const bills = [];
-        const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + 30);
+        // Resolve due date: use provided value or default to 30 days from now
+        const dueDate = options?.dueDate ? new Date(options.dueDate) : (() => {
+            const d = new Date();
+            d.setDate(d.getDate() + 30);
+            return d;
+        })();
         // Parse billingMonth (format: 'YYYY-MM') to get actual period boundaries
         const [yearStr, monthStr] = billingMonth.split('-');
         const year = parseInt(yearStr, 10);
         const month = parseInt(monthStr, 10) - 1; // 0-indexed
-        const periodStart = new Date(year, month, 1, 0, 0, 0, 0);
-        const periodEnd = new Date(year, month + 1, 0, 23, 59, 59, 999); // last day of month
+        const periodStart = options?.billingPeriodStart
+            ? new Date(options.billingPeriodStart)
+            : new Date(year, month, 1, 0, 0, 0, 0);
+        const periodEnd = options?.billingPeriodEnd
+            ? new Date(options.billingPeriodEnd)
+            : new Date(year, month + 1, 0, 23, 59, 59, 999); // last day of month
         for (const reading of readings) {
             const meter = await prisma_1.default.meter.findUnique({
                 where: { id: reading.meterId },
@@ -101,7 +109,10 @@ class BillingService {
             });
             if (!house || !house.resident)
                 continue;
-            const UNIT_RATE = await getUnitRate();
+            // Use provided waterUnitRate, or fall back to DB/default
+            const UNIT_RATE = options?.waterUnitRate && options.waterUnitRate > 0
+                ? options.waterUnitRate
+                : await getUnitRate();
             const totalAmount = reading.unitsConsumed * UNIT_RATE;
             const billNumber = generateBillNumber();
             const bill = await prisma_1.default.bill.create({

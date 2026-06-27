@@ -332,8 +332,22 @@ export class PaymentEngineService {
 
       // 6. If payment is successful, update bill and create receipt
       if (statusVerification.verified) {
+        // Update payment with confirmation code and account if available from providerData
+        const providerData = statusVerification.status === 'SUCCESSFUL' ? (statusVerification as any).providerData : null;
+        if (providerData) {
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+              confirmationCode: providerData.confirmation_code || payment.confirmationCode,
+              maskedAccount: providerData.payment_account || payment.maskedAccount,
+              paymentMethod: providerData.payment_method === 'MPESA' ? 'MPESA_STK_PUSH' : (providerData.payment_method === 'VISA' ? 'VISA' : (providerData.payment_method === 'MASTERCARD' ? 'MASTERCARD' : payment.paymentMethod)),
+            },
+          });
+        }
+
         // Update bill status
-        const newBillStatus = payment.amount >= payment.bill.balance ? 'PAID' : 'PARTIAL';
+        const updatedPayment = await prisma.payment.findUnique({ where: { id: payment.id } });
+        const newBillStatus = (updatedPayment?.amount || payment.amount) >= payment.bill.balance ? 'PAID' : 'PARTIAL';
         await prisma.bill.update({
           where: { id: payment.billId },
           data: {
@@ -359,7 +373,7 @@ export class PaymentEngineService {
           await notificationService.sendPaymentSuccessNotification(
             payment.residentId,
             payment.amount,
-            payment.confirmationCode || undefined
+            updatedPayment?.confirmationCode || payment.confirmationCode || undefined
           );
           logger.info(`[CALLBACK] Notification sent to resident`, { residentId: payment.residentId, auditId });
         } catch (notificationError) {

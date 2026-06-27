@@ -19,7 +19,7 @@ export declare class MeterService {
             houseId: string;
             previousReading: number;
             currentReading: number;
-            status: import(".prisma/client").$Enums.MeterStatus;
+            status: import("@prisma/client").$Enums.MeterStatus;
             meterNumber: string;
             meterSerial: string;
             installationDate: Date;
@@ -55,7 +55,7 @@ export declare class MeterService {
         houseId: string;
         previousReading: number;
         currentReading: number;
-        status: import(".prisma/client").$Enums.MeterStatus;
+        status: import("@prisma/client").$Enums.MeterStatus;
         meterNumber: string;
         meterSerial: string;
         installationDate: Date;
@@ -75,7 +75,7 @@ export declare class MeterService {
         houseId: string;
         previousReading: number;
         currentReading: number;
-        status: import(".prisma/client").$Enums.MeterStatus;
+        status: import("@prisma/client").$Enums.MeterStatus;
         meterNumber: string;
         meterSerial: string;
         installationDate: Date;
@@ -93,7 +93,7 @@ export declare class MeterService {
         houseId: string;
         previousReading: number;
         currentReading: number;
-        status: import(".prisma/client").$Enums.MeterStatus;
+        status: import("@prisma/client").$Enums.MeterStatus;
         meterNumber: string;
         meterSerial: string;
         installationDate: Date;
@@ -151,7 +151,7 @@ export declare class MeterService {
         createdAt: Date;
         previousReading: number;
         currentReading: number;
-        status: import(".prisma/client").$Enums.MeterStatus;
+        status: import("@prisma/client").$Enums.MeterStatus;
         meterNumber: string;
         meterSerial: string;
     }>;

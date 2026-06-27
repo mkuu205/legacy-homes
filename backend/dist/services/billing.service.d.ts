@@ -1,5 +1,11 @@
 export declare class BillingService {
-    generateMonthlyBills(billingMonth: string, force?: boolean): Promise<{
+    generateMonthlyBills(billingMonth: string, force?: boolean, options?: {
+        dueDate?: string;
+        waterUnitRate?: number;
+        lateFee?: number;
+        billingPeriodStart?: string;
+        billingPeriodEnd?: string;
+    }): Promise<{
         generated: number;
         bills: any[];
     }>;
@@ -32,7 +38,7 @@ export declare class BillingService {
             totalAmount: number;
             amountPaid: number;
             balance: number;
-            status: import(".prisma/client").$Enums.BillStatus;
+            status: import("@prisma/client").$Enums.BillStatus;
         }[];
         pagination: {
             page: number;
@@ -59,9 +65,9 @@ export declare class BillingService {
             createdAt: Date;
             updatedAt: Date;
             residentId: string;
-            status: import(".prisma/client").$Enums.PaymentStatus;
-            paymentMethod: import(".prisma/client").$Enums.PaymentMethodType;
-            provider: import(".prisma/client").$Enums.PaymentProviderType;
+            status: import("@prisma/client").$Enums.PaymentStatus;
+            paymentMethod: import("@prisma/client").$Enums.PaymentMethodType;
+            provider: import("@prisma/client").$Enums.PaymentProviderType;
             billId: string;
             merchantReference: string | null;
             providerTransactionId: string | null;
@@ -76,7 +82,7 @@ export declare class BillingService {
             cardBrand: string | null;
             currency: string | null;
             amount: number;
-            reconciliationStatus: import(".prisma/client").$Enums.PaymentReconciliationStatus;
+            reconciliationStatus: import("@prisma/client").$Enums.PaymentReconciliationStatus;
             merchantRequestId: string | null;
             checkoutRequestId: string | null;
             callbackPayload: import("@prisma/client/runtime/library").JsonValue | null;
@@ -100,7 +106,7 @@ export declare class BillingService {
         totalAmount: number;
         amountPaid: number;
         balance: number;
-        status: import(".prisma/client").$Enums.BillStatus;
+        status: import("@prisma/client").$Enums.BillStatus;
     }>;
     getResidentBills(residentId: string, query: {
         page?: number;
@@ -125,7 +131,7 @@ export declare class BillingService {
             totalAmount: number;
             amountPaid: number;
             balance: number;
-            status: import(".prisma/client").$Enums.BillStatus;
+            status: import("@prisma/client").$Enums.BillStatus;
         }[];
         pagination: {
             page: number;
@@ -134,7 +140,7 @@ export declare class BillingService {
             pages: number;
         };
     }>;
-    markOverdueBills(): Promise<import(".prisma/client").Prisma.BatchPayload>;
+    markOverdueBills(): Promise<import("@prisma/client").Prisma.BatchPayload>;
     getResidentStatement(residentId: string): Promise<{
         resident: {
             houseNumber: string;
@@ -157,9 +163,9 @@ export declare class BillingService {
             createdAt: Date;
             updatedAt: Date;
             residentId: string;
-            status: import(".prisma/client").$Enums.PaymentStatus;
-            paymentMethod: import(".prisma/client").$Enums.PaymentMethodType;
-            provider: import(".prisma/client").$Enums.PaymentProviderType;
+            status: import("@prisma/client").$Enums.PaymentStatus;
+            paymentMethod: import("@prisma/client").$Enums.PaymentMethodType;
+            provider: import("@prisma/client").$Enums.PaymentProviderType;
             billId: string;
             merchantReference: string | null;
             providerTransactionId: string | null;
@@ -174,7 +180,7 @@ export declare class BillingService {
             cardBrand: string | null;
             currency: string | null;
             amount: number;
-            reconciliationStatus: import(".prisma/client").$Enums.PaymentReconciliationStatus;
+            reconciliationStatus: import("@prisma/client").$Enums.PaymentReconciliationStatus;
             merchantRequestId: string | null;
             checkoutRequestId: string | null;
             callbackPayload: import("@prisma/client/runtime/library").JsonValue | null;

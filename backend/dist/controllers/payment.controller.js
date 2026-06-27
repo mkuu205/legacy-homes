@@ -27,16 +27,6 @@ class PaymentController {
             res.status(200).json({ success: true, message: 'Callback received' });
         }
     }
-    async handlePayHeroCallback(req, res, next) {
-        try {
-            const result = await paymentEngineService.handleCallback('PAYHERO', req.body);
-            res.json(result);
-        }
-        catch (error) {
-            logger_1.logger.error('PayHero callback error:', error);
-            res.status(200).json({ success: true, message: 'Callback received' });
-        }
-    }
     async handlePesapalIpn(req, res, next) {
         try {
             // Pesapal IPN usually sends orderTrackingId in query params
@@ -149,6 +139,15 @@ class PaymentController {
             res.setHeader('Content-Type', 'text/csv');
             res.setHeader('Content-Disposition', 'attachment; filename=payments.csv');
             res.send(csv);
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    async systemCheck(req, res, next) {
+        try {
+            const health = await paymentEngineService.checkSystemHealth();
+            res.json({ success: true, data: health });
         }
         catch (error) {
             next(error);

@@ -14,6 +14,8 @@ const logger_1 = __importDefault(require("../utils/logger"));
 const crypto_1 = __importDefault(require("crypto"));
 class AuthService {
     async register(data) {
+        // Normalise house number: trim whitespace and convert to uppercase
+        const houseNumber = data.houseNumber.trim().toUpperCase();
         const existingEmail = await prisma_1.default.user.findUnique({
             where: { email: data.email },
         });
@@ -27,10 +29,10 @@ class AuthService {
             throw new errorHandler_1.AppError('Phone number already registered', 409);
         }
         const house = await prisma_1.default.house.findUnique({
-            where: { houseNumber: data.houseNumber },
+            where: { houseNumber },
         });
         if (!house) {
-            throw new errorHandler_1.AppError('Invalid house number', 400);
+            throw new errorHandler_1.AppError(`House ${houseNumber} not found. Please check your house number and try again.`, 400);
         }
         const existingResident = await prisma_1.default.user.findUnique({
             where: { houseId: house.id },
@@ -47,7 +49,6 @@ class AuthService {
                 phone: data.phone,
                 assignedHouse: { connect: { id: house.id } },
                 passwordHash,
-                nationalId: data.nationalId,
                 profilePicture: data.profilePicture,
                 accountNumber,
                 role: 'RESIDENT',

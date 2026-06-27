@@ -27,26 +27,30 @@ export class PesapalProvider implements PaymentProvider {
     this.callbackUrl = process.env.PESAPAL_CALLBACK_URL || '';
     this.environment = process.env.PESAPAL_ENVIRONMENT || 'sandbox';
     this.baseUrl = this.environment === 'production'
-      ? 'https://api.pesapal.com/api/v3'
-      : 'https://cybqa.pesapal.com/api/v3';
+      ? 'https://pay.pesapal.com/v3'
+      : 'https://cybqa.pesapal.com/pesapalv3';
   }
 
   private async getAccessToken(): Promise<string> {
     try {
-      // Return cached token if still valid
-      if (this.accessToken && this.tokenExpiry > Date.now()) {
+      // Return cached token if still valid (with 5 min buffer)
+      if (this.accessToken && this.tokenExpiry > (Date.now() + 300000)) {
         return this.accessToken;
       }
 
-      const response = await axios.post(`${this.baseUrl}/api/auth/request/token`, {
+      const response = await axios.post(`${this.baseUrl}/api/Auth/RequestToken`, {
         consumer_key: this.consumerKey,
         consumer_secret: this.consumerSecret,
       });
 
-      this.accessToken = response.data.token;
-      this.tokenExpiry = Date.now() + (response.data.expiresIn * 1000);
+      if (response.data && response.data.token) {
+        this.accessToken = response.data.token;
+        // Parse expiryDate from response (e.g., "2023-08-15T10:00:00Z")
+        this.tokenExpiry = new Date(response.data.expiryDate).getTime();
+        return this.accessToken;
+      }
 
-      return this.accessToken;
+      throw new Error('Invalid token response from Pesapal');
     } catch (error) {
       logger.error('Pesapal token request error:', error);
       throw error;
@@ -68,28 +72,29 @@ export class PesapalProvider implements PaymentProvider {
         id: request.externalReference,
         currency: 'KES',
         amount: request.amount,
-        description: `Bill Payment - ${request.billId}`,
+        description: 'Legacy Homes Water Bill',
         callback_url: this.callbackUrl,
         notification_id: this.ipnId,
         billing_address: {
           phone_number: request.phoneNumber,
-          email_address: 'resident@legacyhomes.local',
+          email_address: 'resident@legacyhomes.local', // Placeholder as required by API
+          first_name: 'Resident', // Placeholder
         },
       };
 
-      const response = await axios.post(`${this.baseUrl}/orders`, payload, {
+      const response = await axios.post(`${this.baseUrl}/api/Transactions/SubmitOrderRequest`, payload, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
 
-      if (response.data.success) {
+      if (response.data && response.data.order_tracking_id) {
         return {
           success: true,
           orderId: response.data.order_tracking_id,
           checkoutUrl: response.data.redirect_url,
-          message: response.data.message,
+          message: 'Order created successfully',
         };
       }
 
@@ -108,30 +113,35 @@ export class PesapalProvider implements PaymentProvider {
 
   async verifyPaymentStatus(request: PaymentStatusRequest): Promise<PaymentStatusResponse> {
     try {
-      if (!request.orderId) {
+      const orderTrackingId = request.orderId;
+      if (!orderTrackingId) {
         return {
           status: 'FAILED',
-          message: 'Order ID required',
+          message: 'Order Tracking ID required',
         };
       }
 
       const token = await this.getAccessToken();
 
-      const response = await axios.get(`${this.baseUrl}/orders/${request.orderId}/transactions`, {
+      const response = await axios.get(`${this.baseUrl}/api/Transactions/GetTransactionStatus?orderTrackingId=${orderTrackingId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      if (response.data.success && response.data.data && response.data.data.length > 0) {
-        const transaction = response.data.data[0];
+      const data = response.data;
+      if (data) {
+        // Only if payment_status_description == COMPLETED should the backend mark Payment SUCCESSFUL
+        const isCompleted = data.payment_status_description === 'COMPLETED';
+        
         return {
-          status: transaction.payment_status_description === 'Completed' ? 'SUCCESSFUL' : 'FAILED',
-          transactionId: transaction.transaction_id,
-          orderId: transaction.order_tracking_id,
-          amount: transaction.amount,
-          timestamp: new Date(transaction.created_date),
-          providerData: transaction,
+          status: isCompleted ? 'SUCCESSFUL' : (data.payment_status_description === 'FAILED' ? 'FAILED' : 'PENDING'),
+          transactionId: data.confirmation_code,
+          orderId: orderTrackingId,
+          amount: data.amount,
+          message: data.payment_status_description,
+          timestamp: new Date(),
+          providerData: data,
         };
       }
 
@@ -151,15 +161,20 @@ export class PesapalProvider implements PaymentProvider {
   async verifyCallback(request: CallbackVerificationRequest): Promise<CallbackVerificationResponse> {
     try {
       const payload = request.payload;
+      const orderTrackingId = payload.OrderTrackingId || payload.order_tracking_id;
 
-      // Verify with provider
+      if (!orderTrackingId) {
+        return { valid: false, message: 'Missing OrderTrackingId' };
+      }
+
+      // Never trust callback. Immediately call GetTransactionStatus.
       const verification = await this.verifyPaymentStatus({
-        orderId: payload.order_tracking_id,
+        orderId: orderTrackingId,
       });
 
       return {
-        valid: verification.status === 'SUCCESSFUL',
-        transactionId: payload.transaction_id,
+        valid: true, // We trust the result of GetTransactionStatus
+        transactionId: orderTrackingId,
         status: verification.status,
         amount: verification.amount,
         message: verification.message,
@@ -170,6 +185,47 @@ export class PesapalProvider implements PaymentProvider {
         valid: false,
         message: error instanceof Error ? error.message : 'Unknown error',
       };
+    }
+  }
+
+  async cancelOrder(orderTrackingId: string): Promise<boolean> {
+    try {
+      const token = await this.getAccessToken();
+      const response = await axios.post(`${this.baseUrl}/api/Transactions/CancelOrder`, {
+        order_tracking_id: orderTrackingId
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      return response.status === 200;
+    } catch (error) {
+      logger.error('Pesapal cancel order error:', error);
+      return false;
+    }
+  }
+
+  async registerIPN(url: string): Promise<string | null> {
+    try {
+      const token = await this.getAccessToken();
+      const response = await axios.post(`${this.baseUrl}/api/URLSetup/RegisterIPN`, {
+        url: url,
+        ipn_notification_type: 'POST'
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.data && response.data.ipn_id) {
+        return response.data.ipn_id;
+      }
+      return null;
+    } catch (error) {
+      logger.error('Pesapal IPN registration error:', error);
+      return null;
     }
   }
 
