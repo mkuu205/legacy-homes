@@ -193,111 +193,16 @@ export class TumaProvider implements PaymentProvider {
     }
   }
 
-  async verifyPaymentStatus(request: PaymentStatusRequest): Promise<PaymentStatusResponse> {
-    try {
-      if (!request.transactionId) {
-        return {
-          status: 'FAILED',
-          message: 'Transaction ID required',
-        };
-      }
+  // The Tuma API does not provide a verification endpoint. The callback is the source of truth.
+  // Therefore, these methods are removed as per the updated requirements.
 
-      const token = await this.getAuthToken();
+  // async verifyPaymentStatus(request: PaymentStatusRequest): Promise<PaymentStatusResponse> {
+  //   // Implementation removed
+  // }
 
-      const payload = {
-        transaction_id: request.transactionId,
-      };
-
-      logger.info('[TUMA] Verifying payment status:', { transactionId: request.transactionId });
-
-      const response = await axios.post(
-        `${this.apiUrl}/payment/verify-transaction`,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 10000,
-        }
-      );
-
-      if (response.data.success && response.data.data) {
-        const data = response.data.data;
-        const status = data.status === 'SUCCESS' ? 'SUCCESSFUL' : data.status === 'FAILED' ? 'FAILED' : 'PENDING';
-
-        logger.info('[TUMA] Payment status verified:', {
-          transactionId: request.transactionId,
-          status,
-        });
-
-        return {
-          status,
-          transactionId: data.transaction_id,
-          amount: data.amount,
-          timestamp: new Date(data.created_at),
-          message: data.message || 'Payment verified',
-          providerData: data,
-        };
-      }
-
-      const message = response.data.message || 'Verification failed';
-      logger.error('[TUMA] Verification failed:', message);
-
-      return {
-        status: 'FAILED',
-        message,
-      };
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
-      logger.error('[TUMA] Payment verification error:', {
-        status: error.response?.status,
-        message: errorMessage,
-      });
-
-      return {
-        status: 'FAILED',
-        message: errorMessage,
-      };
-    }
-  }
-
-  async verifyCallback(request: CallbackVerificationRequest): Promise<CallbackVerificationResponse> {
-    try {
-      const payload = request.payload;
-
-      logger.info('[TUMA] Verifying callback:', {
-        transactionId: payload.transaction_id || payload.checkout_request_id,
-      });
-
-      // Verify with provider
-      const verification = await this.verifyPaymentStatus({
-        transactionId: payload.transaction_id || payload.checkout_request_id,
-      });
-
-      const isValid = verification.status === 'SUCCESSFUL';
-
-      logger.info('[TUMA] Callback verification result:', {
-        valid: isValid,
-        status: verification.status,
-      });
-
-      return {
-        valid: isValid,
-        transactionId: payload.transaction_id || payload.checkout_request_id,
-        status: verification.status,
-        amount: verification.amount,
-        message: verification.message,
-      };
-    } catch (error: any) {
-      logger.error('[TUMA] Callback verification error:', error.message);
-
-      return {
-        valid: false,
-        message: error.message || 'Callback verification failed',
-      };
-    }
-  }
+  // async verifyCallback(request: CallbackVerificationRequest): Promise<CallbackVerificationResponse> {
+  //   // Implementation removed
+  // }
 
   getProviderName(): string {
     return 'TUMA';
