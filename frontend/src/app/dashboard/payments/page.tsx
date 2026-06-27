@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { api, getErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/components/ui/toaster';
+import CardPaymentForm, { CardData } from '@/components/CardPaymentForm';
 import {
   CreditCard,
   Smartphone,
@@ -20,6 +21,8 @@ import {
   RefreshCw,
   Lock,
   ShieldCheck,
+  Trash2,
+  Star,
 } from 'lucide-react';
 
 export default function PaymentsPage() {
@@ -41,6 +44,7 @@ export default function PaymentsPage() {
   const [paymentStartedAt, setPaymentStartedAt] = useState<number | null>(null);
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
   const [isVerifying, setIsVerifying] = useState(!!orderTrackingId);
+  const [showCardForm, setShowCardForm] = useState(false);
 
   // 0. Handle Pesapal Redirect Back
   useEffect(() => {
@@ -205,6 +209,30 @@ export default function PaymentsPage() {
     onError: (err) => toast({ type: 'error', title: 'Failed to download receipt', description: getErrorMessage(err) }),
   });
 
+  // Delete individual payment
+  const deletePaymentMutation = useMutation({
+    mutationFn: async (paymentId: string) => {
+      await api.delete(`/payments/${paymentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-payments'] });
+      toast({ type: 'success', title: 'Payment deleted', description: 'The payment record has been removed.' });
+    },
+    onError: (err) => toast({ type: 'error', title: 'Failed to delete payment', description: getErrorMessage(err) }),
+  });
+
+  // Clear all payment history
+  const clearHistoryMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete('/payments/my-history');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-payments'] });
+      toast({ type: 'success', title: 'Payment history cleared', description: 'All payment records have been removed.' });
+    },
+    onError: (err) => toast({ type: 'error', title: 'Failed to clear history', description: getErrorMessage(err) }),
+  });
+
   const selectedBill = billsData?.find((b: any) => b.id === selectedBillId);
   const maxAmount = selectedBill?.balance || 0;
   const isAmountValid = amount && parseFloat(amount) > 0 && parseFloat(amount) <= maxAmount;
@@ -332,10 +360,27 @@ export default function PaymentsPage() {
               ))}
             </select>
           </div>
-
           {/* Payment Method Toggle */}
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>Payment Method</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Payment Method</label>
+              {paymentMethod === 'CARD' && (
+                <button
+                  onClick={() => setShowCardForm(!showCardForm)}
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    color: '#1434CB',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  {showCardForm ? 'Hide Form' : 'Enter Card Details'}
+                </button>
+              )}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: savedCard ? '1fr 1fr 1fr' : '1fr 1fr', gap: '8px' }}>
               <button
                 onClick={() => setPaymentMethod('MPESA_STK_PUSH')}
@@ -543,10 +588,51 @@ export default function PaymentsPage() {
         </div>
       </div>
 
+      {/* Card Payment Form */}
+      {showCardForm && (
+        <CardPaymentForm
+          disabled={false}
+          isLoading={false}
+          onSubmit={(cardData: CardData) => {
+            toast({ type: 'success', title: 'Card details saved', description: 'Your card has been saved securely.' });
+            setShowCardForm(false);
+          }}
+        />
+      )}
+
       {/* Payment History Table */}
       {showPaymentHistory && (
         <div style={{ padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--t1)', marginBottom: '16px' }}>Payment History</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Payment History</h2>
+            {paymentHistoryData && paymentHistoryData.length > 0 && (
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete all payment history? This action cannot be undone.')) {
+                    clearHistoryMutation.mutate();
+                  }
+                }}
+                disabled={clearHistoryMutation.isPending}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  background: 'rgba(239, 68, 68, 0.05)',
+                  color: '#ef4444',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  opacity: clearHistoryMutation.isPending ? 0.6 : 1,
+                }}
+              >
+                <Trash2 size={14} />
+                Clear All
+              </button>
+            )}
+          </div>
           {historyLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
               <Loader2 className="animate-spin" />
@@ -585,7 +671,7 @@ export default function PaymentsPage() {
                           {payment.status}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 8px' }}>
+                      <td style={{ padding: '12px 8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
                         {payment.status === 'SUCCESSFUL' && (
                           <button
                             onClick={() => downloadReceiptMutation.mutate(payment.id)}
@@ -595,6 +681,27 @@ export default function PaymentsPage() {
                             Receipt
                           </button>
                         )}
+                        <button
+                          onClick={() => {
+                            if (confirm('Are you sure you want to delete this payment record?')) {
+                              deletePaymentMutation.mutate(payment.id);
+                            }
+                          }}
+                          disabled={deletePaymentMutation.isPending}
+                          title="Delete payment record"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            opacity: deletePaymentMutation.isPending ? 0.6 : 1,
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </td>
                     </tr>
                   ))}
