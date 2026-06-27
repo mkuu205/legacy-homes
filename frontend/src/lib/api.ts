@@ -257,9 +257,6 @@ api.interceptors.response.use(
         }, 3000);
       } else if (currentStatus !== 'WAKING_UP') {
         updateStoreStatus('OFFLINE');
-        if (currentStatus === 'ONLINE' || currentStatus === 'SLOW') {
-          backendEvents.emit('backend-offline');
-        }
       }
       
       // Queue replayable GET requests
