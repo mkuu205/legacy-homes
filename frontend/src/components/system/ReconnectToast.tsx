@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react';
 import { useSystemStatusStore } from '@/stores/system-status.store';
 import { useToast } from '@/components/ui/use-toast';
 
-type SystemStatus = 'ONLINE' | 'OFFLINE' | 'CHECKING' | 'ERROR';
+type SystemStatus = 'ONLINE' | 'OFFLINE' | 'CHECKING' | 'ERROR' | 'MAINTENANCE' | 'NETWORK_OFFLINE' | 'SLOW' | 'WAKING_UP';
 
 export function ReconnectToast() {
   const status = useSystemStatusStore((state) => state.status) as SystemStatus;
@@ -35,7 +35,43 @@ export function ReconnectToast() {
       toast({
         title: 'Connection Restored',
         description: 'You are back online.',
-        variant: 'default', // ✅ Using 'default' instead of 'success'
+        variant: 'default',
+      });
+    }
+
+    // Handle network offline
+    if (status === 'NETWORK_OFFLINE' && prevStatus.current !== 'NETWORK_OFFLINE') {
+      toast({
+        title: 'Network Offline',
+        description: 'Please check your internet connection.',
+        variant: 'destructive',
+      });
+    }
+
+    // Handle maintenance mode
+    if (status === 'MAINTENANCE' && prevStatus.current !== 'MAINTENANCE') {
+      toast({
+        title: 'Maintenance Mode',
+        description: 'The system is currently under maintenance.',
+        variant: 'destructive',
+      });
+    }
+
+    // Handle slow connection
+    if (status === 'SLOW' && prevStatus.current !== 'SLOW') {
+      toast({
+        title: 'Slow Connection',
+        description: 'The server is responding slowly. Please wait...',
+        variant: 'default',
+      });
+    }
+
+    // Handle waking up
+    if (status === 'WAKING_UP' && prevStatus.current !== 'WAKING_UP') {
+      toast({
+        title: 'Waking Up',
+        description: 'The server is starting up. Please wait...',
+        variant: 'default',
       });
     }
 
