@@ -112,8 +112,7 @@ const EXCLUDED_ENDPOINTS = [
 ];
 
 const isReplayableRequest = (config: any): boolean => {
-  // ✅ FIXED: Removed the ! (not) operator
-  if (config?.method?.toLowerCase() === 'get') return false;
+  if (config?.method?.toLowerCase() !== 'get') return false;
   if (!config?.url) return false;
   
   // Check excluded endpoints
@@ -213,13 +212,19 @@ const updateStoreStatus = (status: BackendStatus, details?: any) => {
 api.interceptors.response.use(
   (response) => {
     // Successful response - backend is online
+    // ONLY update to ONLINE if it's NOT a health check or if health check was successful
+    // This prevents random successful requests from clearing maintenance state prematurely
     const store = useSystemStatusStore.getState();
+    const isHealthCheck = response.config.url?.includes('/health');
+    
     if (store.status !== 'ONLINE' && store.status !== 'SLOW') {
-      updateStoreStatus('ONLINE');
-      backendEvents.emit('backend-online');
-      
-      // Attempt to replay queued requests
-      replayQueuedRequests().catch(console.error);
+      // If it's a health check, we let checkBackendHealth handle it
+      // If it's a regular request that succeeded, it's a strong indicator we're online
+      if (!isHealthCheck) {
+        updateStoreStatus('ONLINE');
+        backendEvents.emit('backend-online');
+        replayQueuedRequests().catch(console.error);
+      }
     }
     return response;
   },
@@ -255,7 +260,8 @@ api.interceptors.response.use(
             updateStoreStatus('OFFLINE');
           }
         }, 3000);
-      } else if (currentStatus !== 'WAKING_UP') {
+      } else if (currentStatus !== 'WAKING_UP' && currentStatus !== 'CHECKING' && currentStatus !== 'MAINTENANCE') {
+        // Only set to OFFLINE if not already in a specific outage state
         updateStoreStatus('OFFLINE');
       }
       
@@ -335,7 +341,11 @@ api.interceptors.response.use(
         } catch (healthError) {
           // Backend unreachable - preserve session
           console.warn('Backend unreachable during refresh - preserving session');
-          updateStoreStatus('OFFLINE');
+          // Don't overwrite MAINTENANCE state with OFFLINE
+          const store = useSystemStatusStore.getState();
+          if (store.status !== 'MAINTENANCE') {
+            updateStoreStatus('OFFLINE');
+          }
           return Promise.reject(new Error('Backend unavailable'));
         }
 
@@ -398,6 +408,7 @@ export const clearPendingRequests = (): void => {
 export const checkBackendHealth = async (): Promise<HealthResponse> => {
   const startTime = Date.now();
   const store = useSystemStatusStore.getState();
+  const currentStatus = store.status;
   
   try {
     // Check if browser is offline first
@@ -406,8 +417,16 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
       throw new Error('Network offline');
     }
 
-    // Update status to checking
-    updateStoreStatus('CHECKING');
+    // Update status to checking ONLY if we're not already in an outage state
+    // This prevents the maintenance screen from flickering/unmounting during polls
+    const isOutage = currentStatus === 'OFFLINE' || 
+                    currentStatus === 'MAINTENANCE' || 
+                    currentStatus === 'NETWORK_OFFLINE' || 
+                    currentStatus === 'WAKING_UP';
+    
+    if (!isOutage) {
+      updateStoreStatus('CHECKING');
+    }
 
     const response = await axios.get(HEALTH_ENDPOINT, {
       timeout: 8000,
@@ -486,83 +505,24 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
           message: data?.message || 'Service under maintenance',
           ...data?.maintenance
         }
-      } as HealthResponse;
+      };
     }
     
-    // Check if unreachable
-    if (isBackendUnreachable(axiosError)) {
-      // If previously online or slow, try waking up first
-      const currentStore = useSystemStatusStore.getState();
-      if (currentStore.status === 'ONLINE' || currentStore.status === 'SLOW') {
-        updateStoreStatus('WAKING_UP');
-        backendEvents.emit('backend-offline');
-        // After 3 seconds, move to offline if still failing
-        setTimeout(() => {
-          const updatedStore = useSystemStatusStore.getState();
-          if (updatedStore.status === 'WAKING_UP') {
-            updateStoreStatus('OFFLINE');
-          }
-        }, 3000);
-      } else {
-        if (currentStore.status !== 'OFFLINE') {
-            updateStoreStatus('OFFLINE');
-        }
-      }
-      
-      store.recordFailedConnection();
-      throw new Error('Backend unreachable');
+    // Default to offline for errors
+    // But preserve current state if it's already an outage state
+    if (currentStatus !== 'MAINTENANCE' && currentStatus !== 'NETWORK_OFFLINE' && currentStatus !== 'WAKING_UP') {
+      updateStoreStatus('OFFLINE');
     }
     
-    // Check timeout (slow)
-    if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ETIMEDOUT') {
-      updateStoreStatus('SLOW', { latency });
-      throw new Error('Request timeout');
-    }
-    
-    // Unknown error - don't change status, it might be a transient issue
-    console.error('Health check failed with unknown error:', error);
+    store.recordFailedConnection();
     throw error;
   }
 };
 
-export const getCurrentBackendStatus = (): BackendStatus => {
-  return useSystemStatusStore.getState().status;
-};
-
-export const isBackendOnline = (): boolean => {
-  const status = useSystemStatusStore.getState().status;
-  return status === 'ONLINE' || status === 'SLOW';
-};
-
-// --- EXPOSE FOR DEBUGGING ---
-if (typeof window !== 'undefined') {
-  (window as any).__backendStatus = {
-    getStatus: getCurrentBackendStatus,
-    isOnline: isBackendOnline,
-    events: backendEvents,
-    pendingRequests: () => pendingRequests.length,
-    clearPending: clearPendingRequests,
-    replayRequests: replayQueuedRequests,
-  };
-}
-
-// --- ORIGINAL FUNCTIONS (unchanged) ---
-export const getErrorMessage = (
-  error: unknown
-): string => {
+export const getErrorMessage = (error: any): string => {
   if (axios.isAxiosError(error)) {
-    return (
-      error.response?.data?.message ||
-      error.message ||
-      'An error occurred'
-    );
+    const data = error.response?.data as any;
+    return data?.message || error.message || 'An unexpected error occurred';
   }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'An unexpected error occurred';
+  return error.message || 'An unexpected error occurred';
 };
-
-export default api;

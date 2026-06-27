@@ -9,13 +9,18 @@ import { ReconnectToast } from '@/components/system/ReconnectToast';
 export function MaintenanceProvider({ children }: { children: ReactNode }) {
   const status = useSystemStatusStore((state) => state.status);
 
-  if (status === 'MAINTENANCE') {
+  // Define all states that should show the maintenance screen
+  const isMaintenanceMode = status === 'MAINTENANCE' || 
+                           status === 'OFFLINE' || 
+                           status === 'WAKING_UP' || 
+                           status === 'NETWORK_OFFLINE';
+
+  if (isMaintenanceMode) {
     return <MaintenanceScreen />;
   }
 
   return (
     <>
-      {status === 'OFFLINE' && <OfflineBanner />}
       <ReconnectToast />
       {children}
     </>

@@ -52,7 +52,12 @@ export default function LoginPage() {
 
   // Monitor backend status and update maintenance mode
   useEffect(() => {
-    const isOffline = backendStatus === 'OFFLINE' || backendStatus === 'WAKING_UP';
+    // Define all states that should show the maintenance screen
+    const isOffline = backendStatus === 'OFFLINE' || 
+                     backendStatus === 'WAKING_UP' || 
+                     backendStatus === 'MAINTENANCE' || 
+                     backendStatus === 'NETWORK_OFFLINE';
+    
     setIsMaintenanceMode(isOffline);
     
     if (isOffline) {
@@ -123,8 +128,13 @@ export default function LoginPage() {
       await checkBackendHealth();
       setLastChecked(new Date());
 
-      // If still offline, show toast
-      if (backendStatus === 'OFFLINE' || backendStatus === 'WAKING_UP') {
+      // Check if still in any outage state
+      const isStillOffline = backendStatus === 'OFFLINE' || 
+                            backendStatus === 'WAKING_UP' || 
+                            backendStatus === 'MAINTENANCE' || 
+                            backendStatus === 'NETWORK_OFFLINE';
+
+      if (isStillOffline) {
         toast({
           type: 'info',
           title: 'Service Still Unavailable',
@@ -248,7 +258,9 @@ export default function LoginPage() {
                 <span style={{ color: 'var(--t2)' }}>Backend Status</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }} />
-                  <span style={{ color: '#f87171', fontWeight: 600 }}>Offline</span>
+                  <span style={{ color: '#f87171', fontWeight: 600 }}>
+                    {backendStatus === 'MAINTENANCE' ? 'Maintenance' : 'Offline'}
+                  </span>
                 </div>
               </div>
 
@@ -428,46 +440,30 @@ export default function LoginPage() {
             type="submit"
             disabled={isLoading}
             className="btn bp"
-            style={{ width: '100%', marginTop: '8px' }}
+            style={{ width: '100%', marginTop: '10px' }}
           >
             {isLoading ? (
               <>
-                <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
                 Signing in...
               </>
             ) : (
               <>
                 Sign In
-                <ArrowRight size={16} />
+                <ArrowRight size={18} />
               </>
             )}
           </button>
         </form>
 
-        {/* Divider */}
-        <div className="dv" />
-
-        {/* Sign Up Link */}
-        <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--t2)' }}>
-          Don&apos;t have an account?{' '}
-          <Link href="/register" style={{ color: 'var(--ac)', fontWeight: 600, textDecoration: 'none' }}>
-            Create one now
-          </Link>
-        </p>
-
-        {/* Features */}
-        <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--bd)' }}>
-          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>
-            Features
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {['Instant M-Pesa STK Push', 'Real-time notifications', 'AI-powered support'].map((feature) => (
-              <div key={feature} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--t2)' }}>
-                <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--ac)', flexShrink: 0 }} />
-                {feature}
-              </div>
-            ))}
-          </div>
+        {/* Footer */}
+        <div style={{ marginTop: '24px', textAlign: 'center' }}>
+          <p style={{ fontSize: '13px', color: 'var(--t2)' }}>
+            Don't have an account?{' '}
+            <Link href="/register" style={{ fontWeight: 600, color: 'var(--ac)', textDecoration: 'none' }}>
+              Contact Admin
+            </Link>
+          </p>
         </div>
       </div>
     </div>
