@@ -1,0 +1,534 @@
+// Legacy Homes Water Billing System - Prisma Schema
+// PostgreSQL database schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  BILLING_OFFICER
+  SUPPORT_AGENT
+  NOTIFICATION_MANAGER
+  READ_ONLY_MANAGER
+  RESIDENT
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum HouseStatus {
+  OCCUPIED
+  VACANT
+  UNDER_CONSTRUCTION
+  SUSPENDED
+  MAINTENANCE
+}
+
+enum MeterStatus {
+  ACTIVE
+  FAULTY
+  REPLACED
+}
+
+enum BillStatus {
+  PAID
+  PARTIAL
+  UNPAID
+  OVERDUE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentReconciliationStatus {
+  PENDING
+  RECONCILED
+  MISMATCH
+  ORPHANED
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum TicketCategory {
+  BILLING
+  PAYMENT
+  METER
+  TECHNICAL
+  COMPLAINT
+  ACCOUNT
+}
+
+enum NotificationType {
+  MAINTENANCE
+  WATER_OUTAGE
+  BILLING_REMINDER
+  PAYMENT_REMINDER
+  EMERGENCY
+  ESTATE_COMMUNICATION
+  PAYMENT_CONFIRMATION
+  BILLING_ALERT
+  BILL_GENERATED
+  BILL_DUE_SOON
+  BILL_OVERDUE
+  PAYMENT_PENDING
+  PAYMENT_SUCCESSFUL
+  PAYMENT_FAILED
+  PAYMENT_CANCELLED
+  PAYMENT_REFUNDED
+  RECEIPT_READY
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  READ
+}
+
+enum PaymentProviderType {
+  TUMA
+  PESAPAL
+}
+
+enum PaymentMethodType {
+  MPESA_STK_PUSH
+  BUY_GOODS_STK_PUSH
+  VISA
+  MASTERCARD
+  SAVED_CARD
+  CARD
+}
+
+// ─────────────────────────────────────────────
+// HOUSES
+// ─────────────────────────────────────────────
+
+model House {
+  id               String      @id @default(uuid())
+  houseNumber      String      @unique
+  occupancyStatus  HouseStatus @default(UNDER_CONSTRUCTION)
+  creationDate     DateTime    @default(now())
+  notes            String?
+  isLocked         Boolean     @default(false) // For billing cycle locking
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  resident         User?       @relation("HouseToResident")
+  meter            Meter?      @relation("HouseToMeter")
+  bills            Bill[]
+
+  @@map("houses")
+}
+
+// ─────────────────────────────────────────────
+// USERS (Admins + Residents share this table)
+// ─────────────────────────────────────────────
+
+model User {
+  id                String             @id @default(uuid())
+  fullName          String
+  email             String             @unique
+  phone             String             @unique
+  passwordHash      String
+  role              Role               @default(RESIDENT)
+  accountStatus     AccountStatus      @default(INACTIVE)
+  registrationStatus RegistrationStatus @default(PENDING)
+  profilePicture    String?
+  nationalId        String?
+  accountNumber     String             @unique
+  houseId           String?            @unique // Foreign key for House
+  emailVerified     Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  otpCodes          OtpCode[]
+  refreshTokens     RefreshToken[]
+  assignedHouse     House?             @relation("HouseToResident", fields: [houseId], references: [id])
+  bills             Bill[]
+  payments          Payment[]
+  tickets           Ticket[]
+  ticketReplies     TicketReply[]
+  notifications     UserNotification[]
+  auditLogs         AuditLog[]
+  meterReadings     MeterReading[]
+  assignedTickets   Ticket[]           @relation("AssignedTickets")
+  paymentMethods    PaymentMethod[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// OTP CODES
+// ─────────────────────────────────────────────
+
+model OtpCode {
+  id          String   @id @default(uuid())
+  userId      String
+  otpHash     String
+  expiresAt   DateTime
+  attempts    Int      @default(0)
+  used        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("otp_codes")
+}
+
+// ─────────────────────────────────────────────
+// REFRESH TOKENS
+// ─────────────────────────────────────────────
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  revoked     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────
+// METERS
+// ─────────────────────────────────────────────
+
+model Meter {
+  id               String      @id @default(uuid())
+  meterNumber      String      @unique
+  meterSerial      String      @unique
+  houseId          String      @unique // Foreign key for House
+  installationDate DateTime
+  previousReading  Float       @default(0)
+  currentReading   Float       @default(0)
+  status           MeterStatus @default(ACTIVE)
+  notes            String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  house            House       @relation("HouseToMeter", fields: [houseId], references: [id])
+  readings         MeterReading[]
+  bills            Bill[]
+
+  @@map("meters")
+}
+
+// ─────────────────────────────────────────────
+// METER READINGS
+// ─────────────────────────────────────────────
+
+model MeterReading {
+  id              String   @id @default(uuid())
+  meterId         String
+  readBy          String
+  billingMonth    String
+  previousReading Float
+  currentReading  Float
+  unitsConsumed   Float
+  photoUrl        String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  meter           Meter    @relation(fields: [meterId], references: [id])
+  reader          User     @relation(fields: [readBy], references: [id])
+  billId          String?  @unique // Foreign key for Bill
+  bill            Bill?    @relation("MeterReadingToBill")
+
+  @@unique([meterId, billingMonth])
+  @@map("meter_readings")
+}
+
+// ─────────────────────────────────────────────
+// BILLS
+// ─────────────────────────────────────────────
+
+model Bill {
+  id                 String     @id @default(uuid())
+  billNumber         String     @unique
+  residentId         String
+  houseId            String
+  meterId            String
+  readingId          String?    @unique // Foreign key for MeterReading
+  billingMonth       String
+  billingPeriodStart DateTime
+  billingPeriodEnd   DateTime
+  generatedAt        DateTime   @default(now())
+  dueDate            DateTime
+  paidAt             DateTime?
+  previousReading    Float
+  currentReading     Float
+  unitsConsumed      Float
+  unitRate           Float      @default(250)
+  totalAmount        Float
+  amountPaid         Float      @default(0)
+  balance            Float
+  status             BillStatus @default(UNPAID)
+  isLocked           Boolean    @default(false)
+  paymentProvider    PaymentProviderType?
+  paymentMethod      PaymentMethodType?
+  paymentId          String?
+  daysUntilDue       Int?
+  overdueDays        Int?
+  isOverdue          Boolean?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  resident           User          @relation(fields: [residentId], references: [id])
+  house              House         @relation(fields: [houseId], references: [id])
+  meter              Meter         @relation(fields: [meterId], references: [id])
+  reading            MeterReading? @relation("MeterReadingToBill", fields: [readingId], references: [id])
+  payments           Payment[]
+
+  @@map("bills")
+}
+
+// ─────────────────────────────────────────────
+// PAYMENTS
+// ─────────────────────────────────────────────
+
+model Payment {
+  id                    String                    @id @default(uuid())
+  provider              PaymentProviderType
+  paymentMethod         PaymentMethodType
+  residentId            String
+  billId                String
+  merchantReference     String?
+  providerTransactionId String?
+  providerReference     String?
+  providerOrderId       String?
+  providerStatus        String?
+  providerMessage       String?
+  receiptNumber         String?
+  confirmationCode      String?
+  phoneNumber           String?
+  maskedAccount         String?
+  cardBrand             String?
+  currency              String?
+  amount                Float
+  status                PaymentStatus             @default(PENDING)
+  reconciliationStatus  PaymentReconciliationStatus @default(PENDING)
+  merchantRequestId     String?
+  checkoutRequestId     String?
+  callbackPayload       Json?
+  providerPayload       Json?
+  failureReason         String?
+  verificationTimestamp DateTime?
+  verifiedBy            String?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  bill                  Bill                      @relation(fields: [billId], references: [id])
+  resident              User                      @relation(fields: [residentId], references: [id])
+  receipt               Receipt?                  @relation("PaymentToReceipt")
+
+  @@map("payments")
+}
+
+// ─────────────────────────────────────────────
+// RECEIPTS
+// ─────────────────────────────────────────────
+
+model Receipt {
+  id          String   @id @default(uuid())
+  receiptNumber String   @unique
+  paymentId   String   @unique
+  provider    PaymentProviderType
+  pdfUrl      String?
+  generatedAt DateTime @default(now())
+  emailed     Boolean  @default(false)
+  smsSent     Boolean  @default(false)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  payment     Payment  @relation("PaymentToReceipt", fields: [paymentId], references: [id])
+
+  @@map("receipts")
+}
+
+// ─────────────────────────────────────────────
+// PAYMENT METHODS
+// ─────────────────────────────────────────────
+
+model PaymentMethod {
+  id            String            @id @default(uuid())
+  residentId    String
+  provider      PaymentProviderType
+  methodType    PaymentMethodType
+  displayName   String
+  lastFour      String?
+  cardBrand     String?
+  expiryMonth   Int?
+  expiryYear    Int?
+  providerToken String?
+  phoneNumber   String?
+  isDefault     Boolean           @default(false)
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  resident      User              @relation(fields: [residentId], references: [id])
+
+  @@map("payment_methods")
+}
+
+// ─────────────────────────────────────────────
+// SUPPORT TICKETS
+// ─────────────────────────────────────────────
+
+model Ticket {
+  id          String         @id @default(uuid())
+  ticketId    String         @unique
+  residentId  String
+  assignedTo  String?
+  subject     String
+  description String
+  category    TicketCategory
+  status      TicketStatus   @default(OPEN)
+  attachments String[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  resident    User           @relation(fields: [residentId], references: [id])
+  assignee    User?          @relation("AssignedTickets", fields: [assignedTo], references: [id])
+  replies     TicketReply[]
+
+  @@map("tickets")
+}
+
+model TicketReply {
+  id          String   @id @default(uuid())
+  ticketId    String
+  userId      String
+  message     String
+  attachments String[]
+  isAdmin     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("ticket_replies")
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────
+
+model Notification {
+  id          String                @id @default(uuid())
+  title       String
+  message     String
+  type        NotificationType
+  channels    NotificationChannel[]
+  sentBy      String?
+  targetAll   Boolean               @default(false)
+  targetGroup String?
+  createdAt   DateTime              @default(now())
+
+  userNotifications UserNotification[]
+
+  @@map("notifications")
+}
+
+model UserNotification {
+  id             String             @id @default(uuid())
+  notificationId String
+  userId         String
+  channel        NotificationChannel
+  status         NotificationStatus @default(PENDING)
+  readAt         DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime           @default(now())
+
+  notification   Notification       @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notifications")
+}
+
+// ─────────────────────────────────────────────
+// AUDIT LOGS
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  action      String
+  resource    String
+  resourceId  String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────
+// SYSTEM SETTINGS
+// ─────────────────────────────────────────────
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model CallbackAudit {
+  id               String   @id @default(uuid())
+  headers          Json?
+  payload          Json
+  receivedAt       DateTime @default(now())
+  processed        Boolean  @default(false)
+  paymentId        String?
+  provider         String   @default("TUMA")
+  processingResult String?
+  errorMessage     String?
+
+  @@map("callback_audits")
+}
