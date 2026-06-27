@@ -1,7 +1,0 @@
-1:"$Sreact.fragment"
-2:I[92825,["/_next/static/chunks/0vlo7e~3_ovoh.js","/_next/static/chunks/0p.-lf2bqux9h.js"],"ClientSegmentRoot"]
-3:I[62473,["/_next/static/chunks/0vlo7e~3_ovoh.js","/_next/static/chunks/0p.-lf2bqux9h.js","/_next/static/chunks/0ks491cusw3em.js"],"default"]
-4:I[39756,["/_next/static/chunks/0vlo7e~3_ovoh.js","/_next/static/chunks/0p.-lf2bqux9h.js"],"default"]
-5:I[37457,["/_next/static/chunks/0vlo7e~3_ovoh.js","/_next/static/chunks/0p.-lf2bqux9h.js"],"default"]
-0:{"rsc":["$","$1","c",{"children":[[["$","script","script-0",{"src":"/_next/static/chunks/0ks491cusw3em.js","async":true}]],["$","$L2",null,{"Component":"$3","slots":{"children":["$","$L4",null,{"parallelRouterKey":"children","template":["$","$L5",null,{}]}]},"serverProvidedParams":{"params":{},"promises":["$@6"]}}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"ozUx_Q08emboOoEonQFlr"}
-6:"$0:rsc:props:children:1:props:serverProvidedParams:params"
