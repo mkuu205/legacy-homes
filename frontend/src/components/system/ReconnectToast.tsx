@@ -10,7 +10,7 @@ type SystemStatus = 'ONLINE' | 'OFFLINE' | 'CHECKING' | 'ERROR';
 export function ReconnectToast() {
   const status = useSystemStatusStore((state) => state.status) as SystemStatus;
   const prevStatus = useRef<SystemStatus>(status);
-  const { toast, dismiss } = useToast(); // ✅ Get dismiss from useToast
+  const { toast, dismiss } = useToast();
   const offlineToastId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -28,14 +28,14 @@ export function ReconnectToast() {
     if (status === 'ONLINE' && prevStatus.current === 'OFFLINE') {
       // Dismiss the offline toast
       if (offlineToastId.current) {
-        dismiss(offlineToastId.current); // ✅ Use dismiss from useToast
+        dismiss(offlineToastId.current);
         offlineToastId.current = null;
       }
 
       toast({
         title: 'Connection Restored',
         description: 'You are back online.',
-        variant: 'success',
+        variant: 'default', // ✅ Using 'default' instead of 'success'
       });
     }
 
@@ -58,7 +58,7 @@ export function ReconnectToast() {
     }
 
     prevStatus.current = status;
-  }, [status, toast, dismiss]); // ✅ Add dismiss to dependencies
+  }, [status, toast, dismiss]);
 
   return null;
 }
