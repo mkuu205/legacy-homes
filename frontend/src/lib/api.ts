@@ -243,20 +243,21 @@ api.interceptors.response.use(
       const store = useSystemStatusStore.getState();
       
       // If it was previously online, set to waking up first (cold start detection)
-      if (store.status === 'ONLINE' || store.status === 'SLOW') {
+      const currentStatus = store.status;
+      if (currentStatus === 'ONLINE' || currentStatus === 'SLOW') {
         updateStoreStatus('WAKING_UP');
         backendEvents.emit('backend-offline');
         
         // After 3 seconds, if still failing, move to OFFLINE
         setTimeout(() => {
-          const currentStore = useSystemStatusStore.getState();
-          if (currentStore.status === 'WAKING_UP') {
+          const checkStore = useSystemStatusStore.getState();
+          if (checkStore.status === 'WAKING_UP') {
             updateStoreStatus('OFFLINE');
           }
         }, 3000);
-      } else if (store.status !== 'WAKING_UP') {
+      } else if (currentStatus !== 'WAKING_UP') {
         updateStoreStatus('OFFLINE');
-        if (store.status === 'ONLINE' || store.status === 'SLOW') {
+        if (currentStatus === 'ONLINE' || currentStatus === 'SLOW') {
           backendEvents.emit('backend-offline');
         }
       }
