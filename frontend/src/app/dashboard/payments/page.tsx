@@ -120,15 +120,6 @@ export default function PaymentsPage() {
     return regex.test(cleaned);
   };
 
-  const formatPhoneDisplay = (phone: string) => {
-    if (!phone) return '';
-    const cleaned = phone.replace(/\s/g, '');
-    if (cleaned.length >= 10) {
-      return cleaned.slice(0, 4) + '•••' + cleaned.slice(-4);
-    }
-    return phone;
-  };
-
   // Initiate payment
   const initiatePaymentMutation = useMutation({
     mutationFn: async () => {
@@ -375,10 +366,104 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      {/* Bill Details */}
+      {/* Payment Methods - Always Visible */}
+      <div style={{ marginBottom: '16px' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '12px' }}>
+          Payment Method
+        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* M-Pesa Card */}
+          <div
+            onClick={() => setPaymentMethod('MPESA_STK_PUSH')}
+            style={{
+              padding: '16px',
+              borderRadius: '12px',
+              border: paymentMethod === 'MPESA_STK_PUSH' ? '2px solid var(--ac)' : '1px solid var(--bd)',
+              background: paymentMethod === 'MPESA_STK_PUSH' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              display: 'flex',
+              gap: '16px',
+              alignItems: 'flex-start'
+            }}
+          >
+            <div style={{ 
+              width: '40px', 
+              height: '40px', 
+              borderRadius: '8px', 
+              background: paymentMethod === 'MPESA_STK_PUSH' ? 'var(--ac)' : 'var(--bd)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Smartphone size={20} color={paymentMethod === 'MPESA_STK_PUSH' ? 'white' : 'var(--t3)'} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>M-Pesa</span>
+                <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--t3)', background: 'var(--bd)', padding: '2px 8px', borderRadius: '4px' }}>
+                  Powered by Tuma
+                </span>
+                {paymentMethod === 'MPESA_STK_PUSH' && (
+                  <ChevronRight size={16} style={{ color: 'var(--ac)', marginLeft: 'auto' }} />
+                )}
+              </div>
+              <p style={{ fontSize: '13px', color: 'var(--t2)', margin: 0 }}>
+                Pay instantly using Safaricom STK Push.
+              </p>
+            </div>
+          </div>
+
+          {/* Card Payment Card */}
+          <div
+            onClick={() => setPaymentMethod('CARD')}
+            style={{
+              padding: '16px',
+              borderRadius: '12px',
+              border: paymentMethod === 'CARD' ? '2px solid var(--ac)' : '1px solid var(--bd)',
+              background: paymentMethod === 'CARD' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              display: 'flex',
+              gap: '16px',
+              alignItems: 'flex-start'
+            }}
+          >
+            <div style={{ 
+              width: '40px', 
+              height: '40px', 
+              borderRadius: '8px', 
+              background: paymentMethod === 'CARD' ? 'var(--ac)' : 'var(--bd)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <CreditCard size={20} color={paymentMethod === 'CARD' ? 'white' : 'var(--t3)'} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>Debit / Credit Card</span>
+                <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--t3)', background: 'var(--bd)', padding: '2px 8px', borderRadius: '4px' }}>
+                  Powered by Pesapal
+                </span>
+                {paymentMethod === 'CARD' && (
+                  <ChevronRight size={16} style={{ color: 'var(--ac)', marginLeft: 'auto' }} />
+                )}
+              </div>
+              <p style={{ fontSize: '13px', color: 'var(--t2)', margin: 0 }}>
+                Visa • Mastercard • Secure online payment.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bill Details - Only show when bill is selected */}
       {selectedBill && (
         <div style={{ 
-          marginBottom: '24px', 
+          marginBottom: '20px', 
           padding: '16px', 
           borderRadius: '8px', 
           border: '1px solid var(--bd)', 
@@ -419,246 +504,145 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* Payment Method */}
-      {selectedBill && (
-        <>
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '12px' }}>
-              Payment Method
-            </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* M-Pesa Card */}
-              <div
-                onClick={() => setPaymentMethod('MPESA_STK_PUSH')}
-                style={{
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: paymentMethod === 'MPESA_STK_PUSH' ? '2px solid var(--ac)' : '1px solid var(--bd)',
-                  background: paymentMethod === 'MPESA_STK_PUSH' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  display: 'flex',
-                  gap: '16px',
-                  alignItems: 'flex-start'
-                }}
-              >
-                <div style={{ 
-                  width: '40px', 
-                  height: '40px', 
-                  borderRadius: '8px', 
-                  background: paymentMethod === 'MPESA_STK_PUSH' ? 'var(--ac)' : 'var(--bd)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}>
-                  <Smartphone size={20} color={paymentMethod === 'MPESA_STK_PUSH' ? 'white' : 'var(--t3)'} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>M-Pesa</span>
-                    <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--t3)', background: 'var(--bd)', padding: '2px 8px', borderRadius: '4px' }}>
-                      Powered by Tuma
-                    </span>
-                    {paymentMethod === 'MPESA_STK_PUSH' && (
-                      <ChevronRight size={16} style={{ color: 'var(--ac)', marginLeft: 'auto' }} />
-                    )}
-                  </div>
-                  <p style={{ fontSize: '13px', color: 'var(--t2)', margin: 0 }}>
-                    Pay instantly using Safaricom STK Push.
-                  </p>
-                </div>
-              </div>
-
-              {/* Card Payment Card */}
-              <div
-                onClick={() => setPaymentMethod('CARD')}
-                style={{
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: paymentMethod === 'CARD' ? '2px solid var(--ac)' : '1px solid var(--bd)',
-                  background: paymentMethod === 'CARD' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  display: 'flex',
-                  gap: '16px',
-                  alignItems: 'flex-start'
-                }}
-              >
-                <div style={{ 
-                  width: '40px', 
-                  height: '40px', 
-                  borderRadius: '8px', 
-                  background: paymentMethod === 'CARD' ? 'var(--ac)' : 'var(--bd)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}>
-                  <CreditCard size={20} color={paymentMethod === 'CARD' ? 'white' : 'var(--t3)'} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>Debit / Credit Card</span>
-                    <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--t3)', background: 'var(--bd)', padding: '2px 8px', borderRadius: '4px' }}>
-                      Powered by Pesapal
-                    </span>
-                    {paymentMethod === 'CARD' && (
-                      <ChevronRight size={16} style={{ color: 'var(--ac)', marginLeft: 'auto' }} />
-                    )}
-                  </div>
-                  <p style={{ fontSize: '13px', color: 'var(--t2)', margin: 0 }}>
-                    Visa • Mastercard • Secure online payment.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* M-Pesa Section */}
-          {paymentMethod === 'MPESA_STK_PUSH' && (
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
-                Pay Using
-              </label>
-              <div style={{ 
-                padding: '14px', 
-                borderRadius: '12px', 
-                border: phoneError ? '2px solid #ef4444' : '1px solid var(--bd)', 
-                background: 'var(--c1)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                {!showPhoneInput ? (
-                  <>
-                    <div>
-                      <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>
-                        {formatPhoneDisplay(phone) || 'Not set'}
-                      </span>
-                      {phone && !validatePhone(phone) && (
-                        <p style={{ fontSize: '12px', color: '#ef4444', margin: '4px 0 0 0' }}>
-                          Invalid number format
-                        </p>
-                      )}
-                    </div>
-                    <button 
-                      onClick={() => setShowPhoneInput(true)}
-                      style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ac)', background: 'none', border: 'none', cursor: 'pointer' }}
-                    >
-                      Use another number
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <input 
-                      type="text"
-                      value={phone}
-                      onChange={(e) => {
-                        setPhone(e.target.value);
-                        setPhoneError('');
-                      }}
-                      placeholder="e.g. 0712345678"
-                      autoFocus
-                      style={{ 
-                        flex: 1,
-                        padding: '4px 0', 
-                        border: 'none', 
-                        borderBottom: '2px solid var(--ac)', 
-                        background: 'transparent', 
-                        color: 'var(--t1)', 
-                        fontSize: '15px', 
-                        fontWeight: 600,
-                        outline: 'none',
-                        fontFamily: 'inherit'
-                      }}
-                    />
-                    <button 
-                      onClick={() => {
-                        setShowPhoneInput(false);
-                        setPhone(user?.phone || '');
-                        setPhoneError('');
-                      }}
-                      style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t3)', background: 'none', border: 'none', cursor: 'pointer', marginLeft: '12px' }}
-                    >
-                      Use default number
-                    </button>
-                  </>
-                )}
-              </div>
-              {phoneError && (
-                <p style={{ fontSize: '12px', color: '#ef4444', margin: '4px 0 0 0' }}>
-                  {phoneError}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Card Section */}
-          {paymentMethod === 'CARD' && (
-            <div style={{ 
-              marginBottom: '20px', 
-              padding: '16px', 
-              borderRadius: '12px', 
-              background: 'rgba(0, 198, 167, 0.05)', 
-              border: '1px solid rgba(0, 198, 167, 0.1)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <Shield size={20} style={{ color: 'var(--ac)' }} />
-                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>Secure Card Payment</span>
-              </div>
-              <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t2)' }}>Visa</span>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t2)' }}>Mastercard</span>
-              </div>
-              <p style={{ fontSize: '13px', color: 'var(--t2)', margin: '0 0 8px 0' }}>
-                Your payment will be securely processed by Pesapal.
-              </p>
-              <p style={{ fontSize: '12px', color: 'var(--t3)', margin: 0 }}>
-                <Lock size={12} style={{ display: 'inline', marginRight: '6px' }} />
-                Legacy Homes never stores or processes your card information.
-              </p>
-            </div>
-          )}
-
-          {/* Payment Button */}
-          <button
-            onClick={() => {
-              if (paymentMethod === 'MPESA_STK_PUSH' && !validatePhone(phone)) {
-                setPhoneError('Please enter a valid Safaricom number (e.g., 0712345678)');
-                return;
-              }
-              initiatePaymentMutation.mutate();
-            }}
-            disabled={!isFormValid || initiatePaymentMutation.isPending}
-            style={{ 
-              width: '100%', 
-              padding: '16px', 
-              borderRadius: '12px', 
-              background: isFormValid ? 'var(--ac)' : 'var(--bd)', 
-              color: isFormValid ? 'white' : 'var(--t3)', 
-              border: 'none', 
-              fontSize: '16px', 
-              fontWeight: 700, 
-              cursor: isFormValid ? 'pointer' : 'not-allowed',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              transition: 'all 0.2s'
-            }}
-          >
-            {initiatePaymentMutation.isPending ? (
+      {/* M-Pesa Section - Only show when M-Pesa is selected */}
+      {paymentMethod === 'MPESA_STK_PUSH' && (
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
+            Pay Using
+          </label>
+          <div style={{ 
+            padding: '14px', 
+            borderRadius: '12px', 
+            border: phoneError ? '2px solid #ef4444' : '1px solid var(--bd)', 
+            background: 'var(--c1)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            {!showPhoneInput ? (
               <>
-                <Loader2 size={20} className="animate-spin" />
-                {paymentMethod === 'CARD' ? 'Redirecting to Pesapal...' : 'Processing Payment...'}
+                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>
+                  {phone || 'Not set'}
+                </span>
+                <button 
+                  onClick={() => setShowPhoneInput(true)}
+                  style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ac)', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Use another number
+                </button>
               </>
             ) : (
-              paymentMethod === 'CARD' ? 'Pay with Card' : 'Pay with M-Pesa'
+              <>
+                <input 
+                  type="text"
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    setPhoneError('');
+                  }}
+                  placeholder="e.g. 0712345678"
+                  autoFocus
+                  style={{ 
+                    flex: 1,
+                    padding: '4px 0', 
+                    border: 'none', 
+                    borderBottom: '2px solid var(--ac)', 
+                    background: 'transparent', 
+                    color: 'var(--t1)', 
+                    fontSize: '15px', 
+                    fontWeight: 600,
+                    outline: 'none',
+                    fontFamily: 'inherit'
+                  }}
+                />
+                <button 
+                  onClick={() => {
+                    setShowPhoneInput(false);
+                    setPhone(user?.phone || '');
+                    setPhoneError('');
+                  }}
+                  style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t3)', background: 'none', border: 'none', cursor: 'pointer', marginLeft: '12px' }}
+                >
+                  Use default number
+                </button>
+              </>
             )}
-          </button>
-        </>
+          </div>
+          {phoneError && (
+            <p style={{ fontSize: '12px', color: '#ef4444', margin: '4px 0 0 0' }}>
+              {phoneError}
+            </p>
+          )}
+        </div>
       )}
+
+      {/* Card Section - Only show when Card is selected */}
+      {paymentMethod === 'CARD' && (
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '16px', 
+          borderRadius: '12px', 
+          background: 'rgba(0, 198, 167, 0.05)', 
+          border: '1px solid rgba(0, 198, 167, 0.1)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+            <Shield size={20} style={{ color: 'var(--ac)' }} />
+            <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>Secure Card Payment</span>
+          </div>
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t2)' }}>Visa</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t2)' }}>Mastercard</span>
+          </div>
+          <p style={{ fontSize: '13px', color: 'var(--t2)', margin: '0 0 8px 0' }}>
+            Your payment will be securely processed by Pesapal.
+          </p>
+          <p style={{ fontSize: '12px', color: 'var(--t3)', margin: 0 }}>
+            <Lock size={12} style={{ display: 'inline', marginRight: '6px' }} />
+            Legacy Homes never stores or processes your card information.
+          </p>
+        </div>
+      )}
+
+      {/* Payment Button */}
+      <button
+        onClick={() => {
+          if (!selectedBillId) {
+            toast({ type: 'error', title: 'Please select a bill', description: 'Choose a bill to pay from the dropdown above.' });
+            return;
+          }
+          if (paymentMethod === 'MPESA_STK_PUSH' && !validatePhone(phone)) {
+            setPhoneError('Please enter a valid Safaricom number (e.g., 0712345678)');
+            return;
+          }
+          initiatePaymentMutation.mutate();
+        }}
+        disabled={initiatePaymentMutation.isPending}
+        style={{ 
+          width: '100%', 
+          padding: '16px', 
+          borderRadius: '12px', 
+          background: selectedBillId ? 'var(--ac)' : 'var(--bd)', 
+          color: selectedBillId ? 'white' : 'var(--t3)', 
+          border: 'none', 
+          fontSize: '16px', 
+          fontWeight: 700, 
+          cursor: selectedBillId ? 'pointer' : 'not-allowed',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          transition: 'all 0.2s'
+        }}
+      >
+        {initiatePaymentMutation.isPending ? (
+          <>
+            <Loader2 size={20} className="animate-spin" />
+            {paymentMethod === 'CARD' ? 'Redirecting to Pesapal...' : 'Processing Payment...'}
+          </>
+        ) : (
+          paymentMethod === 'CARD' ? 'Pay with Card' : 'Pay with M-Pesa'
+        )}
+      </button>
     </div>
   );
 }
