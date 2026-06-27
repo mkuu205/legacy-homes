@@ -17,6 +17,10 @@ import {
   Lock,
   ChevronRight,
   Shield,
+  History,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 export default function PaymentsPage() {
@@ -36,6 +40,8 @@ export default function PaymentsPage() {
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(paymentIdParam || null);
   const [isVerifying, setIsVerifying] = useState(!!orderTrackingId);
   const [phoneError, setPhoneError] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Handle Pesapal Redirect Back
   useEffect(() => {
@@ -81,6 +87,16 @@ export default function PaymentsPage() {
     },
   });
 
+  // Fetch payment history
+  const { data: historyData, isLoading: historyLoading, refetch: refetchHistory } = useQuery({
+    queryKey: ['payment-history'],
+    queryFn: async () => {
+      const res = await api.get('/payments/my-payments?limit=50');
+      return res.data.data?.payments || [];
+    },
+    enabled: showHistory,
+  });
+
   // Set bill from URL param only
   useEffect(() => {
     if (billIdParam && billsData) {
@@ -116,6 +132,29 @@ export default function PaymentsPage() {
     const regex = /^(?:\+254|0)?(7|1)\d{8}$/;
     return regex.test(cleaned);
   };
+
+  // Delete all payments mutation
+  const deleteAllPaymentsMutation = useMutation({
+    mutationFn: async () => {
+      if (!historyData || historyData.length === 0) return;
+      
+      // Delete each payment
+      const deletePromises = historyData.map((payment: any) => 
+        api.delete(`/payments/${payment.id}`)
+      );
+      await Promise.all(deletePromises);
+    },
+    onSuccess: () => {
+      toast({ type: 'success', title: 'All payments deleted', description: 'Your payment history has been cleared.' });
+      queryClient.invalidateQueries({ queryKey: ['payment-history'] });
+      refetchHistory();
+      setIsDeleting(false);
+    },
+    onError: (err) => {
+      toast({ type: 'error', title: 'Delete failed', description: getErrorMessage(err) });
+      setIsDeleting(false);
+    },
+  });
 
   // Initiate payment
   const initiatePaymentMutation = useMutation({
@@ -315,7 +354,156 @@ export default function PaymentsPage() {
           <ArrowLeft size={20} />
         </button>
         <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>Make Payment</h1>
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          style={{ 
+            marginLeft: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            border: '1px solid var(--bd)',
+            background: showHistory ? 'var(--ac)' : 'var(--c1)',
+            color: showHistory ? 'white' : 'var(--t1)',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: 600,
+            transition: 'all 0.2s'
+          }}
+        >
+          <History size={16} />
+          {showHistory ? 'Hide History' : 'Show History'}
+          {showHistory ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
       </div>
+
+      {/* Payment History */}
+      {showHistory && (
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '16px', 
+          borderRadius: '12px', 
+          border: '1px solid var(--bd)', 
+          background: 'var(--c1)',
+          maxHeight: '400px',
+          overflow: 'auto'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Payment History</h3>
+            {historyData && historyData.length > 0 && (
+              <button
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to delete all payment history?')) {
+                    setIsDeleting(true);
+                    deleteAllPaymentsMutation.mutate();
+                  }
+                }}
+                disabled={isDeleting}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #ef4444',
+                  background: 'transparent',
+                  color: '#ef4444',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  opacity: isDeleting ? 0.6 : 1
+                }}
+              >
+                {isDeleting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+                Delete All
+              </button>
+            )}
+          </div>
+          
+          {historyLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'center', padding: '20px' }}>
+              <Loader2 size={20} className="animate-spin" style={{ color: 'var(--ac)' }} />
+              <span style={{ color: 'var(--t2)' }}>Loading history...</span>
+            </div>
+          ) : historyData && historyData.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {historyData.map((payment: any) => (
+                <div 
+                  key={payment.id}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--bd)',
+                    background: 'var(--c2)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>
+                        {payment.method === 'MPESA_STK_PUSH' ? 'M-Pesa' : 'Card'}
+                      </span>
+                      <span style={{ 
+                        fontSize: '10px', 
+                        fontWeight: 600, 
+                        padding: '2px 8px', 
+                        borderRadius: '4px',
+                        background: payment.status === 'SUCCESSFUL' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                        color: payment.status === 'SUCCESSFUL' ? '#10b981' : '#ef4444'
+                      }}>
+                        {payment.status}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--t2)' }}>
+                      <span>KES {payment.amount?.toLocaleString()}</span>
+                      <span>{payment.receiptNumber || 'No receipt'}</span>
+                      <span>{new Date(payment.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (window.confirm('Delete this payment record?')) {
+                        try {
+                          await api.delete(`/payments/${payment.id}`);
+                          toast({ type: 'success', title: 'Payment deleted' });
+                          queryClient.invalidateQueries({ queryKey: ['payment-history'] });
+                          refetchHistory();
+                        } catch (err) {
+                          toast({ type: 'error', title: 'Delete failed', description: getErrorMessage(err) });
+                        }
+                      }
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--t3)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--t3)'}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--t2)' }}>
+              <p style={{ margin: 0 }}>No payment history found</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Select Bill - Dropdown */}
       <div style={{ marginBottom: '20px' }}>
