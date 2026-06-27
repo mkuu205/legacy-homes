@@ -225,54 +225,13 @@ export class PaymentMethodController {
   }
 
   /**
-   * Validate card details
+   * Validate card details (DEPRECATED: Use secure redirect instead)
    */
   async validateCard(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-      const { cardNumber, expiryMonth, expiryYear, cvv } = req.body;
-
-      const errors: string[] = [];
-
-      // Validate card number
-      if (!cardNumber || !this.validateCardNumber(cardNumber)) {
-        errors.push('Invalid card number');
-      }
-
-      // Validate expiry
-      if (!expiryMonth || !expiryYear) {
-        errors.push('Expiry date is required');
-      } else {
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1;
-
-        if (expiryYear < currentYear || (expiryYear === currentYear && expiryMonth < currentMonth)) {
-          errors.push('Card has expired');
-        }
-      }
-
-      // Validate CVV
-      if (!cvv || !/^\d{3,4}$/.test(cvv)) {
-        errors.push('Invalid CVV');
-      }
-
-      if (errors.length > 0) {
-        return res.status(400).json({ success: false, errors });
-      }
-
-      const cardBrand = this.detectCardBrand(cardNumber);
-
-      res.json({
-        success: true,
-        data: {
-          valid: true,
-          cardBrand,
-          lastFour: cardNumber.slice(-4),
-        },
-      });
-    } catch (error) {
-      next(error);
-    }
+    res.status(403).json({ 
+      success: false, 
+      message: 'Direct card validation is disabled for security. Use secure redirect flow.' 
+    });
   }
 }
 

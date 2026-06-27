@@ -70,7 +70,7 @@ export class PesapalProvider implements PaymentProvider {
 
       // We should ideally pass resident details from the service layer, 
       // but for now we use the phone and try to infer or use placeholders that are more professional.
-      const payload = {
+      const payload: any = {
         id: request.externalReference,
         currency: 'KES',
         amount: request.amount,
@@ -84,6 +84,11 @@ export class PesapalProvider implements PaymentProvider {
           last_name: 'Legacy Homes'
         },
       };
+
+      // If token is provided for saved card payment
+      if ((request as any).account_value) {
+        payload.account_value = (request as any).account_value;
+      }
 
       const response = await axios.post(`${this.baseUrl}/api/Transactions/SubmitOrderRequest`, payload, {
         headers: {

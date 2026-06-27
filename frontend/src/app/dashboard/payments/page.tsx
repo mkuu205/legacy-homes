@@ -36,7 +36,7 @@ export default function PaymentsPage() {
   const [selectedBillId, setSelectedBillId] = useState(billIdParam || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [amount, setAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'MPESA_STK_PUSH' | 'CARD'>('MPESA_STK_PUSH');
+  const [paymentMethod, setPaymentMethod] = useState<'MPESA_STK_PUSH' | 'CARD' | 'SAVED_CARD'>('MPESA_STK_PUSH');
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(paymentIdParam || null);
   const [paymentStartedAt, setPaymentStartedAt] = useState<number | null>(null);
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
@@ -105,6 +105,17 @@ export default function PaymentsPage() {
     },
   });
 
+  // Fetch saved payment methods
+  const { data: savedMethods = [] } = useQuery({
+    queryKey: ['payment-methods'],
+    queryFn: async () => {
+      const res = await api.get('/payment-methods');
+      return res.data.data || [];
+    },
+  });
+
+  const savedCard = savedMethods.find((m: any) => m.methodType === 'SAVED_CARD' && m.isActive);
+
   // Fetch payment status
   const { data: statusData } = useQuery({
     queryKey: ['payment-status', pendingPaymentId],
@@ -153,7 +164,7 @@ export default function PaymentsPage() {
       const res = await api.post('/payments/initiate', {
         billId: selectedBillId,
         provider: paymentMethod === 'MPESA_STK_PUSH' ? 'TUMA' : 'PESAPAL',
-        paymentMethod,
+        paymentMethod: paymentMethod === 'SAVED_CARD' ? 'SAVED_CARD' : paymentMethod,
         phoneNumber: phone,
         amount: parseFloat(amount),
       });
@@ -161,7 +172,7 @@ export default function PaymentsPage() {
       return res.data.data;
     },
     onSuccess: (data) => {
-      if (paymentMethod === 'CARD' && data.redirectUrl) {
+      if ((paymentMethod === 'CARD' || paymentMethod === 'SAVED_CARD') && data.redirectUrl) {
         // Redirect to Pesapal as per spec
         window.location.href = data.redirectUrl;
         return;
@@ -321,7 +332,7 @@ export default function PaymentsPage() {
           {/* Payment Method Toggle */}
           <div>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>Payment Method</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: savedCard ? '1fr 1fr 1fr' : '1fr 1fr', gap: '8px' }}>
               <button
                 onClick={() => setPaymentMethod('MPESA_STK_PUSH')}
                 style={{
@@ -331,17 +342,39 @@ export default function PaymentsPage() {
                   background: paymentMethod === 'MPESA_STK_PUSH' ? 'rgba(0, 201, 167, 0.1)' : 'var(--c1)',
                   color: 'var(--t1)',
                   cursor: 'pointer',
-                  fontSize: '13px',
+                  fontSize: '11px',
                   fontWeight: 600,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '8px',
+                  gap: '4px',
                 }}
               >
-                <Smartphone size={18} />
+                <Smartphone size={14} />
                 M-Pesa
               </button>
+              {savedCard && (
+                <button
+                  onClick={() => setPaymentMethod('SAVED_CARD')}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: paymentMethod === 'SAVED_CARD' ? '2px solid #00C9A7' : '1px solid var(--bd)',
+                    background: paymentMethod === 'SAVED_CARD' ? 'rgba(0, 201, 167, 0.1)' : 'var(--c1)',
+                    color: 'var(--t1)',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <Star size={14} style={{ color: '#eab308' }} />
+                  Saved Card
+                </button>
+              )}
               <button
                 onClick={() => setPaymentMethod('CARD')}
                 style={{
@@ -351,16 +384,16 @@ export default function PaymentsPage() {
                   background: paymentMethod === 'CARD' ? 'rgba(20, 52, 203, 0.1)' : 'var(--c1)',
                   color: 'var(--t1)',
                   cursor: 'pointer',
-                  fontSize: '13px',
+                  fontSize: '11px',
                   fontWeight: 600,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '8px',
+                  gap: '4px',
                 }}
               >
-                <CreditCard size={18} />
-                Card
+                <CreditCard size={14} />
+                New Card
               </button>
             </div>
           </div>
@@ -368,6 +401,26 @@ export default function PaymentsPage() {
           {/* Form Fields Based on Method */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px', borderRadius: '12px', background: 'var(--c1)', border: '1px solid var(--bd)' }}>
             
+            {paymentMethod === 'SAVED_CARD' && savedCard && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '8px', background: 'var(--c2)', border: '1px solid var(--bd)' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t2)' }}>
+                  <CreditCard size={20} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>
+                    {savedCard.cardBrand} •••• {savedCard.lastFour}
+                  </p>
+                  <p style={{ fontSize: '11px', color: 'var(--t3)', margin: 0 }}>
+                    Expires {String(savedCard.expiryMonth).padStart(2, '0')}/{savedCard.expiryYear}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#eab308' }}>
+                  <Star size={14} fill="currentColor" />
+                  <span style={{ fontSize: '10px', fontWeight: 700 }}>SAVED</span>
+                </div>
+              </div>
+            )}
+
             {paymentMethod === 'CARD' && (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1434CB', marginBottom: '4px' }}>
@@ -466,7 +519,7 @@ export default function PaymentsPage() {
               <Loader2 size={20} className="animate-spin" />
             ) : (
               <>
-                {paymentMethod === 'CARD' ? (
+                {paymentMethod === 'CARD' || paymentMethod === 'SAVED_CARD' ? (
                   <>
                     <Lock size={18} />
                     Continue to Secure Payment

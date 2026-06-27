@@ -111,6 +111,17 @@ export class PaymentEngineService {
         throw new Error(`Provider ${provider} not configured`);
       }
 
+      // Check if paying with a saved card
+      let accountToken = undefined;
+      if (method === 'SAVED_CARD') {
+        const savedMethod = await prisma.paymentMethod.findFirst({
+          where: { residentId, isActive: true, methodType: 'SAVED_CARD' }
+        });
+        if (savedMethod?.providerToken) {
+          accountToken = savedMethod.providerToken;
+        }
+      }
+
       // Initiate payment through provider
       const result = await paymentProvider.initiatePayment({
         amount,
@@ -118,6 +129,8 @@ export class PaymentEngineService {
         billId,
         residentId,
         externalReference: payment.id,
+        // @ts-ignore - Pesapal 3.0 supports account_value for tokenized payments
+        account_value: accountToken
       });
 
       if (!result.success) {
@@ -476,7 +489,7 @@ export class PaymentEngineService {
 
     // 1. Update Payment record
     await prisma.payment.update({
-      where: { id: payment.id },
+      where: { id: paymentId },
       data: {
         status: PaymentStatus.SUCCESSFUL,
         providerStatus: providerPayload.status || payment_status_description || 'completed',
@@ -489,6 +502,39 @@ export class PaymentEngineService {
         receiptNumber: confirmationCode, // Use confirmation code as receipt number if not provided
       },
     });
+
+    // 1b. Handle Card Tokenization (Saved Cards)
+    if (payment.provider === 'PESAPAL' && providerPayload.payment_method === 'CARD' && providerPayload.token) {
+      try {
+        const existingMethod = await prisma.paymentMethod.findFirst({
+          where: {
+            residentId: payment.residentId,
+            providerToken: providerPayload.token,
+            isActive: true,
+          },
+        });
+
+        if (!existingMethod) {
+          await prisma.paymentMethod.create({
+            data: {
+              residentId: payment.residentId,
+              provider: 'PESAPAL',
+              methodType: 'SAVED_CARD',
+              displayName: `${providerPayload.card_brand} ending in ${providerPayload.last_four_digits}`,
+              lastFour: providerPayload.last_four_digits,
+              cardBrand: providerPayload.card_brand,
+              expiryMonth: parseInt(providerPayload.expiry_month),
+              expiryYear: parseInt(providerPayload.expiry_year),
+              providerToken: providerPayload.token,
+              isActive: true,
+            },
+          });
+          logger.info(`[PAYMENT ENGINE] Saved new card token for resident ${payment.residentId}`);
+        }
+      } catch (tokenError) {
+        logger.error(`[PAYMENT ENGINE] Failed to save card token: ${tokenError}`);
+      }
+    }
 
     // 2. Update Bill record
     const updatedAmountPaid = payment.bill.amountPaid + finalAmount;
