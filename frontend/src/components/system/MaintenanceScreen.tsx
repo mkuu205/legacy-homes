@@ -4,23 +4,17 @@ import { useState } from 'react';
 import { useSystemStatusStore } from '@/stores/system-status.store';
 import { useAuthStore } from '@/store/auth.store';
 import { useBackendHealth } from '@/hooks/useBackendHealth';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { format } from 'date-fns';
+import { RefreshCw, Bell, Server } from 'lucide-react';
 
 export function MaintenanceScreen() {
-  const { status, lastSuccessfulConnection, connectionAttempts, outageDuration, maintenanceMessage, isNotified, setNotified } = useSystemStatusStore();
-  const { lastChecked, retry } = useBackendHealth();
+  const { status, maintenanceMessage, isNotified, setNotified } = useSystemStatusStore();
+  const { retry } = useBackendHealth();
   const { isAuthenticated, user } = useAuthStore();
   
   const [email, setEmail] = useState(user?.email || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const formatTime = (timestamp: number | null) => {
-    if (!timestamp) return 'Never';
-    return format(new Date(timestamp), 'h:mm a');
-  };
+  const [isRetrying, setIsRetrying] = useState(false);
 
   const handleNotifyMe = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,89 +44,193 @@ export function MaintenanceScreen() {
     }
   };
 
-  const formatDuration = (ms: number) => {
-    const minutes = Math.floor(ms / 60000);
-    if (minutes < 1) return 'Less than a minute';
-    return `${minutes} Minute${minutes === 1 ? '' : 's'}`;
+  const handleRetryConnection = async () => {
+    setIsRetrying(true);
+    try {
+      await retry();
+    } finally {
+      setIsRetrying(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-50 z-[100] flex flex-col items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-gray-100">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Legacy Homes</h1>
-        <h2 className="text-xl text-gray-600 mb-4">Service Temporarily Unavailable</h2>
-        
-        <p className="text-gray-500 mb-6 text-sm">
-          {maintenanceMessage || 'Our servers are currently unavailable. Your account and billing data remain safe.'}
-        </p>
-
-        <div className="border-t border-b border-gray-100 py-4 my-6 text-left space-y-3 text-sm">
-          <h3 className="font-semibold text-gray-700 mb-2">System Status</h3>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500">Backend API</span>
-            <span className={`font-medium ${status === 'MAINTENANCE' ? 'text-amber-500' : 'text-red-500'}`}>
-              {status === 'MAINTENANCE' ? 'Maintenance' : 'Offline'}
-            </span>
+    <div className="auth-wrap">
+      <div className="auth-card fu">
+        {/* Logo */}
+        <div className="auth-logo">
+          <div className="auth-logo-ico">
+            <img
+              src="https://i.ibb.co/5hvy5zXd/Chat-GPT-Image-Jun-23-2026-01-17-11-AM.png"
+              alt="Legacy Homes Logo"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain'
+              }}
+            />
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500">Internet</span>
-            <span className="font-medium text-green-500">
-              {typeof navigator !== 'undefined' && navigator.onLine ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500">Last Successful Connection</span>
-            <span className="font-medium text-gray-700">{formatTime(lastSuccessfulConnection)}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500">Last Checked</span>
-            <span className="font-medium text-gray-700">{formatTime(lastChecked)}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500">Outage Duration</span>
-            <span className="font-medium text-gray-700">{formatDuration(outageDuration)}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500">Connection Attempts</span>
-            <span className="font-medium text-gray-700">{connectionAttempts}</span>
+          <div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)', fontFamily: 'var(--f1)' }}>
+              Legacy Homes
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '2px' }}>
+              Water Billing System
+            </div>
           </div>
         </div>
 
-        {!isNotified ? (
-          <form onSubmit={handleNotifyMe} className="mb-6 space-y-3">
-            {isAuthenticated ? (
-              <p className="text-sm text-gray-600 mb-2">Notify me when service returns?</p>
+        {/* Heading */}
+        <div style={{ marginBottom: '26px' }}>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--t1)', marginBottom: '6px', fontFamily: 'var(--f1)' }}>
+            Service Temporarily Unavailable
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--t2)', lineHeight: '1.5' }}>
+            We're currently performing maintenance or experiencing a temporary service interruption.
+          </p>
+        </div>
+
+        {/* Description */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid var(--bd)',
+          borderRadius: '9px',
+          padding: '14px',
+          marginBottom: '20px',
+          fontSize: '13px',
+          color: 'var(--t2)',
+          lineHeight: '1.6'
+        }}>
+          <p style={{ marginBottom: '8px' }}>
+            Your account, bills and payment history remain safe.
+          </p>
+          <p>
+            We'll automatically reconnect as soon as service is restored.
+          </p>
+        </div>
+
+        {/* Illustration / Icon */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          marginBottom: '20px'
+        }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '14px',
+            background: 'var(--gl)',
+            border: '1px solid rgba(0, 198, 167, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Server size={32} style={{ color: 'var(--ac)' }} />
+          </div>
+        </div>
+
+        {/* Status Card */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid var(--bd)',
+          borderRadius: '9px',
+          padding: '16px',
+          marginBottom: '20px'
+        }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
+            System Status
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <div style={{ 
+              width: '8px', 
+              height: '8px', 
+              borderRadius: '50%', 
+              background: '#ef4444',
+              animation: 'pulse 2s ease-in-out infinite'
+            }} />
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#f87171' }}>
+              Offline
+            </span>
+          </div>
+
+          <div style={{ fontSize: '12px', color: 'var(--t3)', marginTop: '8px' }}>
+            Checking automatically...
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+          <button
+            onClick={handleRetryConnection}
+            disabled={isRetrying}
+            className="btn bp"
+            style={{ width: '100%' }}
+          >
+            {isRetrying ? (
+              <>
+                <RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                Retrying...
+              </>
             ) : (
-              <div className="text-left">
-                <Input 
-                  type="email" 
-                  placeholder="Enter your email" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full"
-                  required
-                />
-              </div>
+              <>
+                <RefreshCw size={16} />
+                Retry Connection
+              </>
             )}
-            {error && <p className="text-red-500 text-xs text-left">{error}</p>}
-            <Button type="submit" disabled={loading} className="w-full">
+          </button>
+
+          {!isNotified && (
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                handleNotifyMe(e as any);
+              }}
+              disabled={loading}
+              className="btn bg"
+              style={{ width: '100%' }}
+            >
+              <Bell size={16} />
               {loading ? 'Subscribing...' : 'Notify Me'}
-            </Button>
-          </form>
-        ) : (
-          <div className="mb-6 p-3 bg-green-50 text-green-700 rounded-lg text-sm border border-green-100">
+            </button>
+          )}
+        </div>
+
+        {/* Notification Status */}
+        {isNotified && (
+          <div style={{
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+            borderRadius: '9px',
+            padding: '12px',
+            marginBottom: '16px',
+            fontSize: '12px',
+            color: '#34d399',
+            textAlign: 'center'
+          }}>
             We'll notify {email} when service returns.
           </div>
         )}
 
-        <div className="space-y-4">
-          <Button variant="outline" onClick={retry} className="w-full text-gray-700">
-            Retry Connection
-          </Button>
-          <div className="text-xs text-gray-400">
-            Checking again automatically...
+        {error && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            borderRadius: '9px',
+            padding: '12px',
+            marginBottom: '16px',
+            fontSize: '12px',
+            color: '#f87171',
+            textAlign: 'center'
+          }}>
+            {error}
           </div>
-        </div>
+        )}
+
+        {/* Footer */}
+        <div className="dv" />
+        <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--t3)', lineHeight: '1.5' }}>
+          Checking every 30 seconds...
+        </p>
       </div>
     </div>
   );
