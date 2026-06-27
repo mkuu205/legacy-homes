@@ -32,6 +32,7 @@ export default function CardPaymentForm({ onSubmit, isLoading = false, disabled 
     billingPostalCode: '',
   });
 
+  const [expiryInput, setExpiryInput] = useState(''); // Store the raw input for display
   const [errors, setErrors] = useState<Partial<CardData>>({});
   const [cardBrand, setCardBrand] = useState<'VISA' | 'MASTERCARD' | 'AMEX' | null>(null);
 
@@ -68,9 +69,18 @@ export default function CardPaymentForm({ onSubmit, isLoading = false, disabled 
       newErrors.expiryMonth = 'Invalid month';
     }
 
+    // Convert 2-digit year to 4-digit year for validation
     const currentYear = new Date().getFullYear();
-    const expYear = parseInt(formData.expiryYear);
-    if (!formData.expiryYear || expYear < currentYear || expYear > currentYear + 20) {
+    const currentMonth = new Date().getMonth() + 1;
+    let expYear = parseInt(formData.expiryYear);
+    
+    // If 2-digit year, convert to 4-digit (e.g., 25 -> 2025)
+    if (formData.expiryYear && formData.expiryYear.length === 2) {
+      expYear = 2000 + expYear;
+    }
+
+    // Check if expiry date is in the past
+    if (!formData.expiryYear || expYear < currentYear || (expYear === currentYear && parseInt(formData.expiryMonth) < currentMonth) || expYear > currentYear + 20) {
       newErrors.expiryYear = 'Invalid year';
     }
 
@@ -102,13 +112,30 @@ export default function CardPaymentForm({ onSubmit, isLoading = false, disabled 
   };
 
   const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, '');
+    let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+    
+    // Limit to 4 digits (MMYY)
+    value = value.slice(0, 4);
+    
+    // Update display input
+    let displayValue = value;
+    if (value.length >= 2) {
+      displayValue = value.slice(0, 2) + '/' + value.slice(2);
+    }
+    setExpiryInput(displayValue);
+
+    // Update form data
     if (value.length >= 2) {
       const month = value.slice(0, 2);
       const year = value.slice(2, 4);
       setFormData({ ...formData, expiryMonth: month, expiryYear: year });
     } else {
-      setFormData({ ...formData, expiryMonth: value });
+      setFormData({ ...formData, expiryMonth: value, expiryYear: '' });
+    }
+    
+    // Clear errors
+    if (errors.expiryMonth || errors.expiryYear) {
+      setErrors({ ...errors, expiryMonth: undefined, expiryYear: undefined });
     }
   };
 
@@ -124,9 +151,6 @@ export default function CardPaymentForm({ onSubmit, isLoading = false, disabled 
       onSubmit?.(formData);
     }
   };
-
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 20 }, (_, i) => currentYear + i);
 
   return (
     <div style={{ padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
@@ -224,7 +248,7 @@ export default function CardPaymentForm({ onSubmit, isLoading = false, disabled 
             <input
               type="text"
               placeholder="12/25"
-              value={formData.expiryMonth && formData.expiryYear ? `${formData.expiryMonth}/${formData.expiryYear}` : ''}
+              value={expiryInput}
               onChange={handleExpiryChange}
               disabled={disabled || isLoading}
               maxLength={5}
