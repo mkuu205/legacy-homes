@@ -482,9 +482,11 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
       updateStoreStatus('MAINTENANCE', data);
       return {
         status: 'MAINTENANCE',
-        message: data?.message || 'Service under maintenance',
-        maintenance: data?.maintenance,
-      };
+        maintenance: {
+          message: data?.message || 'Service under maintenance',
+          ...data?.maintenance
+        }
+      } as HealthResponse;
     }
     
     // Check if unreachable
