@@ -16,9 +16,6 @@ import {
   RefreshCw,
   Lock,
   ChevronRight,
-  FileText,
-  Clock,
-  Calendar,
   Shield,
 } from 'lucide-react';
 
@@ -174,7 +171,6 @@ export default function PaymentsPage() {
     },
   });
 
-  const selectedBill = billsData?.find((b: any) => b.id === selectedBillId);
   const isFormValid = selectedBillId && (paymentMethod === 'CARD' || (paymentMethod === 'MPESA_STK_PUSH' && phone && validatePhone(phone)));
 
   useEffect(() => {
@@ -366,7 +362,7 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      {/* Payment Methods - Always Visible */}
+      {/* Payment Methods */}
       <div style={{ marginBottom: '16px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '12px' }}>
           Payment Method
@@ -460,51 +456,7 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* Bill Details - Only show when bill is selected */}
-      {selectedBill && (
-        <div style={{ 
-          marginBottom: '20px', 
-          padding: '16px', 
-          borderRadius: '8px', 
-          border: '1px solid var(--bd)', 
-          background: 'var(--c1)'
-        }}>
-          <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-            <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Outstanding Balance
-            </p>
-            <p style={{ fontSize: '28px', fontWeight: 800, color: 'var(--ac)', margin: 0 }}>
-              KES {selectedBill.balance?.toLocaleString()}
-            </p>
-          </div>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: '1fr 1fr', 
-            gap: '12px',
-            paddingTop: '16px',
-            borderTop: '1px solid var(--bd)'
-          }}>
-            <div>
-              <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bill Number</p>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{selectedBill.billNumber}</p>
-            </div>
-            <div>
-              <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Billing Month</p>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{selectedBill.billingMonth}</p>
-            </div>
-            <div>
-              <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Billing Period</p>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{selectedBill.billingPeriod || selectedBill.billingMonth}</p>
-            </div>
-            <div>
-              <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Due Date</p>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{selectedBill.dueDate}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* M-Pesa Section - Only show when M-Pesa is selected */}
+      {/* M-Pesa Section */}
       {paymentMethod === 'MPESA_STK_PUSH' && (
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
@@ -576,7 +528,7 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* Card Section - Only show when Card is selected */}
+      {/* Card Section */}
       {paymentMethod === 'CARD' && (
         <div style={{ 
           marginBottom: '20px', 
