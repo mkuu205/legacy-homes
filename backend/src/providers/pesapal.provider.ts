@@ -15,8 +15,7 @@ export class PesapalProvider implements PaymentProvider {
   private consumerSecret: string;
   private ipnId: string;
   private callbackUrl: string;
-  private environment: string;
-  private baseUrl: string;
+  private baseUrl: string = 'https://pay.pesapal.com/v3';
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
 
@@ -25,10 +24,10 @@ export class PesapalProvider implements PaymentProvider {
     this.consumerSecret = process.env.PESAPAL_CONSUMER_SECRET || '';
     this.ipnId = process.env.PESAPAL_IPN_ID || '';
     this.callbackUrl = process.env.PESAPAL_CALLBACK_URL || '';
-    this.environment = process.env.PESAPAL_ENVIRONMENT || 'sandbox';
-    this.baseUrl = this.environment === 'production'
-      ? 'https://pay.pesapal.com/v3'
-      : 'https://cybqa.pesapal.com/pesapalv3';
+    
+    if (!this.consumerKey || !this.consumerSecret) {
+      logger.error('[PESAPAL] Consumer Key or Secret is missing in environment variables');
+    }
   }
 
   private async getAccessToken(): Promise<string> {
@@ -38,6 +37,7 @@ export class PesapalProvider implements PaymentProvider {
         return this.accessToken;
       }
 
+      logger.info('[PESAPAL] Requesting new access token');
       const response = await axios.post(`${this.baseUrl}/api/Auth/RequestToken`, {
         consumer_key: this.consumerKey,
         consumer_secret: this.consumerSecret,
@@ -47,12 +47,13 @@ export class PesapalProvider implements PaymentProvider {
         this.accessToken = response.data.token;
         // Parse expiryDate from response (e.g., "2023-08-15T10:00:00Z")
         this.tokenExpiry = new Date(response.data.expiryDate).getTime();
+        logger.info('[PESAPAL] Access token received and cached');
         return this.accessToken;
       }
 
       throw new Error('Invalid token response from Pesapal');
     } catch (error) {
-      logger.error('Pesapal token request error:', error);
+      logger.error('[PESAPAL] Token request error:', error);
       throw error;
     }
   }
@@ -68,41 +69,38 @@ export class PesapalProvider implements PaymentProvider {
 
       const token = await this.getAccessToken();
 
-      // We should ideally pass resident details from the service layer, 
-      // but for now we use the phone and try to infer or use placeholders that are more professional.
       const residentName = (request as any).residentName || 'Resident';
-      const nameParts = residentName.split(' ');
-      const firstName = nameParts[0];
+      const nameParts = residentName.trim().split(/\s+/);
+      const firstName = nameParts[0] || 'Resident';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Legacy Homes';
 
-      const payload: any = {
+      const payload = {
         id: request.externalReference,
         currency: 'KES',
         amount: request.amount,
-        description: `Legacy Homes Water Bill - ${request.billId}`,
+        description: `Legacy Homes Payment - Bill #${(request as any).billNumber || request.billId}`,
         callback_url: this.callbackUrl,
         notification_id: this.ipnId,
         billing_address: {
           phone_number: request.phoneNumber,
           email_address: (request as any).residentEmail || 'resident@legacyhomes.co.ke',
           first_name: firstName,
-          last_name: lastName
+          last_name: lastName,
+          country_code: 'KE'
         },
       };
 
-      // If token is provided for saved card payment
-      if ((request as any).account_value) {
-        payload.account_value = (request as any).account_value;
-      }
-
+      logger.info(`[PESAPAL] Submitting order request for reference: ${request.externalReference}`);
       const response = await axios.post(`${this.baseUrl}/api/Transactions/SubmitOrderRequest`, payload, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
       });
 
       if (response.data && response.data.order_tracking_id) {
+        logger.info(`[PESAPAL] Order created successfully. Tracking ID: ${response.data.order_tracking_id}`);
         return {
           success: true,
           orderId: response.data.order_tracking_id,
@@ -111,12 +109,14 @@ export class PesapalProvider implements PaymentProvider {
         };
       }
 
+      const errorMsg = response.data.message || 'Failed to initiate payment';
+      logger.error(`[PESAPAL] Order creation failed: ${errorMsg}`);
       return {
         success: false,
-        error: response.data.message || 'Failed to initiate payment',
+        error: errorMsg,
       };
     } catch (error) {
-      logger.error('Pesapal payment initiation error:', error);
+      logger.error('[PESAPAL] Payment initiation error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -136,23 +136,35 @@ export class PesapalProvider implements PaymentProvider {
 
       const token = await this.getAccessToken();
 
+      logger.info(`[PESAPAL] Verifying transaction status for OrderTrackingId: ${orderTrackingId}`);
       const response = await axios.get(`${this.baseUrl}/api/Transactions/GetTransactionStatus?orderTrackingId=${orderTrackingId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
+          'Accept': 'application/json'
         },
       });
 
       const data = response.data;
       if (data) {
-        // Only if payment_status_description == COMPLETED should the backend mark Payment SUCCESSFUL
-        const isCompleted = data.payment_status_description === 'COMPLETED';
+        // According to Pesapal V3 docs, status is determined by payment_status_description
+        // Possible values: COMPLETED, FAILED, INVALID, REVERSED
+        const statusDesc = data.payment_status_description;
+        
+        let status: 'SUCCESSFUL' | 'FAILED' | 'PENDING' = 'PENDING';
+        if (statusDesc === 'COMPLETED') {
+          status = 'SUCCESSFUL';
+        } else if (['FAILED', 'INVALID', 'REVERSED'].includes(statusDesc)) {
+          status = 'FAILED';
+        }
+
+        logger.info(`[PESAPAL] Transaction status for ${orderTrackingId}: ${statusDesc} (${status})`);
         
         return {
-          status: isCompleted ? 'SUCCESSFUL' : (data.payment_status_description === 'FAILED' ? 'FAILED' : 'PENDING'),
+          status,
           transactionId: data.confirmation_code,
           orderId: orderTrackingId,
           amount: data.amount,
-          message: data.payment_status_description,
+          message: statusDesc,
           timestamp: new Date(),
           providerData: data,
         };
@@ -160,10 +172,10 @@ export class PesapalProvider implements PaymentProvider {
 
       return {
         status: 'FAILED',
-        message: 'No transaction found',
+        message: 'No transaction data returned from Pesapal',
       };
     } catch (error) {
-      logger.error('Pesapal payment verification error:', error);
+      logger.error('[PESAPAL] Payment verification error:', error);
       return {
         status: 'FAILED',
         message: error instanceof Error ? error.message : 'Unknown error',
@@ -177,23 +189,26 @@ export class PesapalProvider implements PaymentProvider {
       const orderTrackingId = payload.OrderTrackingId || payload.order_tracking_id;
 
       if (!orderTrackingId) {
+        logger.warn('[PESAPAL] Callback received without OrderTrackingId');
         return { valid: false, message: 'Missing OrderTrackingId' };
       }
 
-      // Never trust callback. Immediately call GetTransactionStatus.
+      logger.info(`[PESAPAL] Callback received for OrderTrackingId: ${orderTrackingId}. Verifying...`);
+      
+      // Always verify status with the official API
       const verification = await this.verifyPaymentStatus({
         orderId: orderTrackingId,
       });
 
       return {
-        valid: true, // We trust the result of GetTransactionStatus
+        valid: true,
         transactionId: orderTrackingId,
         status: verification.status,
         amount: verification.amount,
         message: verification.message,
       };
     } catch (error) {
-      logger.error('Pesapal callback verification error:', error);
+      logger.error('[PESAPAL] Callback verification error:', error);
       return {
         valid: false,
         message: error instanceof Error ? error.message : 'Unknown error',
@@ -201,27 +216,11 @@ export class PesapalProvider implements PaymentProvider {
     }
   }
 
-  async cancelOrder(orderTrackingId: string): Promise<boolean> {
-    try {
-      const token = await this.getAccessToken();
-      const response = await axios.post(`${this.baseUrl}/api/Transactions/CancelOrder`, {
-        order_tracking_id: orderTrackingId
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      return response.status === 200;
-    } catch (error) {
-      logger.error('Pesapal cancel order error:', error);
-      return false;
-    }
-  }
-
   async registerIPN(url: string): Promise<string | null> {
     try {
       const token = await this.getAccessToken();
+      logger.info(`[PESAPAL] Registering IPN URL: ${url}`);
+      
       const response = await axios.post(`${this.baseUrl}/api/URLSetup/RegisterIPN`, {
         url: url,
         ipn_notification_type: 'POST'
@@ -229,15 +228,19 @@ export class PesapalProvider implements PaymentProvider {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
       });
 
       if (response.data && response.data.ipn_id) {
+        logger.info(`[PESAPAL] IPN registered successfully. IPN ID: ${response.data.ipn_id}`);
         return response.data.ipn_id;
       }
+      
+      logger.error(`[PESAPAL] IPN registration failed: ${JSON.stringify(response.data)}`);
       return null;
     } catch (error) {
-      logger.error('Pesapal IPN registration error:', error);
+      logger.error('[PESAPAL] IPN registration error:', error);
       return null;
     }
   }
@@ -248,15 +251,5 @@ export class PesapalProvider implements PaymentProvider {
 
   isConfigured(): boolean {
     return !!(this.consumerKey && this.consumerSecret && this.ipnId && this.callbackUrl);
-  }
-
-  async validateCredentials(): Promise<boolean> {
-    try {
-      await this.getAccessToken();
-      return true;
-    } catch (error) {
-      logger.error('Pesapal credential validation error:', error);
-      return false;
-    }
   }
 }

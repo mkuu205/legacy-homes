@@ -44,7 +44,6 @@ export default function SystemCheckPage() {
   const serviceCards = [
     { id: 'backendApi', name: 'Backend API', icon: <Server size={20} />, data: services.backendApi },
     { id: 'database', name: 'PostgreSQL Database', icon: <Database size={20} />, data: services.database },
-    { id: 'tumaApi', name: 'Tuma Payment API', icon: <Phone size={20} />, data: services.tumaApi },
     { id: 'pesapalApi', name: 'Pesapal API', icon: <CreditCard size={20} />, data: services.pesapalApi },
     { id: 'callbackEndpoint', name: 'Payment Callback Endpoint', icon: <Webhook size={20} />, data: services.callbackEndpoint },
     { id: 'emailService', name: 'Email Service (SMTP)', icon: <Mail size={20} />, data: services.emailService },

@@ -1,6 +1,6 @@
 /**
  * PaymentProvider Interface
- * Defines the contract for all payment providers (Tuma, Pesapal)
+ * Defines the contract for all payment providers (Pesapal)
  */
 
 export interface PaymentInitiationRequest {
@@ -75,9 +75,4 @@ export interface PaymentProvider {
    * Check if provider is configured
    */
   isConfigured(): boolean;
-
-  /**
-   * Validate credentials
-   */
-  validateCredentials(): Promise<boolean>;
 }

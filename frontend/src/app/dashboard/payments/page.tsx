@@ -6,7 +6,6 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { api, getErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { toast } from '@/components/ui/toaster';
-import CardPaymentForm, { CardData } from '@/components/CardPaymentForm';
 import {
   CreditCard,
   Smartphone,
@@ -16,13 +15,10 @@ import {
   AlertCircle,
   Download,
   ArrowLeft,
-  Eye,
-  EyeOff,
   RefreshCw,
   Lock,
   ShieldCheck,
-  Trash2,
-  Star,
+  ArrowRight,
 } from 'lucide-react';
 
 export default function PaymentsPage() {
@@ -33,7 +29,6 @@ export default function PaymentsPage() {
   
   const billIdParam = params.get('billId');
   const paymentIdParam = params.get('paymentId');
-  const statusParam = params.get('status');
   const orderTrackingId = params.get('OrderTrackingId'); // Pesapal redirect param
 
   const [selectedBillId, setSelectedBillId] = useState(billIdParam || '');
@@ -41,10 +36,7 @@ export default function PaymentsPage() {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'MPESA_STK_PUSH' | 'CARD' | 'SAVED_CARD'>('MPESA_STK_PUSH');
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(paymentIdParam || null);
-  const [paymentStartedAt, setPaymentStartedAt] = useState<number | null>(null);
-  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
   const [isVerifying, setIsVerifying] = useState(!!orderTrackingId);
-  const [showCardForm, setShowCardForm] = useState(false);
 
   // 0. Handle Pesapal Redirect Back
   useEffect(() => {
@@ -84,28 +76,12 @@ export default function PaymentsPage() {
     }
   };
 
-  // 1. Resident Phone Number - Automatically load saved phone number
-  useEffect(() => {
-    if (user?.phone && !phone) {
-      setPhone(user.phone);
-    }
-  }, [user?.phone]);
-
   // Fetch unpaid bills
   const { data: billsData, isLoading: billsLoading } = useQuery({
     queryKey: ['unpaid-bills'],
     queryFn: async () => {
       const res = await api.get('/billing/my-bills?status=UNPAID,PARTIAL,OVERDUE');
       return res.data.data?.bills || [];
-    },
-  });
-
-  // Fetch payment history
-  const { data: paymentHistoryData, isLoading: historyLoading } = useQuery({
-    queryKey: ['my-payments'],
-    queryFn: async () => {
-      const res = await api.get('/payments/my-payments');
-      return res.data.data?.payments || [];
     },
   });
 
@@ -139,30 +115,11 @@ export default function PaymentsPage() {
     retry: false,
   });
 
-  // Phone number validation helper
-  const validatePhone = (p: string) => {
-    const cleaned = p.replace(/\s+/g, '').replace('+', '');
-    if (cleaned.startsWith('0')) return cleaned.length === 10;
-    if (cleaned.startsWith('254')) return cleaned.length === 12;
-    if (cleaned.startsWith('7') || cleaned.startsWith('1')) return cleaned.length === 9;
-    return false;
-  };
-
   // Initiate payment
   const initiatePaymentMutation = useMutation({
     mutationFn: async () => {
       if (!selectedBillId || !amount) {
         throw new Error('Please select a bill and enter amount');
-      }
-
-      // Validate phone
-      if (!validatePhone(phone)) {
-        throw new Error('Invalid Safaricom phone number.');
-      }
-
-      // Validate email for Card
-      if (paymentMethod === 'CARD' && !user?.email) {
-        throw new Error('Resident email is required for card payments.');
       }
 
       const res = await api.post('/payments/initiate', {
@@ -177,16 +134,13 @@ export default function PaymentsPage() {
     },
     onSuccess: (data) => {
       if ((paymentMethod === 'CARD' || paymentMethod === 'SAVED_CARD') && data.redirectUrl) {
-        // Show a loading state before redirecting
-        toast({ type: 'success', title: 'Secure connection established', description: 'Redirecting to secure payment page...' });
-        // Use a small timeout to let the toast show up briefly before redirecting
+        toast({ type: 'success', title: 'Redirecting to secure payment page...' });
         setTimeout(() => {
           window.location.href = data.redirectUrl;
         }, 800);
         return;
       }
       setPendingPaymentId(data.paymentId);
-      setPaymentStartedAt(Date.now());
       toast({ type: 'success', title: 'Payment initiated', description: paymentMethod === 'MPESA_STK_PUSH' ? 'Please check your phone for the M-Pesa prompt' : 'Processing...' });
     },
     onError: (err) => {
@@ -194,74 +148,49 @@ export default function PaymentsPage() {
     },
   });
 
-  // Download receipt
-  const downloadReceiptMutation = useMutation({
-    mutationFn: async (paymentId: string) => {
-      const res = await api.get(`/payments/${paymentId}/receipt`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `receipt-${paymentId}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode?.removeChild(link);
-    },
-    onError: (err) => toast({ type: 'error', title: 'Failed to download receipt', description: getErrorMessage(err) }),
-  });
-
-  // Delete individual payment
-  const deletePaymentMutation = useMutation({
-    mutationFn: async (paymentId: string) => {
-      await api.delete(`/payments/${paymentId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-payments'] });
-      toast({ type: 'success', title: 'Payment deleted', description: 'The payment record has been removed.' });
-    },
-    onError: (err) => toast({ type: 'error', title: 'Failed to delete payment', description: getErrorMessage(err) }),
-  });
-
-  // Clear all payment history
-  const clearHistoryMutation = useMutation({
-    mutationFn: async () => {
-      await api.delete('/payments/my-history');
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-payments'] });
-      toast({ type: 'success', title: 'Payment history cleared', description: 'All payment records have been removed.' });
-    },
-    onError: (err) => toast({ type: 'error', title: 'Failed to clear history', description: getErrorMessage(err) }),
-  });
-
   const selectedBill = billsData?.find((b: any) => b.id === selectedBillId);
   const maxAmount = selectedBill?.balance || 0;
   const isAmountValid = amount && parseFloat(amount) > 0 && parseFloat(amount) <= maxAmount;
-  const isFormValid = selectedBillId && user?.email && validatePhone(phone) && isAmountValid;
+  const isFormValid = selectedBillId && isAmountValid;
 
-  // Handle payment status updates
   useEffect(() => {
     if (statusData?.status === 'SUCCESSFUL') {
       toast({ type: 'success', title: 'Payment Successful!', description: 'Your payment has been confirmed.' });
       queryClient.invalidateQueries({ queryKey: ['unpaid-bills'] });
-      queryClient.invalidateQueries({ queryKey: ['my-payments'] });
     } else if (statusData?.status === 'FAILED') {
       toast({ type: 'error', title: 'Payment Failed', description: statusData.failureReason || 'Please try again' });
     }
   }, [statusData?.status]);
 
+  if (isVerifying) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '16px' }}>
+        <Loader2 size={48} className="animate-spin" style={{ color: 'var(--ac)' }} />
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--t1)' }}>Verifying your payment...</h2>
+        <p style={{ fontSize: '14px', color: 'var(--t2)' }}>Please wait while we confirm your transaction with Pesapal.</p>
+      </div>
+    );
+  }
+
   if (pendingPaymentId && statusData) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        {/* Payment Status Page */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '600px', margin: '0 auto' }}>
         <div style={{ padding: '32px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)', textAlign: 'center' }}>
           {statusData.status === 'PENDING' && (
             <>
               <div style={{ marginBottom: '20px' }}>
-                <Loader2 size={48} style={{ margin: '0 auto', animation: 'spin 1s linear infinite', color: '#00C9A7' }} />
+                <Loader2 size={48} style={{ margin: '0 auto', animation: 'spin 1s linear infinite', color: 'var(--ac)' }} />
               </div>
-              <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>Waiting for payment confirmation...</h2>
-              <p style={{ fontSize: '14px', color: 'var(--t2)', marginBottom: '20px' }}>Please check your phone for the M-Pesa prompt and enter your PIN to confirm the payment.</p>
-              <p style={{ fontSize: '12px', color: 'var(--t3)' }}>Amount: KES {statusData.amount}</p>
+              <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>Waiting for confirmation...</h2>
+              <p style={{ fontSize: '14px', color: 'var(--t2)', marginBottom: '20px' }}>
+                {paymentMethod === 'MPESA_STK_PUSH' 
+                  ? 'Please check your phone for the M-Pesa prompt and enter your PIN.' 
+                  : 'We are verifying your card payment with Pesapal.'}
+              </p>
+              <div style={{ background: 'var(--c1)', padding: '12px', borderRadius: '8px', display: 'inline-block' }}>
+                <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '0 0 4px 0' }}>Amount</p>
+                <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>KES {statusData.amount}</p>
+              </div>
             </>
           )}
 
@@ -273,29 +202,19 @@ export default function PaymentsPage() {
               <h2 style={{ fontSize: '20px', fontWeight: 600, color: '#10b981', marginBottom: '8px' }}>Payment Successful!</h2>
               <p style={{ fontSize: '14px', color: 'var(--t2)', marginBottom: '20px' }}>Your payment has been confirmed and processed.</p>
               <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '16px', borderRadius: '8px', marginBottom: '20px', textAlign: 'left' }}>
-                <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '0 0 8px 0' }}>Receipt Number</p>
-                <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{statusData.receiptNumber || statusData.confirmationCode}</p>
+                <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '0 0 8px 0' }}>Confirmation Code</p>
+                <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{statusData.confirmationCode || statusData.receiptNumber}</p>
               </div>
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                <button
-                  onClick={() => router.push('/dashboard/billing')}
-                  style={{ padding: '10px 24px', borderRadius: '8px', background: '#10b981', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}
-                >
-                  Return to Dashboard
-                </button>
-                <button
-                  onClick={() => downloadReceiptMutation.mutate(pendingPaymentId)}
-                  disabled={downloadReceiptMutation.isPending}
-                  style={{ padding: '10px 24px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t1)', cursor: 'pointer', fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  <Download size={16} />
-                  Receipt
-                </button>
-              </div>
+              <button
+                onClick={() => router.push('/dashboard/billing')}
+                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#10b981', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}
+              >
+                Return to Billing
+              </button>
             </>
           )}
 
-          {(statusData.status === 'FAILED' || statusData.status === 'CANCELLED') && (
+          {statusData.status === 'FAILED' && (
             <>
               <div style={{ marginBottom: '20px' }}>
                 <AlertCircle size={48} style={{ margin: '0 auto', color: '#ef4444' }} />
@@ -305,12 +224,11 @@ export default function PaymentsPage() {
               <button
                 onClick={() => {
                   setPendingPaymentId(null);
-                  setPaymentStartedAt(null);
                 }}
-                style={{ padding: '10px 24px', borderRadius: '8px', background: 'var(--t1)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px', margin: '0 auto' }}
+                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: 'var(--t1)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
               >
                 <RefreshCw size={16} />
-                Pay Again
+                Try Again
               </button>
             </>
           )}
@@ -320,397 +238,188 @@ export default function PaymentsPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '800px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <h1 className="pg-h" style={{ fontSize: '24px', marginBottom: '4px' }}>Make a Payment</h1>
-          <p className="pg-sh">Pay your water bills securely</p>
-        </div>
-        <button
-          onClick={() => setShowPaymentHistory(!showPaymentHistory)}
-          style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'transparent', color: 'var(--t1)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <button 
+          onClick={() => router.back()} 
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'var(--bd)', color: 'var(--t1)', border: 'none', cursor: 'pointer' }}
         >
-          {showPaymentHistory ? 'Hide' : 'Show'} History
+          <ArrowLeft size={18} />
         </button>
+        <div>
+          <h1 className="pg-h" style={{ fontSize: '24px', marginBottom: '4px' }}>Secure Payment</h1>
+          <p className="pg-sh">Complete your bill payment</p>
+        </div>
       </div>
 
-      {/* Payment Form */}
-      <div style={{ padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '24px' }}>
+        {/* Left: Payment Selection */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* Bill Selection */}
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t1)', marginBottom: '6px' }}>Select Bill</label>
-            <select
-              value={selectedBillId}
-              onChange={(e) => {
-                setSelectedBillId(e.target.value);
-                const bill = billsData?.find((b: any) => b.id === e.target.value);
-                if (bill) setAmount(bill.balance.toString());
-              }}
-              disabled={billsLoading}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c1)', color: 'var(--t1)', fontSize: '14px', boxSizing: 'border-box' }}
-            >
-              <option value="">Choose a bill...</option>
-              {billsData?.map((bill: any) => (
-                <option key={bill.id} value={bill.id}>
-                  {bill.billNumber} ({bill.billingMonth}) - Due: KES {bill.balance}
-                </option>
-              ))}
-            </select>
-          </div>
-          {/* Payment Method Toggle */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Payment Method</label>
-              {paymentMethod === 'CARD' && (
-                <button
-                  onClick={() => setShowCardForm(!showCardForm)}
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    color: '#1434CB',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  {showCardForm ? 'Hide Form' : 'Enter Card Details'}
-                </button>
+          <div style={{ padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--t1)', marginBottom: '16px' }}>1. Select Bill</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {billsLoading ? (
+                <div style={{ padding: '20px', textAlign: 'center' }}><Loader2 className="animate-spin" /></div>
+              ) : billsData?.length === 0 ? (
+                <p style={{ fontSize: '14px', color: 'var(--t3)' }}>No unpaid bills found.</p>
+              ) : (
+                billsData?.map((bill: any) => (
+                  <div 
+                    key={bill.id}
+                    onClick={() => {
+                      setSelectedBillId(bill.id);
+                      setAmount(bill.balance.toString());
+                    }}
+                    style={{ 
+                      padding: '16px', 
+                      borderRadius: '10px', 
+                      border: selectedBillId === bill.id ? '2px solid var(--ac)' : '1px solid var(--bd)',
+                      background: selectedBillId === bill.id ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div>
+                      <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Bill #{bill.billNumber}</p>
+                      <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '4px 0 0 0' }}>Due: {new Date(bill.dueDate).toLocaleDateString()}</p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>KES {bill.balance.toLocaleString()}</p>
+                      {selectedBillId === bill.id && <span style={{ fontSize: '10px', color: 'var(--ac)', fontWeight: 700 }}>SELECTED</span>}
+                    </div>
+                  </div>
+                ))
               )}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: savedCard ? '1fr 1fr 1fr' : '1fr 1fr', gap: '8px' }}>
-              <button
-                onClick={() => setPaymentMethod('MPESA_STK_PUSH')}
-                style={{
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: paymentMethod === 'MPESA_STK_PUSH' ? '2px solid #00C9A7' : '1px solid var(--bd)',
-                  background: paymentMethod === 'MPESA_STK_PUSH' ? 'rgba(0, 201, 167, 0.1)' : 'var(--c1)',
-                  color: 'var(--t1)',
-                  cursor: 'pointer',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Smartphone size={14} />
-                M-Pesa
-              </button>
-              {savedCard && (
-                <button
-                  onClick={() => setPaymentMethod('SAVED_CARD')}
-                  style={{
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: paymentMethod === 'SAVED_CARD' ? '2px solid #00C9A7' : '1px solid var(--bd)',
-                    background: paymentMethod === 'SAVED_CARD' ? 'rgba(0, 201, 167, 0.1)' : 'var(--c1)',
-                    color: 'var(--t1)',
-                    cursor: 'pointer',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '4px',
-                  }}
-                >
-                  <Star size={14} style={{ color: '#eab308' }} />
-                  Saved Card
-                </button>
-              )}
-              <button
-                onClick={() => setPaymentMethod('CARD')}
-                style={{
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: paymentMethod === 'CARD' ? '2px solid #1434CB' : '1px solid var(--bd)',
-                  background: paymentMethod === 'CARD' ? 'rgba(20, 52, 203, 0.1)' : 'var(--c1)',
-                  color: 'var(--t1)',
-                  cursor: 'pointer',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                }}
-              >
-                <CreditCard size={14} />
-                New Card
-              </button>
             </div>
           </div>
 
-          {/* Form Fields Based on Method */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px', borderRadius: '12px', background: 'var(--c1)', border: '1px solid var(--bd)' }}>
-            
-            {paymentMethod === 'SAVED_CARD' && savedCard && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '8px', background: 'var(--c2)', border: '1px solid var(--bd)' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'var(--bd)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t2)' }}>
-                  <CreditCard size={20} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>
-                    {savedCard.cardBrand} •••• {savedCard.lastFour}
-                  </p>
-                  <p style={{ fontSize: '11px', color: 'var(--t3)', margin: 0 }}>
-                    Expires {String(savedCard.expiryMonth).padStart(2, '0')}/{savedCard.expiryYear}
-                  </p>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#eab308' }}>
-                  <Star size={14} fill="currentColor" />
-                  <span style={{ fontSize: '10px', fontWeight: 700 }}>SAVED</span>
-                </div>
+          <div style={{ padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--t1)', marginBottom: '16px' }}>2. Payment Method</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <button
+                onClick={() => setPaymentMethod('MPESA_STK_PUSH')}
+                style={{ 
+                  padding: '16px', 
+                  borderRadius: '10px', 
+                  border: paymentMethod === 'MPESA_STK_PUSH' ? '2px solid var(--ac)' : '1px solid var(--bd)',
+                  background: paymentMethod === 'MPESA_STK_PUSH' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Smartphone size={24} color={paymentMethod === 'MPESA_STK_PUSH' ? 'var(--ac)' : 'var(--t2)'} />
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>M-Pesa STK</span>
+              </button>
+              <button
+                onClick={() => setPaymentMethod('CARD')}
+                style={{ 
+                  padding: '16px', 
+                  borderRadius: '10px', 
+                  border: paymentMethod === 'CARD' ? '2px solid var(--ac)' : '1px solid var(--bd)',
+                  background: paymentMethod === 'CARD' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                <CreditCard size={24} color={paymentMethod === 'CARD' ? 'var(--ac)' : 'var(--t2)'} />
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>Card Payment</span>
+              </button>
+            </div>
+
+            {paymentMethod === 'MPESA_STK_PUSH' && (
+              <div style={{ marginTop: '20px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t1)', marginBottom: '6px' }}>M-Pesa Phone Number</label>
+                <input 
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. 0712345678"
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c1)', color: 'var(--t1)' }}
+                />
               </div>
             )}
 
             {paymentMethod === 'CARD' && (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1434CB', marginBottom: '4px' }}>
-                  <ShieldCheck size={18} />
-                  <span style={{ fontSize: '14px', fontWeight: 600 }}>Secure Card Payment</span>
-                </div>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', color: 'var(--t3)', marginBottom: '4px' }}>Resident Name</label>
-                    <input type="text" value={user?.fullName || ''} readOnly style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', color: 'var(--t2)', fontSize: '13px', cursor: 'not-allowed' }} />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', color: 'var(--t3)', marginBottom: '4px' }}>Resident Email</label>
-                    <input type="text" value={user?.email || ''} readOnly style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', color: 'var(--t2)', fontSize: '13px', cursor: 'not-allowed' }} />
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div>
-              <label style={{ display: 'block', fontSize: '11px', color: 'var(--t3)', marginBottom: '4px' }}>Resident Phone Number</label>
-              <input
-                type="tel"
-                placeholder="0712345678"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', color: 'var(--t1)', fontSize: '13px' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '11px', color: 'var(--t3)', marginBottom: '4px' }}>Amount to Pay (KES)</label>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                max={maxAmount}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--bd)', background: 'var(--c2)', color: 'var(--t1)', fontSize: '13px', fontWeight: 600 }}
-              />
-            </div>
-
-            {selectedBill && (
-              <div style={{ marginTop: '8px', padding: '12px', borderRadius: '8px', background: 'var(--c2)', border: '1px dashed var(--bd)' }}>
-                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px', borderBottom: '1px solid var(--bd)', paddingBottom: '4px' }}>Payment Summary</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
-                  <span style={{ color: 'var(--t3)' }}>Bill Number:</span>
-                  <span style={{ color: 'var(--t1)', fontWeight: 500, textAlign: 'right' }}>{selectedBill.billNumber}</span>
-                  <span style={{ color: 'var(--t3)' }}>Billing Period:</span>
-                  <span style={{ color: 'var(--t1)', fontWeight: 500, textAlign: 'right' }}>{selectedBill.billingMonth}</span>
-                  <span style={{ color: 'var(--t3)' }}>Amount Due:</span>
-                  <span style={{ color: 'var(--t1)', fontWeight: 500, textAlign: 'right' }}>KES {selectedBill.balance}</span>
-                  <span style={{ color: 'var(--t3)', fontWeight: 600 }}>Amount Being Paid:</span>
-                  <span style={{ color: paymentMethod === 'CARD' ? '#1434CB' : '#00C9A7', fontWeight: 700, textAlign: 'right' }}>KES {amount || 0}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {paymentMethod === 'CARD' && (
-            <div style={{ textAlign: 'center' }}>
-              <p style={{ fontSize: '11px', color: 'var(--t3)', marginBottom: '8px' }}>Accepted cards: Visa & Mastercard</p>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '12px' }}>
-                <img src="https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg" alt="Visa" style={{ height: '16px', opacity: 0.7 }} />
-                <img src="https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg" alt="Mastercard" style={{ height: '20px', opacity: 0.7 }} />
-              </div>
-              <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(20, 52, 203, 0.05)', border: '1px solid rgba(20, 52, 203, 0.1)' }}>
-                <p style={{ fontSize: '11px', color: '#1434CB', margin: 0, lineHeight: 1.4 }}>
-                  Your card details are entered securely on Pesapal. Legacy Homes never stores or processes your card information.
+              <div style={{ marginTop: '20px', padding: '16px', borderRadius: '8px', background: 'rgba(0, 198, 167, 0.05)', border: '1px solid rgba(0, 198, 167, 0.2)', display: 'flex', gap: '12px' }}>
+                <ShieldCheck size={20} style={{ color: 'var(--ac)', flexShrink: 0 }} />
+                <p style={{ fontSize: '12px', color: 'var(--t2)', margin: 0, lineHeight: '1.5' }}>
+                  Your payment is securely processed by Pesapal. Legacy Homes never stores or processes your card details.
                 </p>
               </div>
-            </div>
-          )}
-
-          {/* Action Button */}
-          <button
-            onClick={() => initiatePaymentMutation.mutate()}
-            disabled={!isFormValid || initiatePaymentMutation.isPending}
-            style={{
-              padding: '16px',
-              borderRadius: '10px',
-              background: isFormValid ? (paymentMethod === 'CARD' ? '#1434CB' : '#00C9A7') : '#cbd5e1',
-              color: 'white',
-              border: 'none',
-              cursor: isFormValid ? 'pointer' : 'not-allowed',
-              fontSize: '15px',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            {initiatePaymentMutation.isPending ? (
-              <Loader2 size={20} className="animate-spin" />
-            ) : (
-              <>
-                {paymentMethod === 'CARD' || paymentMethod === 'SAVED_CARD' ? (
-                  <>
-                    <Lock size={18} />
-                    Continue to Secure Payment
-                  </>
-                ) : (
-                  'Initiate M-Pesa Payment'
-                )}
-              </>
-            )}
-          </button>
-          
-          {!user?.email && paymentMethod === 'CARD' && (
-            <p style={{ fontSize: '11px', color: '#ef4444', textAlign: 'center', margin: 0 }}>
-              Please update your email in your profile to use card payments.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Card Payment Form */}
-      {showCardForm && (
-        <CardPaymentForm
-          disabled={false}
-          isLoading={false}
-          onSubmit={(cardData: CardData) => {
-            toast({ type: 'success', title: 'Card details saved', description: 'Your card has been saved securely.' });
-            setShowCardForm(false);
-          }}
-        />
-      )}
-
-      {/* Payment History Table */}
-      {showPaymentHistory && (
-        <div style={{ padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Payment History</h2>
-            {paymentHistoryData && paymentHistoryData.length > 0 && (
-              <button
-                onClick={() => {
-                  if (confirm('Are you sure you want to delete all payment history? This action cannot be undone.')) {
-                    clearHistoryMutation.mutate();
-                  }
-                }}
-                disabled={clearHistoryMutation.isPending}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(239, 68, 68, 0.2)',
-                  background: 'rgba(239, 68, 68, 0.05)',
-                  color: '#ef4444',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  opacity: clearHistoryMutation.isPending ? 0.6 : 1,
-                }}
-              >
-                <Trash2 size={14} />
-                Clear All
-              </button>
             )}
           </div>
-          {historyLoading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
-              <Loader2 className="animate-spin" />
-            </div>
-          ) : paymentHistoryData?.length === 0 ? (
-            <p style={{ textAlign: 'center', color: 'var(--t3)', fontSize: '14px' }}>No payment history found.</p>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--bd)', textAlign: 'left' }}>
-                    <th style={{ padding: '12px 8px', color: 'var(--t3)', fontWeight: 500 }}>Date</th>
-                    <th style={{ padding: '12px 8px', color: 'var(--t3)', fontWeight: 500 }}>Bill #</th>
-                    <th style={{ padding: '12px 8px', color: 'var(--t3)', fontWeight: 500 }}>Method</th>
-                    <th style={{ padding: '12px 8px', color: 'var(--t3)', fontWeight: 500 }}>Amount</th>
-                    <th style={{ padding: '12px 8px', color: 'var(--t3)', fontWeight: 500 }}>Status</th>
-                    <th style={{ padding: '12px 8px', color: 'var(--t3)', fontWeight: 500 }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paymentHistoryData.map((payment: any) => (
-                    <tr key={payment.id} style={{ borderBottom: '1px solid var(--bd)' }}>
-                      <td style={{ padding: '12px 8px', color: 'var(--t1)' }}>{new Date(payment.createdAt).toLocaleDateString()}</td>
-                      <td style={{ padding: '12px 8px', color: 'var(--t1)' }}>{payment.bill?.billNumber}</td>
-                      <td style={{ padding: '12px 8px', color: 'var(--t1)' }}>{payment.paymentMethod}</td>
-                      <td style={{ padding: '12px 8px', color: 'var(--t1)', fontWeight: 600 }}>KES {payment.amount}</td>
-                      <td style={{ padding: '12px 8px' }}>
-                        <span style={{ 
-                          padding: '2px 8px', 
-                          borderRadius: '12px', 
-                          fontSize: '11px', 
-                          fontWeight: 500,
-                          background: payment.status === 'SUCCESSFUL' ? 'rgba(16, 185, 129, 0.1)' : (payment.status === 'FAILED' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'),
-                          color: payment.status === 'SUCCESSFUL' ? '#10b981' : (payment.status === 'FAILED' ? '#ef4444' : '#f59e0b')
-                        }}>
-                          {payment.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        {payment.status === 'SUCCESSFUL' && (
-                          <button
-                            onClick={() => downloadReceiptMutation.mutate(payment.id)}
-                            style={{ background: 'transparent', border: 'none', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <Download size={14} />
-                            Receipt
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            if (confirm('Are you sure you want to delete this payment record?')) {
-                              deletePaymentMutation.mutate(payment.id);
-                            }
-                          }}
-                          disabled={deletePaymentMutation.isPending}
-                          title="Delete payment record"
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#ef4444',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            opacity: deletePaymentMutation.isPending ? 0.6 : 1,
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
-      )}
+
+        {/* Right: Summary & Action */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ padding: '24px', borderRadius: '14px', border: '1px solid var(--bd)', background: 'var(--c2)', position: 'sticky', top: '24px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--t1)', marginBottom: '20px' }}>Payment Summary</h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: 'var(--t3)' }}>Resident</span>
+                <span style={{ color: 'var(--t1)', fontWeight: 500 }}>{user?.fullName}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: 'var(--t3)' }}>Bill Number</span>
+                <span style={{ color: 'var(--t1)', fontWeight: 500 }}>{selectedBill?.billNumber || '-'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: 'var(--t3)' }}>Method</span>
+                <span style={{ color: 'var(--t1)', fontWeight: 500 }}>{paymentMethod === 'MPESA_STK_PUSH' ? 'M-Pesa' : 'Card'}</span>
+              </div>
+              <div style={{ borderTop: '1px solid var(--bd)', paddingTop: '12px', marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>Total Amount</span>
+                <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--ac)' }}>KES {amount ? parseFloat(amount).toLocaleString() : '0'}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => initiatePaymentMutation.mutate()}
+              disabled={!isFormValid || initiatePaymentMutation.isPending}
+              style={{ 
+                width: '100%', 
+                padding: '14px', 
+                borderRadius: '10px', 
+                background: 'var(--ac)', 
+                color: 'white', 
+                border: 'none', 
+                fontSize: '15px', 
+                fontWeight: 700, 
+                cursor: isFormValid ? 'pointer' : 'not-allowed',
+                opacity: isFormValid ? 1 : 0.6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              {initiatePaymentMutation.isPending ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <>
+                  {paymentMethod === 'CARD' ? 'Continue to Secure Payment' : 'Pay Now'}
+                  <ArrowRight size={18} />
+                </>
+              )}
+            </button>
+
+            <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', opacity: 0.6 }}>
+              <Lock size={12} />
+              <span style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Secure Checkout</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

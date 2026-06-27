@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { paymentController } from '../controllers/payment.controller';
 import { authenticate, authorize } from '../middleware/auth';
-import { logger } from '../utils/logger';
 
 const router: import("express").Router = Router();
 
@@ -13,26 +12,8 @@ router.post('/verify/:paymentId', authenticate, paymentController.retryVerificat
 router.delete('/my-history', authenticate, paymentController.clearMyPaymentHistory.bind(paymentController));
 
 // Provider Webhooks / Callbacks
-router.post('/tuma/callback', paymentController.handleTumaCallback.bind(paymentController));
 router.post('/pesapal/ipn', paymentController.handlePesapalIpn.bind(paymentController));
 router.get('/pesapal/ipn', paymentController.handlePesapalIpn.bind(paymentController));
-
-// Diagnostic Routes
-router.post('/callback-test', (req, res) => {
-  logger.info('CALLBACK TEST RECEIVED');
-  logger.info(JSON.stringify(req.body, null, 2));
-
-  return res.status(200).json({
-    success: true
-  });
-});
-
-router.get('/callback-health', (_req, res) => {
-  return res.json({
-    success: true,
-    message: 'Callback endpoint reachable'
-  });
-});
 
 // Admin routes
 router.get('/system-check', authenticate, authorize('SUPER_ADMIN'), paymentController.systemCheck.bind(paymentController));
@@ -41,7 +22,6 @@ router.get('/export/csv', authenticate, authorize('SUPER_ADMIN'), paymentControl
 router.get('/', authenticate, authorize('SUPER_ADMIN'), paymentController.getAll.bind(paymentController));
 router.post('/bulk-delete', authenticate, authorize('SUPER_ADMIN'), paymentController.bulkDelete.bind(paymentController));
 router.post('/retry/:paymentId', authenticate, authorize('SUPER_ADMIN'), paymentController.retryVerification.bind(paymentController));
-router.post('/reconcile/:paymentId', authenticate, paymentController.retryVerification.bind(paymentController));
 router.delete('/:id', authenticate, authorize('SUPER_ADMIN'), paymentController.deletePayment.bind(paymentController));
 
 export default router;

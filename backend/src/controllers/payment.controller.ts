@@ -1,16 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
 import { paymentService } from '../services/payment.service';
 import { PaymentEngineService } from '../services/payment-engine.service';
-
-const paymentEngineService = new PaymentEngineService();
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import { auditService } from '../services/audit.service';
 
+const paymentEngineService = new PaymentEngineService();
+
 export class PaymentController {
+  /**
+   * Initiate a payment through the selected provider
+   */
   async initiatePayment(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { billId, provider, paymentMethod, phoneNumber, amount } = req.body;
+      
+      logger.info(`[PAYMENT CONTROLLER] Initiating payment for bill ${billId} via ${provider}`);
+      
       const result = await paymentEngineService.initiatePayment(
         billId,
         req.user!.userId,
@@ -19,38 +25,59 @@ export class PaymentController {
         phoneNumber,
         amount
       );
+      
       res.status(201).json({ success: true, data: result });
-    } catch (error) { next(error); }
-  }
-
-  async handleTumaCallback(req: Request, res: Response, next: NextFunction) {
-    try {
-      const result = await paymentEngineService.handleCallback('TUMA', req.body);
-      // Tuma expects a 200 OK even if processing fails internally to prevent retries
-      res.status(200).json(result);
     } catch (error) {
-      logger.error('Tuma callback error:', error);
-      res.status(200).json({ success: true, message: 'Tuma callback processed with internal error' });
+      logger.error('[PAYMENT CONTROLLER] Initiation error:', error);
+      next(error);
     }
   }
 
+  /**
+   * Handle Pesapal IPN (Callback)
+   */
   async handlePesapalIpn(req: Request, res: Response, next: NextFunction) {
     try {
-      // Pesapal IPN usually sends orderTrackingId in query params
+      // Pesapal v3 sends OrderTrackingId and OrderMerchantReference in the request
       const payload = Object.keys(req.body).length > 0 ? req.body : req.query;
-      const result = await paymentEngineService.handleCallback('PESAPAL', payload);
-      res.json(result);
+      
+      logger.info(`[PAYMENT CONTROLLER] Pesapal IPN received: ${JSON.stringify(payload)}`);
+      
+      const result = await paymentEngineService.handleCallback('PESAPAL', payload, undefined, req.headers);
+      
+      // Pesapal expects a response to acknowledge receipt of IPN
+      res.status(200).json(result);
     } catch (error) {
-      logger.error('Pesapal IPN error:', error);
+      logger.error('[PAYMENT CONTROLLER] Pesapal IPN error:', error);
+      // Always return 200 to Pesapal to avoid excessive retries if we've logged it
       res.status(200).json({ success: true, message: 'IPN received' });
     }
   }
 
+
+  /**
+   * Verify payment status (Resident manual check or retry)
+   */
   async checkStatus(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const payment = await paymentService.checkPaymentStatus(req.params.paymentId as string, req.user!.userId);
-      res.json({ success: true, data: payment });
-    } catch (error) { next(error); }
+      const paymentId = req.params.paymentId;
+      const result = await paymentEngineService.verifyPaymentStatus(paymentId);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Retry verification (Admin)
+   */
+  async retryVerification(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await paymentEngineService.verifyPaymentStatus(req.params.paymentId);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
   }
 
   async getMyPayments(req: AuthRequest, res: Response, next: NextFunction) {
@@ -114,13 +141,6 @@ export class PaymentController {
         ipAddress: req.ip,
       }).catch(() => {});
       res.json({ success: true, ...result });
-    } catch (error) { next(error); }
-  }
-
-  async retryVerification(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-      const result = await paymentEngineService.verifyPaymentStatus(req.params.paymentId);
-      res.json({ success: true, data: result });
     } catch (error) { next(error); }
   }
 
