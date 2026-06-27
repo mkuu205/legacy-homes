@@ -42,7 +42,7 @@ export default function PaymentsPage() {
     queryKey: ['unpaid-bills'],
     queryFn: async () => {
       const res = await api.get('/billing/my-bills?status=UNPAID,PARTIAL,OVERDUE');
-      return res.data.data || [];
+      return res.data.data?.bills || [];
     },
   });
 
@@ -51,7 +51,7 @@ export default function PaymentsPage() {
     queryKey: ['my-payments'],
     queryFn: async () => {
       const res = await api.get('/payments/my-payments');
-      return res.data.data || [];
+      return res.data.data?.payments || [];
     },
   });
 

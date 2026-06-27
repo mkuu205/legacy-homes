@@ -45,7 +45,7 @@ export default function BillingPage() {
       // Fetch payments for this bill to find the payment ID
       const paymentsRes = await api.get(`/payments/my-payments?billId=${bill.id}`);
       const payments = paymentsRes.data?.data?.payments || [];
-      const successfulPayment = payments.find((p: any) => p.status === 'SUCCESSFUL' && p.billId === bill.id);
+      const successfulPayment = Array.isArray(payments) ? payments.find((p: any) => p.status === 'SUCCESSFUL' && p.billId === bill.id) : null;
       if (!successfulPayment) {
         // Fall back to invoice download if no receipt available
         await handleDownloadInvoice(bill.id);
