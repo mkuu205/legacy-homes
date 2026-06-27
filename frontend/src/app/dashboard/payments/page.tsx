@@ -19,9 +19,7 @@ import {
   FileText,
   Clock,
   Calendar,
-  Wallet,
   Shield,
-  ChevronDown,
 } from 'lucide-react';
 
 export default function PaymentsPage() {
@@ -34,13 +32,12 @@ export default function PaymentsPage() {
   const paymentIdParam = params.get('paymentId');
   const orderTrackingId = params.get('OrderTrackingId');
 
-  const [selectedBillId, setSelectedBillId] = useState(billIdParam || '');
+  const [selectedBillId, setSelectedBillId] = useState('');
   const [phone, setPhone] = useState(user?.phone || '');
   const [showPhoneInput, setShowPhoneInput] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'MPESA_STK_PUSH' | 'CARD'>('MPESA_STK_PUSH');
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(paymentIdParam || null);
   const [isVerifying, setIsVerifying] = useState(!!orderTrackingId);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [phoneError, setPhoneError] = useState('');
 
   // Handle Pesapal Redirect Back
@@ -87,20 +84,15 @@ export default function PaymentsPage() {
     },
   });
 
-  // Set initial bill if only one exists
+  // Set bill from URL param only
   useEffect(() => {
-    if (isInitialLoad && billsData && billsData.length > 0) {
-      if (billsData.length === 1) {
-        setSelectedBillId(billsData[0].id);
-      } else if (billIdParam) {
-        const bill = billsData.find((b: any) => b.id === billIdParam);
-        if (bill) {
-          setSelectedBillId(bill.id);
-        }
+    if (billIdParam && billsData) {
+      const bill = billsData.find((b: any) => b.id === billIdParam);
+      if (bill) {
+        setSelectedBillId(bill.id);
       }
-      setIsInitialLoad(false);
     }
-  }, [billsData, billIdParam, isInitialLoad]);
+  }, [billIdParam, billsData]);
 
   // Fetch payment status
   const { data: statusData } = useQuery({
@@ -338,77 +330,40 @@ export default function PaymentsPage() {
         <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>Make Payment</h1>
       </div>
 
-      {/* Select Bill */}
+      {/* Select Bill - Dropdown */}
       <div style={{ marginBottom: '20px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
           Select Bill
         </label>
         {billsLoading ? (
-          <div style={{ padding: '16px', borderRadius: '12px', border: '1px solid var(--bd)', background: 'var(--c1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Loader2 size={20} className="animate-spin" style={{ color: 'var(--ac)' }} />
-              <span style={{ color: 'var(--t2)' }}>Loading bills...</span>
-            </div>
+          <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c1)', color: 'var(--t2)' }}>
+            Loading bills...
           </div>
         ) : billsData && billsData.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <select 
+            value={selectedBillId}
+            onChange={(e) => setSelectedBillId(e.target.value)}
+            style={{ 
+              width: '100%', 
+              padding: '12px', 
+              borderRadius: '8px', 
+              border: '1px solid var(--bd)', 
+              background: 'var(--c1)', 
+              color: 'var(--t1)', 
+              fontSize: '14px',
+              outline: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="">Select a bill...</option>
             {billsData.map((bill: any) => (
-              <div
-                key={bill.id}
-                onClick={() => setSelectedBillId(bill.id)}
-                style={{
-                  padding: '14px 16px',
-                  borderRadius: '12px',
-                  border: selectedBillId === bill.id ? '2px solid var(--ac)' : '1px solid var(--bd)',
-                  background: selectedBillId === bill.id ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  position: 'relative'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                      <FileText size={16} style={{ color: 'var(--ac)' }} />
-                      <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>
-                        Bill #{bill.billNumber}
-                      </span>
-                      {selectedBillId === bill.id && (
-                        <span style={{ 
-                          marginLeft: 'auto', 
-                          fontSize: '11px', 
-                          fontWeight: 600, 
-                          color: 'var(--ac)',
-                          background: 'rgba(0, 198, 167, 0.1)',
-                          padding: '2px 8px',
-                          borderRadius: '4px'
-                        }}>
-                          Selected
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', fontSize: '13px', color: 'var(--t2)' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Calendar size={12} />
-                        {bill.billingMonth}
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={12} />
-                        Due: {bill.dueDate}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', marginLeft: '12px' }}>
-                    <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--ac)' }}>
-                      KES {bill.balance?.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <option key={bill.id} value={bill.id}>
+                Bill #{bill.billNumber} - KES {bill.balance.toLocaleString()}
+              </option>
             ))}
-          </div>
+          </select>
         ) : (
-          <div style={{ padding: '16px', borderRadius: '12px', border: '1px solid var(--bd)', background: 'var(--c1)', textAlign: 'center' }}>
+          <div style={{ padding: '16px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c1)', textAlign: 'center' }}>
             <p style={{ color: 'var(--t2)', margin: '0 0 12px 0' }}>No unpaid bills found</p>
             <button 
               onClick={() => router.push('/dashboard/billing')}
@@ -420,15 +375,14 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      {/* Bill Details Card */}
+      {/* Bill Details */}
       {selectedBill && (
         <div style={{ 
           marginBottom: '24px', 
-          padding: '20px', 
-          borderRadius: '12px', 
+          padding: '16px', 
+          borderRadius: '8px', 
           border: '1px solid var(--bd)', 
-          background: 'var(--c1)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
+          background: 'var(--c1)'
         }}>
           <div style={{ textAlign: 'center', marginBottom: '16px' }}>
             <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -465,10 +419,10 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* Payment Method Selection */}
+      {/* Payment Method */}
       {selectedBill && (
         <>
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '12px' }}>
               Payment Method
             </label>
@@ -483,7 +437,6 @@ export default function PaymentsPage() {
                   background: paymentMethod === 'MPESA_STK_PUSH' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
-                  position: 'relative',
                   display: 'flex',
                   gap: '16px',
                   alignItems: 'flex-start'
@@ -527,7 +480,6 @@ export default function PaymentsPage() {
                   background: paymentMethod === 'CARD' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
-                  position: 'relative',
                   display: 'flex',
                   gap: '16px',
                   alignItems: 'flex-start'
@@ -705,12 +657,6 @@ export default function PaymentsPage() {
               paymentMethod === 'CARD' ? 'Pay with Card' : 'Pay with M-Pesa'
             )}
           </button>
-
-          {paymentMethod === 'CARD' && initiatePaymentMutation.isPending && (
-            <p style={{ fontSize: '12px', color: 'var(--t3)', textAlign: 'center', marginTop: '8px' }}>
-              You will be redirected to complete your payment
-            </p>
-          )}
         </>
       )}
     </div>
