@@ -82,7 +82,6 @@ app.use(helmet({
 // Express CORS
 app.use(cors({
   origin: (origin, callback) => {
-    // Check if origin is in allowed list or matches vercel.app
     if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
       callback(null, true);
     } else {
@@ -104,16 +103,6 @@ app.use(cors({
   ],
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
-  max: parseInt(process.env.RATE_LIMIT_MAX || '100'),
-  message: { success: false, message: 'Too many requests, please try again later.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api/', limiter);
-
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -123,14 +112,85 @@ app.use(morgan('combined', {
   stream: { write: (message) => logger.http(message.trim()) },
 }));
 
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString(), service: 'Legacy Homes API' });
+// --- HEALTH HANDLER (shared between endpoints) ---
+// TODO: Extend this to check database, SMTP, and payment provider status
+const healthHandler = (_req: express.Request, res: express.Response) => {
+  const memoryUsage = process.memoryUsage();
+
+  // Prevent caching of health check responses
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+    'Surrogate-Control': 'no-store',
+  });
+
+  // Status is always 'ONLINE' because the API is responding
+  // Services are 'UNKNOWN' because we haven't implemented dependency checks yet
+  // In a future iteration, add actual service health checks:
+  // - Database connection pool status
+  // - SMTP service availability
+  // - Payment provider (Pesapal/Tuma) connectivity
+  
+  res.status(200).json({
+    success: true,
+    ready: true, // Indicates the server is fully initialized and accepting requests
+    status: 'ONLINE',
+    service: 'Legacy Homes API',
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || '1.0.0',
+    memory: {
+      rss: Math.round(memoryUsage.rss / 1024 / 1024), // MB
+      heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024), // MB
+      heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024), // MB
+    },
+    // Honest reporting - these are not yet verified
+    services: {
+      database: 'UNKNOWN',   // TODO: Check actual database connection
+      smtp: 'UNKNOWN',       // TODO: Check SMTP service
+      pesapal: 'UNKNOWN',    // TODO: Check Pesapal API
+      tuma: 'UNKNOWN',       // TODO: Check Tuma API
+    },
+  });
+};
+
+// --- HEALTH ENDPOINTS (defined BEFORE rate limiting) ---
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
+
+// --- RATE LIMITING ---
+
+// 1. Global limiter - protects all API routes EXCEPT health (already defined above)
+const limiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
+  max: parseInt(process.env.RATE_LIMIT_MAX || '100'), // 100 requests per 15 minutes
+  message: {
+    success: false,
+    message: 'Too many requests, please try again later.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Auth routes are skipped because they have their own limiter
+  skip: (req) => req.path.startsWith('/auth'),
 });
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString(), service: 'Legacy Homes API' });
+// 2. Dedicated auth limiter (stricter for login/registration)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 auth attempts per 15 minutes
+  message: {
+    success: false,
+    message: 'Too many login attempts, please try again later.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
+
+// Apply rate limiters AFTER health routes
+app.use('/api/', limiter);
+app.use('/api/auth', authLimiter);
 
 app.get('/deployment-test', (_req, res) => {
   res.json({
@@ -140,8 +200,7 @@ app.get('/deployment-test', (_req, res) => {
   });
 });
 
-
-// Callback Debugging Middleware - MUST BE BEFORE ANY OTHER MIDDLEWARE FOR THIS ROUTE
+// Callback Debugging Middleware
 app.use('/api/payments/callback', (req, res, next) => {
   logger.info('🔥 CALLBACK HIT - RAW REQUEST');
   logger.info('HEADERS: ' + JSON.stringify(req.headers));
@@ -170,6 +229,7 @@ const PORT = parseInt(process.env.PORT || '5000');
 
 httpServer.listen(PORT, () => {
   logger.info(`🚀 Legacy Homes API running on port ${PORT}`);
+  logger.info(`🕒 Started at ${new Date().toISOString()}`);
   logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
   logger.info(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
   logger.info(`PAYMENT_CALLBACK_URL=${process.env.PAYMENT_CALLBACK_URL}`);
