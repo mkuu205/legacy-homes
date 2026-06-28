@@ -17,10 +17,11 @@ export function MaintenanceProvider({ children }: { children: ReactNode }) {
                            status === 'WAKING_UP' || 
                            status === 'NETWORK_OFFLINE';
 
-  // Maintenance screen should only be shown on /login and /maintenance pages
+  // Maintenance screen should only be shown on auth and protected pages
   // This allows the landing page and other public pages to remain accessible
   const shouldShowMaintenance = isMaintenanceMode && (
     pathname === '/login' || 
+    pathname === '/register' || 
     pathname === '/maintenance' || 
     pathname.startsWith('/dashboard') || 
     pathname.startsWith('/admin')

@@ -33,7 +33,8 @@ export function MaintenanceScreen() {
       });
       
       if (!res.ok) {
-        throw new Error('Failed to subscribe');
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to subscribe');
       }
       
       setNotified(true);
@@ -158,6 +159,49 @@ export function MaintenanceScreen() {
           </div>
         </div>
 
+        {/* Notification Form */}
+        {!isNotified ? (
+          <form onSubmit={handleNotifyMe} style={{ marginBottom: '20px' }}>
+            <div style={{ marginBottom: '12px' }}>
+              <label htmlFor="email" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--t2)', marginBottom: '6px' }}>
+                Get notified when we're back online
+              </label>
+              <input
+                id="email"
+                type="email"
+                placeholder="Enter your email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="inp"
+                style={{ width: '100%' }}
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn bg"
+              style={{ width: '100%' }}
+            >
+              <Bell size={16} />
+              {loading ? 'Subscribing...' : 'Notify Me'}
+            </button>
+          </form>
+        ) : (
+          <div style={{
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+            borderRadius: '9px',
+            padding: '12px',
+            marginBottom: '20px',
+            fontSize: '12px',
+            color: '#34d399',
+            textAlign: 'center'
+          }}>
+            We'll notify {email} when service returns.
+          </div>
+        )}
+
         {/* Buttons */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
           <button
@@ -178,38 +222,7 @@ export function MaintenanceScreen() {
               </>
             )}
           </button>
-
-          {!isNotified && (
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                handleNotifyMe(e as any);
-              }}
-              disabled={loading}
-              className="btn bg"
-              style={{ width: '100%' }}
-            >
-              <Bell size={16} />
-              {loading ? 'Subscribing...' : 'Notify Me'}
-            </button>
-          )}
         </div>
-
-        {/* Notification Status */}
-        {isNotified && (
-          <div style={{
-            background: 'rgba(16, 185, 129, 0.1)',
-            border: '1px solid rgba(16, 185, 129, 0.2)',
-            borderRadius: '9px',
-            padding: '12px',
-            marginBottom: '16px',
-            fontSize: '12px',
-            color: '#34d399',
-            textAlign: 'center'
-          }}>
-            We'll notify {email} when service returns.
-          </div>
-        )}
 
         {error && (
           <div style={{
