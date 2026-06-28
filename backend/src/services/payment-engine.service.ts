@@ -505,7 +505,8 @@ export class PaymentEngineService {
     // 6. Environment Variables
     const requiredVars = [
       'DATABASE_URL',
-      'JWT_SECRET',
+      'JWT_ACCESS_SECRET',
+      'JWT_REFRESH_SECRET',
       'PESAPAL_CONSUMER_KEY',
       'PESAPAL_CONSUMER_SECRET',
       'BREVO_API_KEY'
