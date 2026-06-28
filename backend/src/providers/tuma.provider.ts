@@ -11,13 +11,6 @@ import {
 } from './payment-provider.interface';
 import { logger } from '../utils/logger';
 
-// Central payment status enum - matches your Prisma schema
-export enum TumaPaymentStatus {
-  SUCCESSFUL = 'SUCCESSFUL',
-  FAILED = 'FAILED',
-  PENDING = 'PENDING',
-}
-
 // Retryable HTTP status codes
 const RETRYABLE_STATUSES = new Set([502, 503, 504]);
 const RETRYABLE_ERRORS = new Set(['ECONNRESET', 'ECONNABORTED', 'ETIMEDOUT']);
@@ -26,22 +19,31 @@ export class TumaProvider implements PaymentProvider {
   private email: string;
   private apiKey: string;
   private callbackUrl: string;
-  private baseUrl: string = 'https://api.tuma.co.ke'; // PRODUCTION ONLY
+  private baseUrl: string;
   private token: string | null = null;
   private tokenExpiry: number = 0;
 
   constructor() {
-    this.email = process.env.TUMA_EMAIL || '';
+    // Match your exact environment variable names
+    this.email = process.env.TUMA_BUSINESS_EMAIL || process.env.TUMA_EMAIL || '';
     this.apiKey = process.env.TUMA_API_KEY || '';
-    this.callbackUrl = process.env.TUMA_CALLBACK_URL || '';
+    this.baseUrl = process.env.TUMA_API_URL || 'https://api.tuma.co.ke';
+    this.callbackUrl = process.env.PAYMENT_CALLBACK_URL || process.env.TUMA_CALLBACK_URL || '';
 
-    if (!this.email || !this.apiKey) {
-      logger.warn('[TUMA] Email or API Key missing in environment variables');
-    }
-
-    // Validate production URL
-    if (!this.baseUrl.includes('api.tuma.co.ke')) {
-      logger.error('[TUMA] WARNING: Using non-production URL!');
+    // Log configuration status
+    const isConfigured = this.isConfigured();
+    logger.info(`[TUMA] Provider initialized. Configured: ${isConfigured}`);
+    
+    if (!isConfigured) {
+      const config = this.getConfigStatus();
+      const missing = [];
+      if (!config.email) missing.push('TUMA_BUSINESS_EMAIL or TUMA_EMAIL');
+      if (!config.apiKey) missing.push('TUMA_API_KEY');
+      if (!config.callbackUrl) missing.push('PAYMENT_CALLBACK_URL or TUMA_CALLBACK_URL');
+      logger.warn(`[TUMA] Missing configuration: ${missing.join(', ')}`);
+    } else {
+      logger.info(`[TUMA] Using API URL: ${this.baseUrl}`);
+      logger.info(`[TUMA] Callback URL: ${this.callbackUrl}`);
     }
   }
 
@@ -56,8 +58,12 @@ export class TumaProvider implements PaymentProvider {
 
     try {
       logger.info('[TUMA] Requesting new access token');
+      
+      // Use the auth URL from env or construct from base URL
+      const authUrl = process.env.TUMA_AUTH_URL || `${this.baseUrl}/auth/token`;
+      
       const response = await axios.post(
-        `${this.baseUrl}/auth/token`,
+        authUrl,
         {
           email: this.email,
           api_key: this.apiKey,
@@ -193,7 +199,7 @@ export class TumaProvider implements PaymentProvider {
       if (!this.isConfigured()) {
         return {
           success: false,
-          error: 'TUMA provider not configured',
+          error: 'TUMA provider not configured. Missing: TUMA_BUSINESS_EMAIL, TUMA_API_KEY, or PAYMENT_CALLBACK_URL',
         };
       }
 
@@ -217,7 +223,7 @@ export class TumaProvider implements PaymentProvider {
           checkout_request_id: string;
           customer_message: string;
         };
-      }>('POST', '/payment/stk-push', payload);
+      }>('/payment/stk-push', payload);
 
       if (response.success && response.data) {
         const orderId = response.data.merchant_request_id || response.data.checkout_request_id;
@@ -279,11 +285,12 @@ export class TumaProvider implements PaymentProvider {
     const mpesaReceiptNumber = payload.mpesa_receipt_number;
     const amount = payload.amount;
     const timestamp = payload.timestamp;
+    const status = payload.status; // 'completed' or 'failed'
 
     logger.info(`[TUMA] Callback received. Merchant: ${merchantRequestId}, Checkout: ${checkoutRequestId}`);
 
     // Per Tuma docs: result_code = 0 means success
-    const isSuccess = resultCode === 0;
+    const isSuccess = resultCode === 0 && status === 'completed';
 
     return {
       valid: true,
@@ -299,7 +306,7 @@ export class TumaProvider implements PaymentProvider {
         result_desc: resultDesc,
         mpesa_receipt_number: mpesaReceiptNumber,
         failure_reason: payload.failure_reason,
-        status: payload.status, // 'completed' or 'failed'
+        status: status,
       },
     };
   }
@@ -328,4 +335,4 @@ export class TumaProvider implements PaymentProvider {
       callbackUrl: !!this.callbackUrl,
     };
   }
-          }
+}
