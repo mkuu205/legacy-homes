@@ -45,7 +45,7 @@ export const getSocket = (userId?: string): Socket => {
       console.log('✅ Socket connected:', socket?.id);
 
       if (userId) {
-        socket.emit('join_room', userId);
+        socket?.emit('join_room', userId);
       }
     });
 
