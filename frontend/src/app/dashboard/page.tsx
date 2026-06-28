@@ -166,7 +166,7 @@ export default function DashboardPage() {
       <div className="g4">
         {[
           { label: 'Unread Alerts', value: unreadNotifications || 0, icon: Bell, color: '#f59e0b', href: '/dashboard/notifications' },
-          { label: 'Recent Payments', value: recentPayments?.length || 0, icon: CreditCard, color: 'var(--ok)', href: '/dashboard/payments' },
+          { label: 'Recent Payments', value: recentPayments?.length || 0, icon: CreditCard, color: 'var(--ok)', href: '/dashboard/payments/history' },
           { label: 'Bill Status', value: currentBill?.status || 'N/A', icon: FileText, color: statusBadges[currentBill?.status]?.color || 'var(--t2)', href: '/dashboard/billing' },
           { label: 'Units Used', value: currentBill ? `${currentBill.unitsConsumed}` : 'N/A', icon: Droplets, color: 'var(--in)', href: '/dashboard/billing' },
           { label: 'Support', value: 'New Ticket', icon: MessageSquarePlus, color: '#a78bfa', href: '/dashboard/support?new=true' },
@@ -259,7 +259,7 @@ export default function DashboardPage() {
               Recent Payments
             </h2>
             <Link
-              href="/dashboard/payments"
+              href="/dashboard/payments/history"
               style={{
                 fontSize: '12px',
                 fontWeight: 600,
