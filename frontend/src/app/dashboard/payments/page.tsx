@@ -18,6 +18,13 @@ import {
   ChevronRight,
   Shield,
   History,
+  Receipt,
+  Calendar,
+  Banknote,
+  FileText,
+  Download,
+  Home,
+  ChevronLeft,
 } from 'lucide-react';
 
 export default function PaymentsPage() {
@@ -38,6 +45,8 @@ export default function PaymentsPage() {
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(paymentIdParam || null);
   const [isVerifying, setIsVerifying] = useState(!!orderTrackingId);
   const [phoneError, setPhoneError] = useState('');
+  const [paymentTimestamp, setPaymentTimestamp] = useState<string>('');
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Handle Pesapal Redirect Back
   useEffect(() => {
@@ -54,6 +63,14 @@ export default function PaymentsPage() {
       if (payments.length > 0) {
         const payment = payments[0];
         setPendingPaymentId(payment.id);
+        setPaymentTimestamp(new Date().toLocaleString('en-KE', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        }));
         
         if (payment.status !== 'SUCCESSFUL') {
           try {
@@ -83,7 +100,7 @@ export default function PaymentsPage() {
     },
   });
 
-  // Set bill from URL param only - no auto-selection
+  // Set bill from URL param only
   useEffect(() => {
     if (billIdParam && billsData) {
       const bill = billsData.find((b: any) => b.id === billIdParam);
@@ -102,7 +119,6 @@ export default function PaymentsPage() {
         setAmount(bill.balance?.toString() || '');
       }
     } else {
-      // Clear amount when no bill is selected
       setAmount('');
     }
   }, [selectedBillId, billsData]);
@@ -164,7 +180,7 @@ export default function PaymentsPage() {
         billId: selectedBillId,
         amount: parseFloat(amount),
         provider: paymentMethod === 'MPESA_STK_PUSH' ? 'TUMA' : 'PESAPAL',
-        paymentMethod: paymentMethod === 'CARD' ? 'VISA' : paymentMethod,
+        paymentMethod: paymentMethod,
       };
 
       if (paymentMethod === 'MPESA_STK_PUSH') {
@@ -207,6 +223,14 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     if (statusData?.status === 'SUCCESSFUL') {
+      setPaymentTimestamp(new Date().toLocaleString('en-KE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }));
       toast({ type: 'success', title: 'Payment Successful!', description: 'Your payment has been confirmed.' });
       queryClient.invalidateQueries({ queryKey: ['unpaid-bills'] });
     } else if (statusData?.status === 'FAILED') {
@@ -223,122 +247,482 @@ export default function PaymentsPage() {
     }
   }, [statusData?.status]);
 
+  // Download PDF function - calls backend API
+  const downloadPDF = async () => {
+    if (!pendingPaymentId && !statusData?.id) {
+      toast({ 
+        type: 'error', 
+        title: 'No receipt available', 
+        description: 'Payment receipt not found.' 
+      });
+      return;
+    }
+
+    setIsDownloading(true);
+
+    try {
+      const paymentId = pendingPaymentId || statusData?.id;
+      
+      toast({ 
+        type: 'info', 
+        title: 'Generating PDF...', 
+        description: 'Please wait while we prepare your receipt.' 
+      });
+
+      // Call the backend API to download the PDF
+      const response = await api.get(`/payments/receipt/${paymentId}/download`, {
+        responseType: 'blob'
+      });
+
+      // Create a blob URL and trigger download
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Payment_Receipt_${statusData?.confirmationCode || 'TXN'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast({ 
+        type: 'success', 
+        title: 'PDF Downloaded!', 
+        description: 'Your receipt has been saved.' 
+      });
+    } catch (error: any) {
+      console.error('PDF download error:', error);
+      toast({ 
+        type: 'error', 
+        title: 'Download failed', 
+        description: error?.response?.data?.error || 'Unable to generate PDF. Please try again.' 
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   if (isVerifying) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '16px', padding: '20px' }}>
-        <Loader2 size={48} className="animate-spin" style={{ color: 'var(--ac)' }} />
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--t1)', textAlign: 'center' }}>Verifying your payment...</h2>
-        <p style={{ fontSize: '14px', color: 'var(--t2)', textAlign: 'center' }}>Please wait while we confirm your transaction.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '20px', padding: '20px' }}>
+        <div style={{ position: 'relative' }}>
+          <div style={{ 
+            width: '64px', 
+            height: '64px', 
+            borderRadius: '50%', 
+            border: '3px solid var(--bd)',
+            borderTopColor: 'var(--ac)',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          <div style={{ 
+            position: 'absolute', 
+            inset: 0, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center' 
+          }}>
+            <Shield size={24} style={{ color: 'var(--ac)' }} />
+          </div>
+        </div>
+        <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--t1)', textAlign: 'center', margin: 0 }}>
+          Verifying Your Payment
+        </h2>
+        <p style={{ fontSize: '14px', color: 'var(--t2)', textAlign: 'center', margin: 0, maxWidth: '320px' }}>
+          Please wait while we confirm your transaction with the payment provider.
+        </p>
       </div>
     );
   }
 
   if (pendingPaymentId && statusData) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '500px', margin: '0 auto', padding: '16px' }}>
-        <div style={{ padding: '32px 24px', borderRadius: '16px', border: '1px solid var(--bd)', background: 'var(--c2)', textAlign: 'center' }}>
-          {statusData.status === 'PENDING' && (
-            <>
-              <div style={{ marginBottom: '24px' }}>
-                <Loader2 size={48} style={{ margin: '0 auto', animation: 'spin 1s linear infinite', color: 'var(--ac)' }} />
+      <div style={{ 
+        maxWidth: '520px', 
+        margin: '0 auto', 
+        padding: '20px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px'
+      }}>
+        {statusData.status === 'SUCCESSFUL' && (
+          <>
+            {/* Success Header */}
+            <div style={{ 
+              textAlign: 'center',
+              padding: '32px 24px 24px',
+            }}>
+              <div style={{ 
+                width: '80px', 
+                height: '80px', 
+                borderRadius: '50%', 
+                background: 'linear-gradient(135deg, #10b98120, #10b98108)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px',
+                border: '2px solid #10b98140',
+              }}>
+                <CheckCircle size={40} style={{ color: '#10b981' }} />
               </div>
-              <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--t1)', marginBottom: '8px' }}>
-                {paymentMethod === 'MPESA_STK_PUSH' ? 'Processing Payment...' : 'Redirecting to secure payment...'}
-              </h2>
-              <p style={{ fontSize: '14px', color: 'var(--t2)', marginBottom: '24px', lineHeight: '1.5' }}>
-                {paymentMethod === 'MPESA_STK_PUSH' 
-                  ? 'Waiting for STK Push confirmation...' 
-                  : 'Your payment is being processed by Pesapal.'}
+              <h1 style={{ 
+                fontSize: '24px', 
+                fontWeight: 700, 
+                color: '#10b981',
+                margin: '0 0 6px 0'
+              }}>
+                Payment Successful 🎉
+              </h1>
+              <p style={{ 
+                fontSize: '14px', 
+                color: 'var(--t2)', 
+                margin: 0 
+              }}>
+                Your payment has been confirmed and processed successfully.
               </p>
-              <div style={{ background: 'var(--c1)', padding: '16px', borderRadius: '12px', display: 'inline-block', width: '100%' }}>
-                <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Payment Amount</p>
-                <p style={{ fontSize: '20px', fontWeight: 800, color: 'var(--t1)', margin: 0 }}>KES {statusData.amount?.toLocaleString()}</p>
-              </div>
-            </>
-          )}
+            </div>
 
-          {statusData.status === 'SUCCESSFUL' && (
-            <>
-              <div style={{ marginBottom: '24px' }}>
-                <CheckCircle size={56} style={{ margin: '0 auto', color: '#10b981' }} />
-              </div>
-              <h2 style={{ fontSize: '22px', fontWeight: 700, color: '#10b981', marginBottom: '8px' }}>Payment Successful</h2>
-              <p style={{ fontSize: '14px', color: 'var(--t2)', marginBottom: '24px' }}>Your payment has been confirmed and processed.</p>
-              <div style={{ background: 'var(--c1)', padding: '16px', borderRadius: '12px', marginBottom: '24px', textAlign: 'left' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <div>
-                    <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Payment Amount</p>
-                    <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>KES {statusData.amount?.toLocaleString()}</p>
+            {/* Payment Details Card */}
+            <div style={{
+              background: 'var(--c1)',
+              borderRadius: '16px',
+              border: '1px solid var(--bd)',
+              padding: '20px 24px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '16px 20px',
+              }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <Banknote size={14} style={{ color: 'var(--t3)' }} />
+                    <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                      Amount
+                    </span>
                   </div>
-                  <div>
-                    <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Receipt Number</p>
-                    <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{statusData.confirmationCode || statusData.receiptNumber || 'N/A'}</p>
+                  <p style={{ fontSize: '20px', fontWeight: 800, color: 'var(--t1)', margin: 0 }}>
+                    KES {statusData.amount?.toLocaleString() || amount || '0'}
+                  </p>
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <Receipt size={14} style={{ color: 'var(--t3)' }} />
+                    <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                      Receipt
+                    </span>
                   </div>
-                  <div>
-                    <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Payment Method</p>
-                    <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{paymentMethod === 'MPESA_STK_PUSH' ? 'M-Pesa' : 'Card'}</p>
+                  <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)', margin: 0, fontFamily: 'monospace' }}>
+                    {statusData.confirmationCode || statusData.receiptNumber || 'N/A'}
+                  </p>
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    {paymentMethod === 'MPESA_STK_PUSH' ? (
+                      <Smartphone size={14} style={{ color: 'var(--t3)' }} />
+                    ) : (
+                      <CreditCard size={14} style={{ color: 'var(--t3)' }} />
+                    )}
+                    <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                      Method
+                    </span>
                   </div>
-                  <div>
-                    <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date & Time</p>
-                    <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>{new Date().toLocaleDateString()}</p>
+                  <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>
+                    {paymentMethod === 'MPESA_STK_PUSH' ? 'M-Pesa' : 'Card'}
+                  </p>
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <Calendar size={14} style={{ color: 'var(--t3)' }} />
+                    <span style={{ fontSize: '11px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                      Date
+                    </span>
                   </div>
+                  <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>
+                    {paymentTimestamp || new Date().toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
                 </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button
-                  onClick={() => router.push('/dashboard/billing')}
-                  style={{ width: '100%', padding: '14px', borderRadius: '12px', background: '#10b981', color: 'white', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 700 }}
-                >
-                  Return to Billing
-                </button>
+            </div>
+
+            {/* Bill Reference */}
+            {selectedBill && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 16px',
+                background: 'var(--c2)',
+                borderRadius: '8px',
+                border: '1px solid var(--bd)',
+              }}>
+                <FileText size={16} style={{ color: 'var(--t3)' }} />
+                <span style={{ fontSize: '13px', color: 'var(--t2)' }}>
+                  Bill #{selectedBill.billNumber}
+                </span>
+                <span style={{ 
+                  fontSize: '11px', 
+                  fontWeight: 600, 
+                  color: '#10b981',
+                  marginLeft: 'auto',
+                  background: '#10b98120',
+                  padding: '2px 10px',
+                  borderRadius: '12px',
+                }}>
+                  PAID
+                </span>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+              <button
+                onClick={() => router.push('/dashboard/billing')}
+                style={{ 
+                  width: '100%', 
+                  padding: '14px', 
+                  borderRadius: '12px', 
+                  background: 'var(--ac)', 
+                  color: 'white', 
+                  border: 'none', 
+                  cursor: 'pointer', 
+                  fontSize: '15px', 
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.01)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+              >
+                <Home size={18} />
+                Return to Billing
+              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
                 <button
                   onClick={() => router.push('/dashboard/payments/history')}
-                  style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'var(--c1)', color: 'var(--t1)', border: '1px solid var(--bd)', cursor: 'pointer', fontSize: '15px', fontWeight: 600 }}
+                  style={{ 
+                    flex: 1,
+                    padding: '12px', 
+                    borderRadius: '10px', 
+                    background: 'var(--c1)', 
+                    color: 'var(--t1)', 
+                    border: '1px solid var(--bd)', 
+                    cursor: 'pointer', 
+                    fontSize: '14px', 
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--c2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--c1)';
+                  }}
                 >
-                  View Payment History
+                  <History size={16} />
+                  History
+                </button>
+                <button
+                  onClick={downloadPDF}
+                  disabled={isDownloading}
+                  style={{ 
+                    flex: 1,
+                    padding: '12px', 
+                    borderRadius: '10px', 
+                    background: isDownloading ? 'var(--bd)' : 'var(--c1)', 
+                    color: isDownloading ? 'var(--t3)' : 'var(--t1)', 
+                    border: '1px solid var(--bd)', 
+                    cursor: isDownloading ? 'not-allowed' : 'pointer', 
+                    fontSize: '14px', 
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isDownloading) {
+                      e.currentTarget.style.background = 'var(--c2)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isDownloading) {
+                      e.currentTarget.style.background = 'var(--c1)';
+                    }
+                  }}
+                >
+                  {isDownloading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Download size={16} />
+                      Download PDF
+                    </>
+                  )}
                 </button>
               </div>
-            </>
-          )}
+            </div>
+          </>
+        )}
 
-          {statusData.status === 'FAILED' && (
-            <>
-              <div style={{ marginBottom: '24px' }}>
-                <AlertCircle size={56} style={{ margin: '0 auto', color: '#ef4444' }} />
+        {statusData.status === 'PENDING' && (
+          <div style={{ 
+            textAlign: 'center',
+            padding: '40px 24px',
+            background: 'var(--c1)',
+            borderRadius: '16px',
+            border: '1px solid var(--bd)',
+          }}>
+            <div style={{ position: 'relative', display: 'inline-block', marginBottom: '20px' }}>
+              <div style={{ 
+                width: '64px', 
+                height: '64px', 
+                borderRadius: '50%', 
+                border: '3px solid var(--bd)',
+                borderTopColor: 'var(--ac)',
+                animation: 'spin 1s linear infinite',
+              }} />
+              <div style={{ 
+                position: 'absolute', 
+                inset: 0, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }}>
+                {paymentMethod === 'MPESA_STK_PUSH' ? (
+                  <Smartphone size={24} style={{ color: 'var(--ac)' }} />
+                ) : (
+                  <CreditCard size={24} style={{ color: 'var(--ac)' }} />
+                )}
               </div>
-              <h2 style={{ fontSize: '22px', fontWeight: 700, color: '#ef4444', marginBottom: '8px' }}>Payment Failed</h2>
-              <p style={{ fontSize: '14px', color: 'var(--t2)', marginBottom: '24px', lineHeight: '1.5' }}>
-                {statusData.failureReason?.toLowerCase().includes('cancel') 
-                  ? 'Payment was cancelled.' 
-                  : statusData.failureReason?.toLowerCase().includes('expired')
-                  ? 'STK request expired. Please try again.'
-                  : 'Your payment could not be processed. Please try again or contact support.'}
+            </div>
+            <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--t1)', margin: '0 0 6px 0' }}>
+              {paymentMethod === 'MPESA_STK_PUSH' ? 'Processing Payment' : 'Redirecting to Secure Payment'}
+            </h2>
+            <p style={{ fontSize: '14px', color: 'var(--t2)', margin: '0 0 20px 0', lineHeight: '1.6' }}>
+              {paymentMethod === 'MPESA_STK_PUSH' 
+                ? 'Please check your phone for the M-Pesa STK push prompt and enter your PIN to confirm.'
+                : 'Your payment is being processed by Pesapal. Please wait...'}
+            </p>
+            <div style={{ 
+              background: 'var(--c2)', 
+              padding: '16px', 
+              borderRadius: '12px', 
+              display: 'inline-block', 
+              width: '100%',
+              maxWidth: '280px'
+            }}>
+              <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                Payment Amount
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <button
-                  onClick={() => setPendingPaymentId(null)}
-                  style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'var(--ac)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                >
-                  <RefreshCw size={18} />
-                  Try Again
-                </button>
-                <button
-                  onClick={() => router.push('/dashboard/billing')}
-                  style={{ width: '100%', padding: '14px', borderRadius: '12px', background: 'var(--c1)', color: 'var(--t1)', border: '1px solid var(--bd)', cursor: 'pointer', fontSize: '15px', fontWeight: 600 }}
-                >
-                  Back to Bills
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+              <p style={{ fontSize: '22px', fontWeight: 800, color: 'var(--t1)', margin: 0 }}>
+                KES {statusData.amount?.toLocaleString() || amount || '0'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {statusData.status === 'FAILED' && (
+          <div style={{ 
+            textAlign: 'center',
+            padding: '32px 24px',
+            background: 'var(--c1)',
+            borderRadius: '16px',
+            border: '1px solid #ef444440',
+          }}>
+            <div style={{ 
+              width: '72px', 
+              height: '72px', 
+              borderRadius: '50%', 
+              background: '#ef444420',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}>
+              <AlertCircle size={36} style={{ color: '#ef4444' }} />
+            </div>
+            <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#ef4444', margin: '0 0 6px 0' }}>
+              Payment Failed
+            </h2>
+            <p style={{ fontSize: '14px', color: 'var(--t2)', margin: '0 0 24px 0', lineHeight: '1.6', maxWidth: '320px', marginLeft: 'auto', marginRight: 'auto' }}>
+              {statusData.failureReason?.toLowerCase().includes('cancel') 
+                ? 'You cancelled the payment before it could be completed.'
+                : statusData.failureReason?.toLowerCase().includes('expired')
+                ? 'The payment request has expired. Please try again.'
+                : 'Your payment could not be processed. Please try again or contact support.'}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  setPendingPaymentId(null);
+                  setAmount(selectedBill?.balance?.toString() || '');
+                }}
+                style={{ 
+                  width: '100%', 
+                  padding: '14px', 
+                  borderRadius: '12px', 
+                  background: 'var(--ac)', 
+                  color: 'white', 
+                  border: 'none', 
+                  cursor: 'pointer', 
+                  fontSize: '15px', 
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                <RefreshCw size={18} />
+                Try Again
+              </button>
+              <button
+                onClick={() => router.push('/dashboard/billing')}
+                style={{ 
+                  width: '100%', 
+                  padding: '14px', 
+                  borderRadius: '12px', 
+                  background: 'var(--c1)', 
+                  color: 'var(--t1)', 
+                  border: '1px solid var(--bd)', 
+                  cursor: 'pointer', 
+                  fontSize: '14px', 
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                <ChevronLeft size={18} />
+                Back to Bills
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '16px' }}>
-      {/* Header */}
+      {/* Header with History button restored */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <button 
           onClick={() => router.back()} 
@@ -347,6 +731,8 @@ export default function PaymentsPage() {
           <ArrowLeft size={20} />
         </button>
         <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>Make Payment</h1>
+        
+        {/* RESTORED HISTORY BUTTON */}
         <button
           onClick={() => router.push('/dashboard/payments/history')}
           style={{
@@ -378,7 +764,7 @@ export default function PaymentsPage() {
         </button>
       </div>
 
-      {/* Select Bill - User selects manually */}
+      {/* Select Bill */}
       <div style={{ marginBottom: '20px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
           Select Bill
@@ -423,7 +809,7 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      {/* Amount Input - Auto-populated when bill is selected */}
+      {/* Amount Input */}
       <div style={{ marginBottom: '20px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
           Amount (KES) <span style={{ color: '#ef4444' }}>*</span>
@@ -677,4 +1063,4 @@ export default function PaymentsPage() {
       </button>
     </div>
   );
-}
+                        }
