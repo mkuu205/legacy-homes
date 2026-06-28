@@ -64,11 +64,58 @@ export class PaymentEngineService {
     return configured;
   }
 
+  /**
+   * Format phone number to Kenyan format (254XXXXXXXXX)
+   * Returns undefined if invalid
+   */
+  private formatPhoneNumber(phone: string | undefined): string | undefined {
+    if (!phone) return undefined;
+    
+    // Remove all non-digit characters
+    let cleaned = phone.replace(/\D/g, '');
+    
+    // If empty after cleaning
+    if (!cleaned) return undefined;
+    
+    // If it starts with 0, replace with 254
+    if (cleaned.startsWith('0')) {
+      cleaned = '254' + cleaned.substring(1);
+    }
+    
+    // If it doesn't start with 254, add it (for 9-digit numbers)
+    if (!cleaned.startsWith('254') && cleaned.length === 9) {
+      cleaned = '254' + cleaned;
+    }
+    
+    // If it doesn't start with 254 and is 10 digits (07XXXXXXXX), fix it
+    if (!cleaned.startsWith('254') && cleaned.length === 10 && cleaned.startsWith('0')) {
+      cleaned = '254' + cleaned.substring(1);
+    }
+    
+    // If it doesn't start with 254 and length is less than 12, try adding 254
+    if (!cleaned.startsWith('254') && cleaned.length < 12) {
+      cleaned = '254' + cleaned;
+    }
+    
+    // Ensure it's exactly 12 digits (Kenyan format)
+    if (cleaned.length > 12) {
+      cleaned = cleaned.substring(0, 12);
+    }
+    
+    // Validate it's a valid Kenyan phone number
+    if (cleaned.length === 12 && cleaned.startsWith('254')) {
+      return cleaned;
+    }
+    
+    logger.warn(`[PAYMENT ENGINE] Invalid phone number format: ${phone} -> ${cleaned}`);
+    return undefined; // Return undefined if invalid
+  }
+
   async initiatePayment(
     billId: string,
     residentId: string,
     provider: PaymentProviderType,
-    paymentMethod: PaymentMethodType,
+    paymentMethod: PaymentMethodType | string,
     phoneNumber: string | undefined,
     amount: number
   ) {
@@ -94,18 +141,45 @@ export class PaymentEngineService {
         throw new Error(`Amount exceeds outstanding balance of KES ${bill.balance}`);
       }
 
+      // Get phone number from request or resident
       let finalPhoneNumber = phoneNumber || bill.resident.phone;
-      if (!finalPhoneNumber) {
-        throw new Error('Phone number not found for resident.');
+
+      // Format phone number
+      const formattedPhone = this.formatPhoneNumber(finalPhoneNumber);
+
+      // For Pesapal, if phone is invalid, don't pass it (phone is optional)
+      let phoneForProvider = formattedPhone;
+      if (provider === 'PESAPAL' && (!phoneForProvider || phoneForProvider.length !== 12)) {
+        phoneForProvider = undefined;
+        logger.info('[PAYMENT ENGINE] Pesapal: No valid phone number, proceeding with card payment');
       }
 
+      // For TUMA, phone is required
+      if (provider === 'TUMA' && !phoneForProvider) {
+        throw new Error('Valid phone number is required for TUMA STK Push');
+      }
+
+      // Map payment method to valid enum values
+      const methodMapping: Record<string, PaymentMethodType> = {
+        'CARD': PaymentMethodType.VISA,
+        'MPESA': PaymentMethodType.MPESA_STK_PUSH,
+        'MPESA_STK_PUSH': PaymentMethodType.MPESA_STK_PUSH,
+        'BUY_GOODS_STK_PUSH': PaymentMethodType.BUY_GOODS_STK_PUSH,
+        'VISA': PaymentMethodType.VISA,
+        'MASTERCARD': PaymentMethodType.MASTERCARD,
+        'SAVED_CARD': PaymentMethodType.SAVED_CARD,
+      };
+
+      const finalMethod = methodMapping[paymentMethod as string] || PaymentMethodType.VISA;
+
+      // Create payment record
       const payment = await prisma.payment.create({
         data: {
           provider,
-          paymentMethod,
+          paymentMethod: finalMethod,
           residentId,
           billId,
-          phoneNumber: finalPhoneNumber,
+          phoneNumber: formattedPhone || finalPhoneNumber || '',
           amount,
           status: PaymentStatus.PENDING,
           merchantReference: `${bill.billNumber}-${Date.now()}`,
@@ -123,9 +197,10 @@ export class PaymentEngineService {
         );
       }
 
+      // Initiate payment through provider
       const result = await paymentProvider.initiatePayment({
         amount,
-        phoneNumber: finalPhoneNumber,
+        phoneNumber: phoneForProvider, // May be undefined for Pesapal
         billId,
         residentId,
         externalReference: payment.id,
@@ -148,6 +223,7 @@ export class PaymentEngineService {
         throw new Error(result.error || 'Payment initiation failed');
       }
 
+      // Update payment with provider references
       const updateData: any = {
         providerOrderId: result.orderId,
         merchantRequestId: result.orderId,
@@ -170,7 +246,7 @@ export class PaymentEngineService {
         data: updateData,
       });
 
-      logger.info(`[PAYMENT ENGINE] Payment initiated: ${payment.id}`);
+      logger.info(`[PAYMENT ENGINE] Payment initiated: ${payment.id}. Provider: ${provider}`);
 
       return {
         success: true,
@@ -522,7 +598,6 @@ export class PaymentEngineService {
     const services: Record<string, any> = {};
     const startTime = Date.now();
 
-    // 1. Backend API
     services.backendApi = {
       status: 'ONLINE',
       message: 'API is responding correctly',
@@ -530,7 +605,6 @@ export class PaymentEngineService {
       version: process.env.npm_package_version || '1.0.0'
     };
 
-    // 2. PostgreSQL Database
     try {
       const dbStart = Date.now();
       await prisma.$queryRaw`SELECT 1`;
@@ -546,7 +620,6 @@ export class PaymentEngineService {
       };
     }
 
-    // 3. Payment Providers - Check ALL providers
     // Check Pesapal
     const pesapalProvider = this.providers.get('PESAPAL');
     if (pesapalProvider) {
@@ -581,7 +654,6 @@ export class PaymentEngineService {
       };
     }
 
-    // 4. Payment Callback Endpoint
     const callbackUrl = process.env.PAYMENT_CALLBACK_URL || process.env.PESAPAL_CALLBACK_URL;
     services.callbackEndpoint = {
       status: callbackUrl ? 'ONLINE' : 'OFFLINE',
@@ -592,7 +664,6 @@ export class PaymentEngineService {
       }
     };
 
-    // 5. Email Service (SMTP/Brevo)
     const hasEmailConfig = !!(process.env.SMTP_USER && process.env.SMTP_PASS) || !!process.env.BREVO_API_KEY;
     services.emailService = {
       status: hasEmailConfig ? 'ONLINE' : 'OFFLINE',
@@ -604,7 +675,6 @@ export class PaymentEngineService {
       }
     };
 
-    // 6. Environment Variables
     const requiredVars = [
       'DATABASE_URL',
       'JWT_ACCESS_SECRET',
@@ -656,4 +726,4 @@ export class PaymentEngineService {
       }
     };
   }
-    }
+}
