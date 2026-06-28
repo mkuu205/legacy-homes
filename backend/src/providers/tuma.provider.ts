@@ -11,7 +11,6 @@ import {
 } from './payment-provider.interface';
 import { logger } from '../utils/logger';
 
-// Retryable HTTP status codes
 const RETRYABLE_STATUSES = new Set([502, 503, 504]);
 const RETRYABLE_ERRORS = new Set(['ECONNRESET', 'ECONNABORTED', 'ETIMEDOUT']);
 
@@ -24,34 +23,24 @@ export class TumaProvider implements PaymentProvider {
   private tokenExpiry: number = 0;
 
   constructor() {
-    // Match your exact environment variable names
     this.email = process.env.TUMA_BUSINESS_EMAIL || process.env.TUMA_EMAIL || '';
     this.apiKey = process.env.TUMA_API_KEY || '';
     this.baseUrl = process.env.TUMA_API_URL || 'https://api.tuma.co.ke';
     this.callbackUrl = process.env.PAYMENT_CALLBACK_URL || process.env.TUMA_CALLBACK_URL || '';
 
-    // Log configuration status
     const isConfigured = this.isConfigured();
     logger.info(`[TUMA] Provider initialized. Configured: ${isConfigured}`);
     
     if (!isConfigured) {
-      const config = this.getConfigStatus();
       const missing = [];
-      if (!config.email) missing.push('TUMA_BUSINESS_EMAIL or TUMA_EMAIL');
-      if (!config.apiKey) missing.push('TUMA_API_KEY');
-      if (!config.callbackUrl) missing.push('PAYMENT_CALLBACK_URL or TUMA_CALLBACK_URL');
-      logger.warn(`[TUMA] Missing configuration: ${missing.join(', ')}`);
-    } else {
-      logger.info(`[TUMA] Using API URL: ${this.baseUrl}`);
-      logger.info(`[TUMA] Callback URL: ${this.callbackUrl}`);
+      if (!this.email) missing.push('TUMA_BUSINESS_EMAIL');
+      if (!this.apiKey) missing.push('TUMA_API_KEY');
+      if (!this.callbackUrl) missing.push('PAYMENT_CALLBACK_URL');
+      logger.warn(`[TUMA] Missing: ${missing.join(', ')}`);
     }
   }
 
-  /**
-   * Get access token with caching and auto-refresh
-   */
   private async getAccessToken(): Promise<string> {
-    // Return cached token if still valid (86400 seconds per docs)
     if (this.token && this.tokenExpiry > Date.now() + 30000) {
       return this.token;
     }
@@ -59,7 +48,6 @@ export class TumaProvider implements PaymentProvider {
     try {
       logger.info('[TUMA] Requesting new access token');
       
-      // Use the auth URL from env or construct from base URL
       const authUrl = process.env.TUMA_AUTH_URL || `${this.baseUrl}/auth/token`;
       
       const response = await axios.post(
@@ -90,11 +78,9 @@ export class TumaProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Make HTTP request with retry and timeout
-   */
+  // FIXED: Method signature accepts string for method
   private async makeRequest<T>(
-    method: 'GET' | 'POST',
+    method: string, // Changed from 'GET' | 'POST' to string
     endpoint: string,
     data?: any,
     retryCount: number = 0
@@ -106,7 +92,7 @@ export class TumaProvider implements PaymentProvider {
       const token = await this.getAccessToken();
 
       const response = await axios({
-        method,
+        method: method as any, // Cast to any to avoid type issues
         url,
         data,
         timeout: 30000,
@@ -126,17 +112,14 @@ export class TumaProvider implements PaymentProvider {
       const status = axiosError.response?.status;
       const errorCode = axiosError.code;
 
-      // Check if retryable
       const isRetryable = this.isRetryableError(axiosError);
 
-      // Handle 401 - auto-refresh token
       if (status === 401 && retryCount === 0) {
         logger.warn('[TUMA] Received 401 - refreshing token and retrying');
-        this.token = null; // Invalidate cache
+        this.token = null;
         return this.makeRequest<T>(method, endpoint, data, retryCount + 1);
       }
 
-      // Retry logic for retryable errors
       if (isRetryable && retryCount < 3) {
         const delays = [1000, 2000, 5000];
         const delay = delays[retryCount];
@@ -152,30 +135,19 @@ export class TumaProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Check if error is retryable
-   */
   private isRetryableError(error: AxiosError): boolean {
     const status = error.response?.status;
     const code = error.code;
-
     if (status && RETRYABLE_STATUSES.has(status)) return true;
     if (code && RETRYABLE_ERRORS.has(code)) return true;
     if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) return true;
-
     return false;
   }
 
-  /**
-   * Sleep helper
-   */
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  /**
-   * Validate request before sending
-   */
   private validateRequest(request: PaymentInitiationRequest): void {
     if (!request.phoneNumber) {
       throw new Error('Phone number is required for STK push');
@@ -191,26 +163,22 @@ export class TumaProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Initiate STK Push payment
-   */
   async initiatePayment(request: PaymentInitiationRequest): Promise<PaymentInitiationResponse> {
     try {
       if (!this.isConfigured()) {
         return {
           success: false,
-          error: 'TUMA provider not configured. Missing: TUMA_BUSINESS_EMAIL, TUMA_API_KEY, or PAYMENT_CALLBACK_URL',
+          error: 'TUMA provider not configured',
         };
       }
 
-      // Production validation
       this.validateRequest(request);
 
       const payload = {
         amount: Number(request.amount),
         phone: request.phoneNumber.replace(/\D/g, ''),
         callback_url: this.callbackUrl,
-        description: (request as any).description || `Payment - ${request.externalReference || request.billId}`,
+        description: request.description || `Payment - ${request.externalReference || request.billId}`,
       };
 
       logger.info(`[TUMA] Initiating STK push. Phone: ${payload.phone}, Amount: ${payload.amount}`);
@@ -223,7 +191,7 @@ export class TumaProvider implements PaymentProvider {
           checkout_request_id: string;
           customer_message: string;
         };
-      }>('/payment/stk-push', payload);
+      }>('POST', '/payment/stk-push', payload);
 
       if (response.success && response.data) {
         const orderId = response.data.merchant_request_id || response.data.checkout_request_id;
@@ -232,7 +200,7 @@ export class TumaProvider implements PaymentProvider {
         return {
           success: true,
           orderId: orderId,
-          checkoutUrl: null, // STK Push doesn't have a redirect URL
+          checkoutUrl: null,
           message: response.message || 'STK Push sent successfully',
           providerData: {
             merchant_request_id: response.data.merchant_request_id,
@@ -257,27 +225,19 @@ export class TumaProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Verify payment status - TUMA doesn't have a direct status check API
-   * Status comes via callbacks only
-   */
   async verifyPaymentStatus(request: PaymentStatusRequest): Promise<PaymentStatusResponse> {
     logger.info(`[TUMA] Status check requested for ${request.orderId} - using callback data only`);
     
     return {
       status: 'PENDING',
-      message: 'TUMA status is delivered via callback only. Check callback payload.',
+      message: 'TUMA status is delivered via callback only',
       orderId: request.orderId,
     };
   }
 
-  /**
-   * Verify callback - process TUMA callback payload
-   */
   async verifyCallback(request: CallbackVerificationRequest): Promise<CallbackVerificationResponse> {
     const payload = request.payload;
 
-    // Extract fields per Tuma docs
     const merchantRequestId = payload.merchant_request_id;
     const checkoutRequestId = payload.checkout_request_id;
     const resultCode = payload.result_code;
@@ -285,11 +245,10 @@ export class TumaProvider implements PaymentProvider {
     const mpesaReceiptNumber = payload.mpesa_receipt_number;
     const amount = payload.amount;
     const timestamp = payload.timestamp;
-    const status = payload.status; // 'completed' or 'failed'
+    const status = payload.status;
 
     logger.info(`[TUMA] Callback received. Merchant: ${merchantRequestId}, Checkout: ${checkoutRequestId}`);
 
-    // Per Tuma docs: result_code = 0 means success
     const isSuccess = resultCode === 0 && status === 'completed';
 
     return {
@@ -311,23 +270,14 @@ export class TumaProvider implements PaymentProvider {
     };
   }
 
-  /**
-   * Get provider name
-   */
   getProviderName(): string {
     return 'TUMA';
   }
 
-  /**
-   * Check if provider is configured
-   */
   isConfigured(): boolean {
     return !!(this.email && this.apiKey && this.callbackUrl);
   }
 
-  /**
-   * Get configuration status
-   */
   getConfigStatus(): { email: boolean; apiKey: boolean; callbackUrl: boolean } {
     return {
       email: !!this.email,
