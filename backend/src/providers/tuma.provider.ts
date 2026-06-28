@@ -78,9 +78,8 @@ export class TumaProvider implements PaymentProvider {
     }
   }
 
-  // FIXED: Method signature accepts string for method
   private async makeRequest<T>(
-    method: string, // Changed from 'GET' | 'POST' to string
+    method: string,
     endpoint: string,
     data?: any,
     retryCount: number = 0
@@ -92,7 +91,7 @@ export class TumaProvider implements PaymentProvider {
       const token = await this.getAccessToken();
 
       const response = await axios({
-        method: method as any, // Cast to any to avoid type issues
+        method: method as any,
         url,
         data,
         timeout: 30000,
@@ -148,14 +147,49 @@ export class TumaProvider implements PaymentProvider {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  /**
+   * Format phone number to Kenyan format (254XXXXXXXXX)
+   * Handles various input formats:
+   * - 0712345678 -> 254712345678
+   * - +254712345678 -> 254712345678
+   * - 254712345678 -> 254712345678
+   * - 0712345678 -> 254712345678
+   */
+  private formatPhoneNumber(phone: string): string {
+    // Remove all non-digit characters
+    let cleaned = phone.replace(/\D/g, '');
+    
+    // If it starts with 0, remove the 0 and add 254
+    if (cleaned.startsWith('0')) {
+      cleaned = '254' + cleaned.substring(1);
+    }
+    // If it starts with 254, keep as is
+    else if (cleaned.startsWith('254')) {
+      // Already in correct format
+    }
+    // If it doesn't start with 254 or 0, assume it's a local number without prefix
+    else if (cleaned.length === 9) {
+      cleaned = '254' + cleaned;
+    }
+    // If it's 10 digits and doesn't start with 254, it might be 07XXXXXXXX
+    else if (cleaned.length === 10 && !cleaned.startsWith('254')) {
+      cleaned = '254' + cleaned.substring(1);
+    }
+    
+    return cleaned;
+  }
+
   private validateRequest(request: PaymentInitiationRequest): void {
     if (!request.phoneNumber) {
       throw new Error('Phone number is required for STK push');
     }
 
-    const phone = request.phoneNumber.replace(/\D/g, '');
-    if (!phone.startsWith('254') || phone.length !== 12) {
-      throw new Error('Invalid phone number format. Must be 254XXXXXXXXX');
+    // Format the phone number first
+    const formattedPhone = this.formatPhoneNumber(request.phoneNumber);
+    
+    // Validate the formatted phone number
+    if (!formattedPhone.startsWith('254') || formattedPhone.length !== 12) {
+      throw new Error(`Invalid phone number format. Expected 254XXXXXXXXX (12 digits), got: ${formattedPhone} (${formattedPhone.length} digits)`);
     }
 
     if (!request.amount || request.amount <= 0) {
@@ -172,11 +206,13 @@ export class TumaProvider implements PaymentProvider {
         };
       }
 
+      // Validate and format phone number
       this.validateRequest(request);
+      const formattedPhone = this.formatPhoneNumber(request.phoneNumber!);
 
       const payload = {
         amount: Number(request.amount),
-        phone: request.phoneNumber.replace(/\D/g, ''),
+        phone: formattedPhone,
         callback_url: this.callbackUrl,
         description: request.description || `Payment - ${request.externalReference || request.billId}`,
       };
