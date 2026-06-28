@@ -20,9 +20,9 @@ export function ConnectionRecoveryProvider({ children }: { children: ReactNode }
         const { isAuthenticated } = useAuthStore.getState();
         
         if (isAuthenticated) {
-          // 1. Fetch /api/me first to verify account status
+          // 1. Fetch /api/auth/me first to verify account status
           try {
-            await api.get('/me'); // Typically /me or /auth/me in this API structure
+            await api.get('/auth/me'); // Correct endpoint in this API structure
           } catch (error: any) {
             if (error.response?.status === 401 || error.response?.status === 403) {
               logout(true);
