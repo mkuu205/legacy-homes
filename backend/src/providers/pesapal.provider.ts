@@ -11,7 +11,6 @@ import {
 } from './payment-provider.interface';
 import { logger } from '../utils/logger';
 
-// Central payment status enum - SINGLE SOURCE OF TRUTH
 export enum PaymentStatus {
   SUCCESSFUL = 'SUCCESSFUL',
   FAILED = 'FAILED',
@@ -20,7 +19,6 @@ export enum PaymentStatus {
   INVALID = 'INVALID',
 }
 
-// Status mapping - centralized
 const PESAPAL_STATUS_MAP: Record<string, PaymentStatus> = {
   'COMPLETED': PaymentStatus.SUCCESSFUL,
   'FAILED': PaymentStatus.FAILED,
@@ -29,13 +27,9 @@ const PESAPAL_STATUS_MAP: Record<string, PaymentStatus> = {
   'PENDING': PaymentStatus.PENDING,
 };
 
-// Retryable HTTP status codes
 const RETRYABLE_STATUSES = new Set([502, 503, 504]);
-
-// Retryable error codes
 const RETRYABLE_ERRORS = new Set(['ECONNRESET', 'ECONNABORTED', 'ETIMEDOUT']);
 
-// Circuit breaker states
 enum CircuitState {
   CLOSED = 'CLOSED',
   OPEN = 'OPEN',
@@ -48,47 +42,34 @@ export class PesapalProvider implements PaymentProvider {
   private ipnId: string | null = null;
   private callbackUrl: string;
   private cancellationUrl?: string;
-  private baseUrl: string = 'https://pay.pesapal.com/v3'; // PRODUCTION ONLY
+  private baseUrl: string = 'https://pay.pesapal.com/v3';
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
   private isInitialized: boolean = false;
   
-  // Circuit breaker
   private circuitState: CircuitState = CircuitState.CLOSED;
   private failureCount: number = 0;
   private readonly FAILURE_THRESHOLD = 5;
-  private readonly CIRCUIT_TIMEOUT = 60000; // 60 seconds
+  private readonly CIRCUIT_TIMEOUT = 60000;
   private lastFailureTime: number = 0;
-
-  // IPN registration status
   private ipnRegistrationAttempted: boolean = false;
 
   constructor() {
     this.consumerKey = process.env.PESAPAL_CONSUMER_KEY || '';
     this.consumerSecret = process.env.PESAPAL_CONSUMER_SECRET || '';
-    this.callbackUrl = process.env.PESAPAL_CALLBACK_URL || '';
+    this.callbackUrl = process.env.PAYMENT_CALLBACK_URL || process.env.PESAPAL_CALLBACK_URL || '';
     this.cancellationUrl = process.env.PESAPAL_CANCELLATION_URL;
     
     if (!this.consumerKey || !this.consumerSecret) {
-      logger.error('[PESAPAL] Consumer Key or Secret is missing in environment variables');
+      logger.error('[PESAPAL] Consumer Key or Secret is missing');
     }
 
-    // Validate production URL
-    if (!this.baseUrl.includes('pay.pesapal.com')) {
-      logger.error('[PESAPAL] WARNING: Using non-production URL!');
-    }
-
-    // Auto-initialize on startup
     this.initialize();
   }
 
-  /**
-   * Initialize provider - auto-register IPN on startup
-   */
   private async initialize(): Promise<void> {
     try {
       if (this.isInitialized) return;
-      
       logger.info('[PESAPAL] Initializing provider...');
       await this.ensureIPNRegistered();
       this.isInitialized = true;
@@ -98,9 +79,6 @@ export class PesapalProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Ensure IPN is registered - called on startup and if missing
-   */
   private async ensureIPNRegistered(): Promise<void> {
     try {
       if (this.ipnId) {
@@ -122,7 +100,6 @@ export class PesapalProvider implements PaymentProvider {
 
       const token = await this.getAccessToken();
 
-      // Step 1: Get existing IPNs
       logger.info('[PESAPAL] Checking for existing IPN...');
       const existingIpnId = await this.getExistingIPN(this.callbackUrl);
       
@@ -132,7 +109,6 @@ export class PesapalProvider implements PaymentProvider {
         return;
       }
 
-      // Step 2: Register new IPN
       logger.info(`[PESAPAL] Registering new IPN URL: ${this.callbackUrl}`);
       const response = await this.makeRequest<{ ipn_id: string; status: string }>(
         'POST',
@@ -156,9 +132,6 @@ export class PesapalProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Get list of existing IPNs
-   */
   private async getExistingIPN(url: string): Promise<string | null> {
     try {
       const token = await this.getAccessToken();
@@ -184,11 +157,7 @@ export class PesapalProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Get access token with caching and auto-refresh on 401
-   */
   private async getAccessToken(): Promise<string> {
-    // Return cached token if still valid (5 min expiry per docs)
     if (this.accessToken && this.tokenExpiry > Date.now() + 30000) {
       return this.accessToken;
     }
@@ -218,9 +187,6 @@ export class PesapalProvider implements PaymentProvider {
     throw new Error(response?.message || 'Invalid token response from Pesapal');
   }
 
-  /**
-   * Make HTTP request with retry, timeout, and circuit breaker
-   */
   private async makeRequest<T>(
     method: 'GET' | 'POST',
     endpoint: string,
@@ -228,7 +194,6 @@ export class PesapalProvider implements PaymentProvider {
     token?: string | null,
     retryCount: number = 0
   ): Promise<T> {
-    // Check circuit breaker
     if (this.circuitState === CircuitState.OPEN) {
       const now = Date.now();
       if (now - this.lastFailureTime > this.CIRCUIT_TIMEOUT) {
@@ -244,7 +209,7 @@ export class PesapalProvider implements PaymentProvider {
     const config: AxiosRequestConfig = {
       method,
       url,
-      timeout: 30000, // 30 second timeout
+      timeout: 30000,
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -259,7 +224,6 @@ export class PesapalProvider implements PaymentProvider {
 
       logger.info(`[PESAPAL] ${method} ${endpoint} - ${response.status} (${duration}ms)`);
 
-      // Circuit breaker: success resets failure count
       if (this.circuitState === CircuitState.HALF_OPEN) {
         this.circuitState = CircuitState.CLOSED;
         this.failureCount = 0;
@@ -274,105 +238,65 @@ export class PesapalProvider implements PaymentProvider {
       const status = axiosError.response?.status;
       const errorCode = axiosError.code;
 
-      // Check if retryable
       const isRetryable = this.isRetryableError(axiosError);
 
-      // Handle 401 - auto-refresh token
       if (status === 401 && retryCount === 0) {
         logger.warn('[PESAPAL] Received 401 - refreshing token and retrying');
-        this.accessToken = null; // Invalidate cache
+        this.accessToken = null;
         const newToken = await this.getAccessToken();
         return this.makeRequest<T>(method, endpoint, data, newToken, retryCount + 1);
       }
 
-      // Retry logic for retryable errors
       if (isRetryable && retryCount < 3) {
-        const delays = [1000, 2000, 5000]; // 1s, 2s, 5s
+        const delays = [1000, 2000, 5000];
         const delay = delays[retryCount];
-        logger.warn(`[PESAPAL] Retryable error - retry ${retryCount + 1}/3 in ${delay}ms: ${errorCode || status}`);
-        
+        logger.warn(`[PESAPAL] Retryable error - retry ${retryCount + 1}/3 in ${delay}ms`);
         this.recordFailure();
         await this.sleep(delay);
         return this.makeRequest<T>(method, endpoint, data, token, retryCount + 1);
       }
 
-      // Circuit breaker: record failure
       this.recordFailure();
-
-      // Log final error
       logger.error(`[PESAPAL] ${method} ${endpoint} failed: ${errorCode || status} - ${axiosError.message}`);
-
       throw new Error(
         `Pesapal request failed: ${axiosError.message}${status ? ` (HTTP ${status})` : ''}`
       );
     }
   }
 
-  /**
-   * Check if error is retryable
-   */
   private isRetryableError(error: AxiosError): boolean {
     const status = error.response?.status;
     const code = error.code;
-
-    if (status && RETRYABLE_STATUSES.has(status)) {
-      return true;
-    }
-
-    if (code && RETRYABLE_ERRORS.has(code)) {
-      return true;
-    }
-
-    if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
-      return true;
-    }
-
+    if (status && RETRYABLE_STATUSES.has(status)) return true;
+    if (code && RETRYABLE_ERRORS.has(code)) return true;
+    if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) return true;
     return false;
   }
 
-  /**
-   * Record failure for circuit breaker
-   */
   private recordFailure(): void {
     this.failureCount++;
     this.lastFailureTime = Date.now();
-
     if (this.failureCount >= this.FAILURE_THRESHOLD) {
       this.circuitState = CircuitState.OPEN;
       logger.error(`[PESAPAL] Circuit breaker: OPEN - ${this.FAILURE_THRESHOLD} consecutive failures`);
     }
   }
 
-  /**
-   * Sleep helper
-   */
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  /**
-   * Validate production request before sending
-   */
   private validateRequest(request: PaymentInitiationRequest): void {
-    // Validate merchant reference - max 50 chars, alphanumeric + - _ . :
     const ref = request.externalReference;
-    if (!ref) {
-      throw new Error('Merchant reference is required');
-    }
-    if (ref.length > 50) {
-      throw new Error('Merchant reference exceeds 50 characters');
-    }
+    if (!ref) throw new Error('Merchant reference is required');
+    if (ref.length > 50) throw new Error('Merchant reference exceeds 50 characters');
     if (!/^[a-zA-Z0-9\-_\.:]+$/.test(ref)) {
-      throw new Error('Merchant reference contains invalid characters. Allowed: alphanumeric, -, _, ., :');
+      throw new Error('Merchant reference contains invalid characters');
     }
 
-    // Validate description - max 100 chars
     const description = (request as any).description || `Payment - ${ref}`;
-    if (description.length > 100) {
-      throw new Error('Description exceeds 100 characters');
-    }
+    if (description.length > 100) throw new Error('Description exceeds 100 characters');
 
-    // Validate phone number - Kenyan format
     if (request.phoneNumber) {
       const phone = request.phoneNumber.replace(/\D/g, '');
       if (!phone.startsWith('254') || phone.length !== 12) {
@@ -380,21 +304,11 @@ export class PesapalProvider implements PaymentProvider {
       }
     }
 
-    // Validate currency
-    const currency = (request as any).currency || 'KES';
-    if (currency !== 'KES') {
-      throw new Error('Only KES currency is supported');
-    }
-
-    // Validate amount
     if (!request.amount || request.amount <= 0) {
       throw new Error('Amount must be greater than zero');
     }
   }
 
-  /**
-   * Initiate payment - main entry point
-   */
   async initiatePayment(request: PaymentInitiationRequest): Promise<PaymentInitiationResponse> {
     try {
       if (!this.isConfigured()) {
@@ -405,7 +319,6 @@ export class PesapalProvider implements PaymentProvider {
       }
 
       this.validateRequest(request);
-
       await this.ensureIPNRegistered();
 
       if (!this.ipnId) {
@@ -416,9 +329,7 @@ export class PesapalProvider implements PaymentProvider {
       }
 
       const token = await this.getAccessToken();
-
-      const merchantRef = this.sanitizeMerchantReference(request.externalReference);
-
+      const merchantRef = this.sanitizeMerchantReference(request.externalReference || '');
       const residentName = (request as any).residentName || 'Resident';
       const nameParts = residentName.trim().split(/\s+/);
       const firstName = nameParts[0] || 'Resident';
@@ -436,16 +347,6 @@ export class PesapalProvider implements PaymentProvider {
       
       if ((request as any).residentEmail) {
         billingAddress.email_address = (request as any).residentEmail;
-      }
-
-      if ((request as any).billingAddress) {
-        const addr = (request as any).billingAddress;
-        billingAddress.line_1 = addr.line1 || '';
-        billingAddress.line_2 = addr.line2 || '';
-        billingAddress.city = addr.city || '';
-        billingAddress.state = addr.state || '';
-        billingAddress.postal_code = addr.postalCode || '';
-        billingAddress.zip_code = addr.zipCode || '';
       }
 
       const payload = {
@@ -507,15 +408,12 @@ export class PesapalProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Verify payment status - central verification point
-   */
   async verifyPaymentStatus(request: PaymentStatusRequest): Promise<PaymentStatusResponse> {
     try {
       const orderTrackingId = request.orderId;
       if (!orderTrackingId) {
         return {
-          status: PaymentStatus.FAILED,
+          status: 'FAILED',
           message: 'Order Tracking ID required',
         };
       }
@@ -545,7 +443,7 @@ export class PesapalProvider implements PaymentProvider {
 
       if (response?.status !== '200') {
         return {
-          status: PaymentStatus.FAILED,
+          status: 'FAILED',
           message: response?.message || 'Failed to get transaction status',
         };
       }
@@ -556,7 +454,7 @@ export class PesapalProvider implements PaymentProvider {
       logger.info(`[PESAPAL] Status for ${orderTrackingId}: ${statusDesc} -> ${mappedStatus}`);
 
       return {
-        status: mappedStatus,
+        status: mappedStatus as any,
         transactionId: response.confirmation_code || orderTrackingId,
         orderId: orderTrackingId,
         amount: response.amount,
@@ -574,19 +472,15 @@ export class PesapalProvider implements PaymentProvider {
     } catch (error) {
       logger.error('[PESAPAL] Payment verification error:', error);
       return {
-        status: PaymentStatus.FAILED,
+        status: 'FAILED',
         message: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
 
-  /**
-   * Verify callback - always verify with API, never trust payload
-   */
   async verifyCallback(request: CallbackVerificationRequest): Promise<CallbackVerificationResponse> {
     try {
       const payload = request.payload || {};
-      
       const orderTrackingId = payload.OrderTrackingId || payload.order_tracking_id;
       const merchantRef = payload.OrderMerchantReference || payload.order_merchant_reference;
 
@@ -597,7 +491,6 @@ export class PesapalProvider implements PaymentProvider {
         return { valid: false, message: 'Missing OrderTrackingId' };
       }
 
-      // ALWAYS verify with official API - never trust callback payload
       const verification = await this.verifyPaymentStatus({
         orderId: orderTrackingId,
       });
@@ -608,6 +501,7 @@ export class PesapalProvider implements PaymentProvider {
         status: verification.status,
         amount: verification.amount,
         message: verification.message,
+        timestamp: verification.timestamp,
         providerData: verification.providerData,
       };
     } catch (error) {
@@ -619,9 +513,6 @@ export class PesapalProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Handle IPN notification - must return 200 response
-   */
   async handleIPN(payload: any): Promise<{ response: any; statusCode: number }> {
     try {
       const orderTrackingId = payload.OrderTrackingId || payload.order_tracking_id;
@@ -642,26 +533,21 @@ export class PesapalProvider implements PaymentProvider {
         };
       }
 
-      // Verify status with API
       await this.verifyPaymentStatus({
         orderId: orderTrackingId,
       });
 
-      // Per docs: Must respond with JSON containing status 200
-      const response = {
-        orderNotificationType: 'IPNCHANGE',
-        orderTrackingId: orderTrackingId,
-        orderMerchantReference: merchantRef || '',
-        status: 200,
-      };
-
       return {
-        response,
+        response: {
+          orderNotificationType: 'IPNCHANGE',
+          orderTrackingId: orderTrackingId,
+          orderMerchantReference: merchantRef || '',
+          status: 200,
+        },
         statusCode: 200,
       };
     } catch (error) {
       logger.error('[PESAPAL] IPN handling error:', error);
-      
       return {
         response: {
           orderNotificationType: 'IPNCHANGE',
@@ -674,13 +560,9 @@ export class PesapalProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Register IPN manually (exposed for admin use)
-   */
   async registerIPN(url: string): Promise<string | null> {
     try {
       const token = await this.getAccessToken();
-      
       const existing = await this.getExistingIPN(url);
       if (existing) {
         logger.info(`[PESAPAL] IPN already exists: ${existing}`);
@@ -714,9 +596,6 @@ export class PesapalProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Cancel order - per docs
-   */
   async cancelOrder(orderTrackingId: string): Promise<{ success: boolean; message: string }> {
     try {
       const token = await this.getAccessToken();
@@ -755,59 +634,35 @@ export class PesapalProvider implements PaymentProvider {
     }
   }
 
-  /**
-   * Map Pesapal status to internal enum - CENTRALIZED
-   */
   private mapPesapalStatus(statusDesc: string): PaymentStatus {
     return PESAPAL_STATUS_MAP[statusDesc] || PaymentStatus.PENDING;
   }
 
-  /**
-   * Helper: Sanitize merchant reference per docs
-   */
   private sanitizeMerchantReference(ref: string): string {
     return ref.replace(/[^a-zA-Z0-9\-_\.:]/g, '');
   }
 
-  /**
-   * Helper: Truncate description per docs
-   */
   private truncateDescription(desc: string, maxLength: number = 100): string {
     return desc.length > maxLength ? desc.substring(0, maxLength) : desc;
   }
 
-  /**
-   * Helper: Sanitize phone number
-   */
   private sanitizePhoneNumber(phone: string): string {
     return phone.replace(/\D/g, '');
   }
 
-  /**
-   * Get provider name
-   */
   getProviderName(): string {
     return 'PESAPAL';
   }
 
-  /**
-   * Check if provider is configured
-   */
   isConfigured(): boolean {
     return !!(this.consumerKey && this.consumerSecret && this.callbackUrl);
   }
 
-  /**
-   * Get current IPN ID (for debugging)
-   */
   getIPNId(): string | null {
     return this.ipnId;
   }
 
-  /**
-   * Get circuit breaker state (for monitoring)
-   */
   getCircuitState(): string {
     return this.circuitState;
   }
-          }
+        }
