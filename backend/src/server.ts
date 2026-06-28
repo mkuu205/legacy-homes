@@ -1,3 +1,4 @@
+// src/server.ts
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -30,17 +31,24 @@ const app: import("express").Application = express();
 app.set('trust proxy', 1);
 const httpServer = http.createServer(app);
 
-// Allowed frontend origins
+// ============================================
+// ALLOWED ORIGINS - Including Pesapal
+// ============================================
 const allowedOrigins = [
   'http://localhost:3000',
   'https://legacy-homes-frontend.vercel.app',
+  'https://pay.pesapal.com',
+  'https://cybqa.pesapal.com',
+  'https://*.pesapal.com',
 ];
 
 if (process.env.FRONTEND_URL) {
   allowedOrigins.push(process.env.FRONTEND_URL);
 }
 
-// Socket.io setup
+// ============================================
+// SOCKET.IO SETUP
+// ============================================
 export const io = new SocketIOServer(httpServer, {
   cors: {
     origin: (origin, callback) => {
@@ -74,17 +82,38 @@ io.on('connection', (socket) => {
   });
 });
 
-// Security middleware
+// ============================================
+// SECURITY MIDDLEWARE
+// ============================================
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 
-// Express CORS
+// ============================================
+// CORS - Updated for Pesapal
+// ============================================
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+    // Allow requests with no origin (like mobile apps, server-to-server)
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    
+    // Check if origin is allowed
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (allowed.includes('*')) {
+        // Handle wildcards like *.pesapal.com
+        const pattern = allowed.replace(/\./g, '\\.').replace(/\*/g, '.*');
+        return new RegExp(`^${pattern}$`).test(origin);
+      }
+      return allowed === origin || origin.endsWith('.vercel.app');
+    });
+    
+    if (isAllowed) {
       callback(null, true);
     } else {
+      logger.warn(`CORS blocked: ${origin}`);
       callback(new Error('CORS not allowed'));
     }
   },
@@ -103,21 +132,25 @@ app.use(cors({
   ],
 }));
 
-// Body parsing
+// ============================================
+// BODY PARSING
+// ============================================
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Logging
+// ============================================
+// LOGGING
+// ============================================
 app.use(morgan('combined', {
   stream: { write: (message) => logger.http(message.trim()) },
 }));
 
-// --- HEALTH HANDLER (shared between endpoints) ---
-// TODO: Extend this to check database, SMTP, and payment provider status
+// ============================================
+// HEALTH HANDLER
+// ============================================
 const healthHandler = (_req: express.Request, res: express.Response) => {
   const memoryUsage = process.memoryUsage();
 
-  // Prevent caching of health check responses
   res.set({
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     Pragma: 'no-cache',
@@ -125,16 +158,9 @@ const healthHandler = (_req: express.Request, res: express.Response) => {
     'Surrogate-Control': 'no-store',
   });
 
-  // Status is always 'ONLINE' because the API is responding
-  // Services are 'UNKNOWN' because we haven't implemented dependency checks yet
-  // In a future iteration, add actual service health checks:
-  // - Database connection pool status
-  // - SMTP service availability
-  // - Payment provider (Pesapal/Tuma) connectivity
-  
   res.status(200).json({
     success: true,
-    ready: true, // Indicates the server is fully initialized and accepting requests
+    ready: true,
     status: 'ONLINE',
     service: 'Legacy Homes API',
     environment: process.env.NODE_ENV || 'development',
@@ -142,44 +168,37 @@ const healthHandler = (_req: express.Request, res: express.Response) => {
     uptime: process.uptime(),
     version: process.env.npm_package_version || '1.0.0',
     memory: {
-      rss: Math.round(memoryUsage.rss / 1024 / 1024), // MB
-      heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024), // MB
-      heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024), // MB
-    },
-    // Honest reporting - these are not yet verified
-    services: {
-      database: 'UNKNOWN',   // TODO: Check actual database connection
-      smtp: 'UNKNOWN',       // TODO: Check SMTP service
-      pesapal: 'UNKNOWN',    // TODO: Check Pesapal API
-      tuma: 'UNKNOWN',       // TODO: Check Tuma API
+      rss: Math.round(memoryUsage.rss / 1024 / 1024),
+      heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024),
     },
   });
 };
 
-// --- HEALTH ENDPOINTS (defined BEFORE rate limiting) ---
+// ============================================
+// HEALTH ENDPOINTS
+// ============================================
 app.get('/api/health', healthHandler);
 app.get('/health', healthHandler);
 
-// --- RATE LIMITING ---
-
-// 1. Global limiter - protects all API routes EXCEPT health (already defined above)
+// ============================================
+// RATE LIMITING
+// ============================================
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX || '100'), // 100 requests per 15 minutes
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
+  max: parseInt(process.env.RATE_LIMIT_MAX || '100'),
   message: {
     success: false,
     message: 'Too many requests, please try again later.',
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Auth routes are skipped because they have their own limiter
   skip: (req) => req.path.startsWith('/auth'),
 });
 
-// 2. Dedicated auth limiter (stricter for login/registration)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 auth attempts per 15 minutes
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   message: {
     success: false,
     message: 'Too many login attempts, please try again later.',
@@ -188,7 +207,6 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Apply rate limiters AFTER health routes
 app.use('/api/', limiter);
 app.use('/api/auth', authLimiter);
 
@@ -200,15 +218,37 @@ app.get('/deployment-test', (_req, res) => {
   });
 });
 
-// Callback Debugging Middleware
+// ============================================
+// 🔥 CALLBACK DEBUGGING MIDDLEWARE
+// ============================================
+
+// Log all callback attempts
 app.use('/api/payments/callback', (req, res, next) => {
   logger.info('🔥 CALLBACK HIT - RAW REQUEST');
-  logger.info('HEADERS: ' + JSON.stringify(req.headers));
-  logger.info('BODY: ' + JSON.stringify(req.body));
+  logger.info('Method:', req.method);
+  logger.info('Headers:', JSON.stringify(req.headers));
+  logger.info('Query:', JSON.stringify(req.query));
+  logger.info('Body:', JSON.stringify(req.body));
   next();
 });
 
-// API Routes
+// Specific Pesapal callback logging
+app.use('/api/payments/pesapal/callback', (req, res, next) => {
+  logger.info('🔥 PESAPAL CALLBACK HIT');
+  logger.info('Query:', JSON.stringify(req.query));
+  next();
+});
+
+// Specific TUMA callback logging
+app.use('/api/payments/tuma/callback', (req, res, next) => {
+  logger.info('🔥 TUMA CALLBACK HIT');
+  logger.info('Body:', JSON.stringify(req.body));
+  next();
+});
+
+// ============================================
+// API ROUTES
+// ============================================
 app.use('/api/auth', authRoutes);
 app.use('/api/residents', residentRoutes);
 app.use('/api/meters', meterRoutes);
@@ -221,10 +261,15 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/ai', aiRoutes);
 
-// Error handling
+// ============================================
+// ERROR HANDLING
+// ============================================
 app.use(notFound);
 app.use(errorHandler);
 
+// ============================================
+// START SERVER
+// ============================================
 const PORT = parseInt(process.env.PORT || '5000');
 
 httpServer.listen(PORT, () => {
@@ -232,7 +277,9 @@ httpServer.listen(PORT, () => {
   logger.info(`🕒 Started at ${new Date().toISOString()}`);
   logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
   logger.info(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
-  logger.info(`PAYMENT_CALLBACK_URL=${process.env.PAYMENT_CALLBACK_URL}`);
+  logger.info(`📞 TUMA Callback URL: ${process.env.PAYMENT_CALLBACK_URL || 'NOT SET'}`);
+  logger.info(`📞 PESAPAL Callback URL: ${process.env.PESAPAL_IPN_URL || 'NOT SET'}`);
+  logger.info(`📞 PESAPAL Consumer Key: ${process.env.PESAPAL_CONSUMER_KEY ? '✅ Set' : '❌ Missing'}`);
 });
 
 export default app;
