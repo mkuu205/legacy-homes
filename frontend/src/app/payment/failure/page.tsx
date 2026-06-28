@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { XCircle } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { XCircle, RefreshCw, LayoutDashboard, AlertCircle, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
 interface FailureDetails {
@@ -20,12 +20,11 @@ function PaymentFailureContent() {
   });
 
   useEffect(() => {
-    // Extract query parameters
     const reason = searchParams.get('reason');
     const tracking = searchParams.get('tracking');
 
     setFailureDetails({
-      reason: reason || 'An error occurred during payment processing.',
+      reason: reason || 'Your transaction could not be completed at this time.',
       trackingId: tracking,
       isLoaded: true,
     });
@@ -33,126 +32,105 @@ function PaymentFailureContent() {
 
   if (!failureDetails.isLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-rose-50 px-4 sm:px-6 lg:px-8">
-        <div className="animate-pulse text-center">
-          <div className="h-16 w-16 bg-gray-300 rounded-full mx-auto mb-4"></div>
-          <div className="h-4 bg-gray-300 rounded w-48 mx-auto"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-red-500/10 border-t-red-500 rounded-full animate-spin"></div>
+          <p className="text-[var(--t2)] font-medium animate-pulse">Processing status...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-rose-50 px-4 sm:px-6 lg:px-8 py-12">
-      <div className="w-full max-w-md">
-        {/* Failure Card */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          {/* Header with Icon */}
-          <div className="bg-gradient-to-r from-red-500 to-rose-600 px-6 py-12 sm:px-8 text-center">
-            <div className="flex justify-center mb-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-red-400 rounded-full opacity-20 animate-pulse"></div>
-                <XCircle
-                  className="h-20 w-20 text-white relative z-10"
-                  aria-label="Payment failed"
-                />
-              </div>
+    <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4 py-12 font-[var(--f2)]">
+      <div className="w-full max-w-lg">
+        {/* Main Card */}
+        <div className="card glassy relative overflow-hidden border-red-500/20">
+          {/* Error Glow Effect */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-red-500 opacity-5 blur-[100px] pointer-events-none"></div>
+
+          {/* Header */}
+          <div className="text-center relative z-10 pt-4 pb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-red-500/10 border border-red-500/20 mb-6">
+              <XCircle className="w-10 h-10 text-red-500" />
             </div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
+            <h1 className="text-3xl font-bold text-[var(--t1)] font-[var(--f1)] mb-2 tracking-tight">
               Payment Failed
             </h1>
-            <p className="text-red-50 text-sm sm:text-base">
-              We were unable to process your payment.
+            <p className="text-[var(--t2)] text-lg">
+              We couldn&apos;t process your payment.
             </p>
           </div>
 
-          {/* Content */}
-          <div className="px-6 py-8 sm:px-8">
-            {/* Failure Reason */}
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              <label className="block text-xs font-semibold text-red-800 uppercase tracking-wide mb-2">
-                Reason
+          {/* Error Reason */}
+          <div className="mb-8">
+            <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/10">
+              <label className="block text-[10px] font-bold text-red-500/60 uppercase tracking-widest mb-2">
+                Declined Reason
               </label>
-              <p
-                className="text-sm sm:text-base text-red-900 leading-relaxed"
-                aria-label={`Payment failure reason: ${failureDetails.reason}`}
-              >
+              <p className="text-[var(--t1)] text-sm leading-relaxed">
                 {failureDetails.reason}
               </p>
             </div>
+          </div>
 
-            {/* Tracking ID */}
-            {failureDetails.trackingId && (
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                  Tracking ID
+          {/* Tracking ID */}
+          {failureDetails.trackingId && (
+            <div className="mb-8">
+              <div className="card-sm bg-[var(--sf)] border-[var(--bd)]">
+                <label className="block text-[10px] font-bold text-[var(--t3)] uppercase tracking-widest mb-1">
+                  Reference ID
                 </label>
-                <p
-                  className="text-xs sm:text-sm font-mono text-gray-900 break-all"
-                  aria-label={`Tracking ID: ${failureDetails.trackingId}`}
-                >
+                <code className="text-sm text-[var(--t2)] font-mono break-all">
                   {failureDetails.trackingId}
-                </p>
-                <p className="text-xs text-gray-500 mt-2">
-                  Keep this ID for support reference.
-                </p>
+                </code>
               </div>
-            )}
-
-            {/* Info Message */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-8">
-              <p className="text-xs sm:text-sm text-yellow-800">
-                <span className="font-semibold">Tip:</span> Please check your payment details and try again. If the problem persists, contact our support team.
-              </p>
             </div>
+          )}
 
-            {/* Troubleshooting Tips */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
-              <h3 className="text-xs font-semibold text-blue-900 uppercase tracking-wide mb-2">
-                Troubleshooting
-              </h3>
-              <ul className="text-xs sm:text-sm text-blue-800 space-y-1 list-disc list-inside">
-                <li>Verify your payment method details</li>
-                <li>Check your account balance</li>
-                <li>Ensure your internet connection is stable</li>
-                <li>Try a different payment method</li>
-              </ul>
+          {/* Troubleshooting Tips */}
+          <div className="p-4 rounded-xl bg-[var(--c2)] border border-[var(--bd)] mb-8">
+            <div className="flex gap-3">
+              <div className="mt-0.5">
+                <AlertCircle className="w-4 h-4 text-[var(--wa)]" />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-[var(--t2)] uppercase tracking-wider">Quick Troubleshooting</p>
+                <ul className="text-xs text-[var(--t3)] space-y-1 list-disc list-inside">
+                  <li>Check your card balance or limit</li>
+                  <li>Verify card details and CVV</li>
+                  <li>Ensure 3D Secure is enabled</li>
+                </ul>
+              </div>
             </div>
+          </div>
 
-            {/* Action Buttons */}
-            <div className="space-y-3 sm:space-y-0 sm:flex sm:gap-3">
-              <Link
-                href="/dashboard/bills"
-                className="flex-1 inline-flex items-center justify-center px-4 py-3 bg-gradient-to-r from-red-500 to-rose-600 text-white font-semibold rounded-lg hover:from-red-600 hover:to-rose-700 transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                aria-label="Try Again - Go to Bills"
-              >
-                Try Again
-              </Link>
-              <Link
-                href="/dashboard"
-                className="flex-1 inline-flex items-center justify-center px-4 py-3 bg-white border-2 border-red-500 text-red-600 font-semibold rounded-lg hover:bg-red-50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                aria-label="Go to Dashboard"
-              >
-                Go to Dashboard
-              </Link>
-            </div>
+          {/* Actions */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Link href="/dashboard/bills" className="btn bp py-3.5">
+              <RefreshCw className="w-4 h-4" />
+              Try Again
+            </Link>
+            <Link href="/dashboard" className="btn bg py-3.5">
+              <LayoutDashboard className="w-4 h-4" />
+              Dashboard
+            </Link>
           </div>
         </div>
 
-        {/* Footer Text */}
-        <div className="text-center mt-6 space-y-2">
-          <p className="text-xs sm:text-sm text-gray-600">
-            Need help?{' '}
-            <a
-              href="mailto:support@legacyhomes.com"
-              className="text-red-600 hover:text-red-700 font-semibold underline"
-            >
-              Contact Support
-            </a>
+        {/* Footer Support */}
+        <div className="mt-8 text-center space-y-4">
+          <p className="text-sm text-[var(--t3)]">
+            Need assistance?{' '}
+            <Link href="/support" className="text-[var(--ac)] hover:underline inline-flex items-center gap-1 font-medium">
+              Contact Billing Support <ExternalLink className="w-3 h-3" />
+            </Link>
           </p>
-          <p className="text-xs text-gray-500">
-            Reference ID: <span className="font-mono">{failureDetails.trackingId || 'N/A'}</span>
-          </p>
+          <div className="pt-4 border-t border-[var(--bd)]">
+            <p className="text-[10px] text-[var(--t3)] uppercase tracking-[0.2em]">
+              Reference Code: {failureDetails.trackingId || 'N/A'}
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -162,11 +140,8 @@ function PaymentFailureContent() {
 export default function PaymentFailurePage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-rose-50 px-4 sm:px-6 lg:px-8">
-        <div className="animate-pulse text-center">
-          <div className="h-16 w-16 bg-gray-300 rounded-full mx-auto mb-4"></div>
-          <div className="h-4 bg-gray-300 rounded w-48 mx-auto"></div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]">
+        <div className="w-8 h-8 border-2 border-red-500/20 border-t-red-500 rounded-full animate-spin"></div>
       </div>
     }>
       <PaymentFailureContent />

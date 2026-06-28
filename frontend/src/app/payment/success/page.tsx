@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { CheckCircle2 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { CheckCircle2, LayoutDashboard, ReceiptText, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
 interface PaymentDetails {
@@ -22,7 +22,6 @@ function PaymentSuccessContent() {
   });
 
   useEffect(() => {
-    // Extract query parameters
     const paymentId = searchParams.get('paymentId');
     const tracking = searchParams.get('tracking');
     const amount = searchParams.get('amount');
@@ -37,126 +36,103 @@ function PaymentSuccessContent() {
 
   if (!paymentDetails.isLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-50 px-4 sm:px-6 lg:px-8">
-        <div className="animate-pulse text-center">
-          <div className="h-16 w-16 bg-gray-300 rounded-full mx-auto mb-4"></div>
-          <div className="h-4 bg-gray-300 rounded w-48 mx-auto"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-[var(--gl)] border-t-[var(--ac)] rounded-full animate-spin"></div>
+          <p className="text-[var(--t2)] font-medium animate-pulse">Confirming payment...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-50 px-4 sm:px-6 lg:px-8 py-12">
-      <div className="w-full max-w-md">
-        {/* Success Card */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          {/* Header with Icon */}
-          <div className="bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-12 sm:px-8 text-center">
-            <div className="flex justify-center mb-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-green-400 rounded-full opacity-20 animate-pulse"></div>
-                <CheckCircle2
-                  className="h-20 w-20 text-white relative z-10"
-                  aria-label="Payment successful"
-                />
-              </div>
+    <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4 py-12 font-[var(--f2)]">
+      <div className="w-full max-w-lg">
+        {/* Main Card */}
+        <div className="card glassy relative overflow-hidden border-[var(--bd2)]">
+          {/* Success Glow Effect */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-[var(--ac)] opacity-10 blur-[100px] pointer-events-none"></div>
+
+          {/* Header */}
+          <div className="text-center relative z-10 pt-4 pb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-[var(--gl)] border border-[var(--ac)]/20 mb-6">
+              <CheckCircle2 className="w-10 h-10 text-[var(--ac)]" />
             </div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
-              Payment Successful!
+            <h1 className="text-3xl font-bold text-[var(--t1)] font-[var(--f1)] mb-2 tracking-tight">
+              Payment Received
             </h1>
-            <p className="text-green-50 text-sm sm:text-base">
-              Your payment has been processed successfully.
+            <p className="text-[var(--t2)] text-lg">
+              Thank you! Your transaction was successful.
             </p>
           </div>
 
-          {/* Content */}
-          <div className="px-6 py-8 sm:px-8">
-            {/* Payment Details */}
-            <div className="space-y-4 mb-8">
+          {/* Details Section */}
+          <div className="space-y-3 mb-8">
+            <div className="flex flex-col gap-3">
+              {/* Amount Display */}
+              {paymentDetails.amount && (
+                <div className="card-sm bg-[var(--sf)] border-[var(--bd)] flex items-center justify-between">
+                  <span className="text-[var(--t3)] font-bold text-xs uppercase tracking-wider">Amount Paid</span>
+                  <span className="text-2xl font-bold text-[var(--ac)] font-[var(--f1)]">{paymentDetails.amount}</span>
+                </div>
+              )}
+
               {/* Payment ID */}
               {paymentDetails.paymentId && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                <div className="card-sm bg-[var(--sf)] border-[var(--bd)]">
+                  <label className="block text-[10px] font-bold text-[var(--t3)] uppercase tracking-widest mb-1">
                     Payment ID
                   </label>
-                  <p
-                    className="text-sm sm:text-base font-mono text-gray-900 break-all"
-                    aria-label={`Payment ID: ${paymentDetails.paymentId}`}
-                  >
-                    {paymentDetails.paymentId}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <code className="text-sm text-[var(--t1)] font-mono truncate">{paymentDetails.paymentId}</code>
+                  </div>
                 </div>
               )}
 
               {/* Tracking ID */}
               {paymentDetails.trackingId && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                    Tracking ID
+                <div className="card-sm bg-[var(--sf)] border-[var(--bd)]">
+                  <label className="block text-[10px] font-bold text-[var(--t3)] uppercase tracking-widest mb-1">
+                    Tracking Reference
                   </label>
-                  <p
-                    className="text-sm sm:text-base font-mono text-gray-900 break-all"
-                    aria-label={`Tracking ID: ${paymentDetails.trackingId}`}
-                  >
-                    {paymentDetails.trackingId}
-                  </p>
-                </div>
-              )}
-
-              {/* Amount */}
-              {paymentDetails.amount && (
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                    Amount Paid
-                  </label>
-                  <p
-                    className="text-lg sm:text-xl font-bold text-green-600"
-                    aria-label={`Amount: ${paymentDetails.amount}`}
-                  >
-                    {paymentDetails.amount}
-                  </p>
+                  <code className="text-sm text-[var(--t1)] font-mono truncate">{paymentDetails.trackingId}</code>
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Info Message */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
-              <p className="text-xs sm:text-sm text-blue-800">
-                <span className="font-semibold">Note:</span> A confirmation email has been sent to your registered email address. Please keep your payment ID for future reference.
+          {/* Info Note */}
+          <div className="p-4 rounded-xl bg-[var(--gl)] border border-[var(--ac)]/10 mb-8">
+            <div className="flex gap-3">
+              <div className="mt-0.5">
+                <ReceiptText className="w-4 h-4 text-[var(--ac)]" />
+              </div>
+              <p className="text-xs text-[var(--t2)] leading-relaxed">
+                A digital receipt has been generated and sent to your email. You can also download it from your dashboard.
               </p>
             </div>
+          </div>
 
-            {/* Action Buttons */}
-            <div className="space-y-3 sm:space-y-0 sm:flex sm:gap-3">
-              <Link
-                href="/dashboard"
-                className="flex-1 inline-flex items-center justify-center px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                aria-label="Go to Dashboard"
-              >
-                Go to Dashboard
-              </Link>
-              <Link
-                href="/dashboard/bills"
-                className="flex-1 inline-flex items-center justify-center px-4 py-3 bg-white border-2 border-green-500 text-green-600 font-semibold rounded-lg hover:bg-green-50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                aria-label="View Bills"
-              >
-                View Bills
-              </Link>
-            </div>
+          {/* Actions */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Link href="/dashboard" className="btn bp py-3.5">
+              <LayoutDashboard className="w-4 h-4" />
+              Dashboard
+            </Link>
+            <Link href="/dashboard/bills" className="btn bg py-3.5">
+              <ReceiptText className="w-4 h-4" />
+              View Bills
+            </Link>
           </div>
         </div>
 
-        {/* Footer Text */}
-        <div className="text-center mt-6">
-          <p className="text-xs sm:text-sm text-gray-600">
-            Questions?{' '}
-            <a
-              href="mailto:support@legacyhomes.com"
-              className="text-green-600 hover:text-green-700 font-semibold underline"
-            >
-              Contact Support
-            </a>
+        {/* Footer Support */}
+        <div className="mt-8 text-center">
+          <p className="text-sm text-[var(--t3)]">
+            Having trouble?{' '}
+            <Link href="/support" className="text-[var(--ac)] hover:underline inline-flex items-center gap-1 font-medium">
+              Contact Support <ExternalLink className="w-3 h-3" />
+            </Link>
           </p>
         </div>
       </div>
@@ -167,11 +143,8 @@ function PaymentSuccessContent() {
 export default function PaymentSuccessPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-50 px-4 sm:px-6 lg:px-8">
-        <div className="animate-pulse text-center">
-          <div className="h-16 w-16 bg-gray-300 rounded-full mx-auto mb-4"></div>
-          <div className="h-4 bg-gray-300 rounded w-48 mx-auto"></div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]">
+        <div className="w-8 h-8 border-2 border-[var(--gl)] border-t-[var(--ac)] rounded-full animate-spin"></div>
       </div>
     }>
       <PaymentSuccessContent />
