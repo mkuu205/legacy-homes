@@ -84,10 +84,13 @@ export class PaymentEngineService {
       }
 
       // 3. Create payment record
+      // Map frontend 'CARD' to Prisma 'VISA' if necessary, or ensure it matches schema
+      const normalizedMethod = paymentMethod === 'CARD' ? PaymentMethodType.VISA : paymentMethod;
+
       const payment = await prisma.payment.create({
         data: {
           provider,
-          paymentMethod,
+          paymentMethod: normalizedMethod,
           residentId,
           billId,
           phoneNumber: finalPhoneNumber,

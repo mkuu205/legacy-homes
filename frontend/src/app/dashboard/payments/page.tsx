@@ -164,7 +164,7 @@ export default function PaymentsPage() {
         billId: selectedBillId,
         amount: parseFloat(amount),
         provider: paymentMethod === 'MPESA_STK_PUSH' ? 'TUMA' : 'PESAPAL',
-        paymentMethod: paymentMethod,
+        paymentMethod: paymentMethod === 'CARD' ? 'VISA' : paymentMethod,
       };
 
       if (paymentMethod === 'MPESA_STK_PUSH') {
