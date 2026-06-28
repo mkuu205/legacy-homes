@@ -192,7 +192,7 @@ const isBackendUnreachable = (error: AxiosError): boolean => {
   
   // Gateway errors (backend unreachable)
   if (error.response?.status === 502) return true;
-  if (error.response?.status === 503 && !error.response?.data?.maintenance) return true;
+  if (error.response?.status === 503 && !(error.response?.data as any)?.maintenance) return true;
   if (error.response?.status === 504) return true;
   
   return false;
