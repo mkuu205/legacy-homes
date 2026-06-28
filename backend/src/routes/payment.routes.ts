@@ -18,13 +18,18 @@ router.delete('/my-history', authenticate, paymentController.clearMyPaymentHisto
 // PROVIDER WEBHOOKS / CALLBACKS (Public - No Auth)
 // ============================================
 
-// ✅ PAYMENT_CALLBACK_URL
-// URL: /api/payments/callback
-router.post('/callback', paymentController.handleTumaCallback.bind(paymentController));
+// ✅ Pesapal Callback - GET (redirect from Pesapal)
+router.get('/callback', paymentController.handlePesapalCallback.bind(paymentController));
 
-// Pesapal IPN (supports both GET and POST)
+// ✅ Pesapal IPN (supports both GET and POST)
 router.post('/pesapal/ipn', paymentController.handlePesapalIpn.bind(paymentController));
 router.get('/pesapal/ipn', paymentController.handlePesapalIpn.bind(paymentController));
+
+// ✅ TUMA Callback - POST
+router.post('/tuma/callback', paymentController.handleTumaCallback.bind(paymentController));
+
+// Also handle TUMA on the generic callback endpoint
+router.post('/callback', paymentController.handleTumaCallback.bind(paymentController));
 
 // ============================================
 // ADMIN ROUTES
