@@ -64,14 +64,26 @@ export class TumaProvider implements PaymentProvider {
         }
       );
 
-      if (response.data?.success && response.data?.token) {
+      logger.debug('[TUMA] Auth response status:', response.status);
+      logger.debug('[TUMA] Auth response data keys:', Object.keys(response.data || {}));
+
+      // Check for token in response
+      if (response.data?.token) {
         this.token = response.data.token;
         this.tokenExpiry = Date.now() + (response.data.expires_in || 86400) * 1000;
         logger.info(`[TUMA] Access token received. Expires in: ${response.data.expires_in || 86400}s`);
         return this.token;
       }
 
-      throw new Error(response.data?.message || 'Invalid token response from Tuma');
+      // Some APIs might return token in a nested structure
+      if (response.data?.data?.token) {
+        this.token = response.data.data.token;
+        this.tokenExpiry = Date.now() + (response.data.data.expires_in || 86400) * 1000;
+        logger.info(`[TUMA] Access token received from nested data.`);
+        return this.token;
+      }
+
+      throw new Error(response.data?.message || 'No token in response from Tuma');
     } catch (error) {
       logger.error('[TUMA] Token request error:', error);
       throw error;
@@ -104,21 +116,34 @@ export class TumaProvider implements PaymentProvider {
       const duration = Date.now() - startTime;
       logger.info(`[TUMA] ${method} ${endpoint} - ${response.status} (${duration}ms)`);
 
-      return response.data as T;
+      // For successful HTTP status codes, return the data
+      if (response.status === 200 || response.status === 201) {
+        logger.debug(`[TUMA] Response data keys:`, Object.keys(response.data || {}));
+        return response.data as T;
+      }
+
+      throw new Error(response.data?.message || `HTTP ${response.status}: Request failed`);
     } catch (error) {
       const duration = Date.now() - startTime;
       const axiosError = error as AxiosError;
       const status = axiosError.response?.status;
       const errorCode = axiosError.code;
 
+      // Log error details for debugging
+      if (axiosError.response?.data) {
+        logger.error('[TUMA] Error response data:', JSON.stringify(axiosError.response.data));
+      }
+
       const isRetryable = this.isRetryableError(axiosError);
 
+      // Handle 401 - auto-refresh token
       if (status === 401 && retryCount === 0) {
         logger.warn('[TUMA] Received 401 - refreshing token and retrying');
         this.token = null;
         return this.makeRequest<T>(method, endpoint, data, retryCount + 1);
       }
 
+      // Retry logic for retryable errors
       if (isRetryable && retryCount < 3) {
         const delays = [1000, 2000, 5000];
         const delay = delays[retryCount];
@@ -127,10 +152,14 @@ export class TumaProvider implements PaymentProvider {
         return this.makeRequest<T>(method, endpoint, data, retryCount + 1);
       }
 
-      logger.error(`[TUMA] ${method} ${endpoint} failed: ${errorCode || status} - ${axiosError.message}`);
-      throw new Error(
-        `Tuma request failed: ${axiosError.message}${status ? ` (HTTP ${status})` : ''}`
-      );
+      let errorMessage = axiosError.message;
+      if (axiosError.response?.data) {
+        const responseData = axiosError.response.data as any;
+        errorMessage = responseData.message || responseData.error || responseData.result_desc || errorMessage;
+      }
+
+      logger.error(`[TUMA] ${method} ${endpoint} failed: ${errorCode || status} - ${errorMessage}`);
+      throw new Error(errorMessage);
     }
   }
 
@@ -147,33 +176,17 @@ export class TumaProvider implements PaymentProvider {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  /**
-   * Format phone number to Kenyan format (254XXXXXXXXX)
-   * Handles various input formats:
-   * - 0712345678 -> 254712345678
-   * - +254712345678 -> 254712345678
-   * - 254712345678 -> 254712345678
-   * - 0712345678 -> 254712345678
-   */
   private formatPhoneNumber(phone: string): string {
-    // Remove all non-digit characters
     let cleaned = phone.replace(/\D/g, '');
     
-    // If it starts with 0, remove the 0 and add 254
     if (cleaned.startsWith('0')) {
       cleaned = '254' + cleaned.substring(1);
-    }
-    // If it starts with 254, keep as is
-    else if (cleaned.startsWith('254')) {
-      // Already in correct format
-    }
-    // If it doesn't start with 254 or 0, assume it's a local number without prefix
-    else if (cleaned.length === 9) {
-      cleaned = '254' + cleaned;
-    }
-    // If it's 10 digits and doesn't start with 254, it might be 07XXXXXXXX
-    else if (cleaned.length === 10 && !cleaned.startsWith('254')) {
-      cleaned = '254' + cleaned.substring(1);
+    } else if (!cleaned.startsWith('254')) {
+      if (cleaned.length === 9) {
+        cleaned = '254' + cleaned;
+      } else if (cleaned.length === 10) {
+        cleaned = '254' + cleaned.substring(1);
+      }
     }
     
     return cleaned;
@@ -184,12 +197,10 @@ export class TumaProvider implements PaymentProvider {
       throw new Error('Phone number is required for STK push');
     }
 
-    // Format the phone number first
     const formattedPhone = this.formatPhoneNumber(request.phoneNumber);
     
-    // Validate the formatted phone number
     if (!formattedPhone.startsWith('254') || formattedPhone.length !== 12) {
-      throw new Error(`Invalid phone number format. Expected 254XXXXXXXXX (12 digits), got: ${formattedPhone} (${formattedPhone.length} digits)`);
+      throw new Error(`Invalid phone number format. Expected 254XXXXXXXXX (12 digits), got: ${formattedPhone}`);
     }
 
     if (!request.amount || request.amount <= 0) {
@@ -206,7 +217,6 @@ export class TumaProvider implements PaymentProvider {
         };
       }
 
-      // Validate and format phone number
       this.validateRequest(request);
       const formattedPhone = this.formatPhoneNumber(request.phoneNumber!);
 
@@ -219,19 +229,24 @@ export class TumaProvider implements PaymentProvider {
 
       logger.info(`[TUMA] Initiating STK push. Phone: ${payload.phone}, Amount: ${payload.amount}`);
 
-      const response = await this.makeRequest<{
-        success: boolean;
-        message: string;
-        data: {
-          merchant_request_id: string;
-          checkout_request_id: string;
-          customer_message: string;
-        };
-      }>('POST', '/payment/stk-push', payload);
+      const response = await this.makeRequest<any>('POST', '/payment/stk-push', payload);
 
-      if (response.success && response.data) {
+      logger.info(`[TUMA] STK Push response received:`, { 
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : []
+      });
+
+      // Check for success indicators in the response
+      const isSuccess = response.success === true || 
+                        response.status === 'success' ||
+                        response.data?.merchant_request_id ||
+                        response.data?.checkout_request_id;
+
+      if (isSuccess && (response.data?.merchant_request_id || response.data?.checkout_request_id)) {
         const orderId = response.data.merchant_request_id || response.data.checkout_request_id;
-        logger.info(`[TUMA] STK Push initiated. Order ID: ${orderId}`);
+        logger.info(`[TUMA] STK Push initiated successfully. Order ID: ${orderId}`);
 
         return {
           success: true,
@@ -241,12 +256,24 @@ export class TumaProvider implements PaymentProvider {
           providerData: {
             merchant_request_id: response.data.merchant_request_id,
             checkout_request_id: response.data.checkout_request_id,
-            customer_message: response.data.customer_message,
+            customer_message: response.data.customer_message || response.message,
           },
         };
       }
 
-      const errorMsg = response.message || 'Failed to initiate STK push';
+      // If we got a success flag but no order ID
+      if (response.success === true) {
+        logger.warn(`[TUMA] Response indicates success but no order ID found`);
+        return {
+          success: true,
+          orderId: `tuma-${Date.now()}`,
+          checkoutUrl: null,
+          message: response.message || 'STK Push initiated',
+          providerData: response.data || response,
+        };
+      }
+
+      const errorMsg = response.message || response.error || 'Failed to initiate STK push';
       logger.error(`[TUMA] STK Push failed: ${errorMsg}`);
       return {
         success: false,
