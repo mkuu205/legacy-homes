@@ -1,10 +1,17 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { useSystemStatusStore } from '@/stores/system-status.store';
 
-// --- CONSTANTS ---
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  'https://legacy-homes.onrender.com/api';
+// --------------------------------------------------
+// API Configuration
+// --------------------------------------------------
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+if (!API_URL) {
+  throw new Error(
+    'Missing NEXT_PUBLIC_API_URL environment variable.'
+  );
+}
 
 const HEALTH_ENDPOINT = `${API_URL}/health`;
 
