@@ -9,6 +9,9 @@ import { auditService } from '../services/audit.service';
 const paymentEngineService = new PaymentEngineService();
 
 export class PaymentController {
+  /**
+   * Initiate a payment through the selected provider
+   */
   async initiatePayment(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { billId, provider, paymentMethod, phoneNumber, amount } = req.body;
@@ -31,31 +34,44 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Handle TUMA Callback (STK Push)
+   */
   async handleTumaCallback(req: Request, res: Response, next: NextFunction) {
     try {
       const payload = req.body;
       
-      logger.info('[TUMA CALLBACK] Received callback:', { 
-        merchant_request_id: payload.merchant_request_id,
-        checkout_request_id: payload.checkout_request_id,
-        result_code: payload.result_code,
-        status: payload.status,
-      });
+      logger.info('[TUMA CALLBACK] ===== CALLBACK RECEIVED =====');
+      logger.info(`[TUMA CALLBACK] Method: ${req.method}`);
+      logger.info(`[TUMA CALLBACK] Headers: ${JSON.stringify(req.headers)}`);
+      logger.info(`[TUMA CALLBACK] Body: ${JSON.stringify(payload)}`);
+      logger.info('[TUMA CALLBACK] =============================');
       
-      const result = await paymentEngineService.handleCallback(
-        'TUMA',
-        payload,
-        undefined,
-        req.headers as any
-      );
-      
+      // Always return 200 immediately to prevent TUMA from retrying
       res.status(200).json({
         status: 'success',
-        message: 'Callback processed',
-        data: result,
+        message: 'Callback received',
+        timestamp: new Date().toISOString(),
       });
+      
+      // Process the callback asynchronously
+      setImmediate(async () => {
+        try {
+          const result = await paymentEngineService.handleCallback(
+            'TUMA',
+            payload,
+            undefined,
+            req.headers as any
+          );
+          logger.info(`[TUMA CALLBACK] Processed successfully:`, result);
+        } catch (error) {
+          logger.error('[TUMA CALLBACK] Async processing error:', error);
+        }
+      });
+      
     } catch (error) {
       logger.error('[TUMA CALLBACK] Error:', error);
+      // Always return 200 to prevent TUMA from retrying
       res.status(200).json({
         status: 'error',
         message: 'Callback processing failed',
@@ -63,14 +79,21 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Handle Pesapal IPN (Server-to-Server)
+   */
   async handlePesapalIpn(req: Request, res: Response, next: NextFunction) {
     try {
       const payload = Object.keys(req.body).length > 0 ? req.body : req.query;
       
-      logger.info(`[PESAPAL IPN] Received: ${JSON.stringify(payload)}`);
+      logger.info('[PESAPAL IPN] ===== IPN RECEIVED =====');
+      logger.info(`[PESAPAL IPN] Method: ${req.method}`);
+      logger.info(`[PESAPAL IPN] Payload: ${JSON.stringify(payload)}`);
+      logger.info('[PESAPAL IPN] =========================');
       
       const result = await paymentEngineService.handleCallback('PESAPAL', payload, undefined, req.headers);
       
+      // Pesapal expects this specific response format
       res.status(200).json({
         orderNotificationType: 'IPNCHANGE',
         orderTrackingId: payload.OrderTrackingId || payload.order_tracking_id || '',
@@ -79,6 +102,7 @@ export class PaymentController {
       });
     } catch (error) {
       logger.error('[PESAPAL IPN] Error:', error);
+      // Always return 200 to prevent retries
       res.status(200).json({
         orderNotificationType: 'IPNCHANGE',
         orderTrackingId: req.body?.OrderTrackingId || req.query?.OrderTrackingId || '',
@@ -88,15 +112,19 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Handle Pesapal Callback (Redirect from Pesapal)
+   */
   async handlePesapalCallback(req: Request, res: Response, next: NextFunction) {
     try {
-      const payload = req.query;
+      const payload = req.query; // Pesapal sends callback as query params
       
-      logger.info('[PESAPAL CALLBACK] Received:', { 
-        OrderTrackingId: payload.OrderTrackingId,
-        OrderMerchantReference: payload.OrderMerchantReference,
-      });
+      logger.info('[PESAPAL CALLBACK] ===== CALLBACK RECEIVED =====');
+      logger.info(`[PESAPAL CALLBACK] Method: ${req.method}`);
+      logger.info(`[PESAPAL CALLBACK] Query: ${JSON.stringify(payload)}`);
+      logger.info('[PESAPAL CALLBACK] =============================');
       
+      // Process the callback
       const result = await paymentEngineService.handleCallback(
         'PESAPAL',
         payload,
@@ -104,19 +132,34 @@ export class PaymentController {
         req.headers as any
       );
       
+      // Redirect to success or failure page
       if (result.success) {
-        const successUrl = process.env.PAYMENT_SUCCESS_URL || '/payment/success';
+        const successUrl = process.env.PAYMENT_SUCCESS_URL || 'https://legacy-homes-frontend.vercel.app/payment/success';
+        logger.info(`[PESAPAL CALLBACK] Redirecting to success: ${successUrl}`);
         res.redirect(`${successUrl}?paymentId=${result.paymentId}&tracking=${payload.OrderTrackingId}`);
       } else {
-        const failureUrl = process.env.PAYMENT_FAILURE_URL || '/payment/failure';
+        const failureUrl = process.env.PAYMENT_FAILURE_URL || 'https://legacy-homes-frontend.vercel.app/payment/failure';
+        logger.info(`[PESAPAL CALLBACK] Redirecting to failure: ${failureUrl}`);
         res.redirect(`${failureUrl}?tracking=${payload.OrderTrackingId}&reason=${encodeURIComponent(result.message)}`);
       }
     } catch (error) {
       logger.error('[PESAPAL CALLBACK] Error:', error);
-      res.status(500).send('Callback processing failed');
+      // Send a user-friendly error page or redirect
+      res.status(500).send(`
+        <html>
+          <body>
+            <h1>Payment Processing Error</h1>
+            <p>We encountered an error processing your payment. Please contact support.</p>
+            <p>Error: ${error instanceof Error ? error.message : 'Unknown error'}</p>
+          </body>
+        </html>
+      `);
     }
   }
 
+  /**
+   * Verify payment status (Resident manual check or retry)
+   */
   async checkStatus(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const paymentId = req.params.paymentId;
@@ -127,6 +170,9 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Retry verification (Admin)
+   */
   async retryVerification(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const result = await paymentEngineService.verifyPaymentStatus(req.params.paymentId);
@@ -136,6 +182,9 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Get resident's payments
+   */
   async getMyPayments(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const result = await paymentService.getResidentPayments(req.user!.userId, req.query as any);
@@ -145,6 +194,9 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Get all payments (Admin)
+   */
   async getAll(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const result = await paymentService.getAllPayments(req.query as any);
@@ -154,6 +206,9 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Get payment stats (Admin)
+   */
   async getStats(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const stats = await paymentService.getPaymentStats();
@@ -163,6 +218,9 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Delete a payment (Admin)
+   */
   async deletePayment(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const result = await paymentService.deletePayment(req.params.id);
@@ -179,6 +237,9 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Bulk delete payments (Admin)
+   */
   async bulkDelete(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { ids } = req.body;
@@ -196,6 +257,9 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Clear resident's payment history
+   */
   async clearMyPaymentHistory(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const result = await paymentService.clearResidentPaymentHistory(req.user!.userId);
@@ -212,6 +276,9 @@ export class PaymentController {
     }
   }
 
+  /**
+   * Export payments as CSV
+   */
   async exportCSV(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const csv = await paymentService.exportPaymentsCSV(req.query);
@@ -223,6 +290,9 @@ export class PaymentController {
     }
   }
 
+  /**
+   * System health check for payment providers
+   */
   async systemCheck(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const health = await paymentEngineService.checkSystemHealth();
