@@ -113,7 +113,7 @@ export class PaymentEngineService {
         },
       });
 
-      logger.info(`[PAYMENT ENGINE] Created payment record: ${payment.id} for bill ${bill.billNumber}`);
+      logger.info(`[PAYMENT ENGINE] Created payment record: ${payment.id}`);
 
       const paymentProvider = this.getProvider(provider);
       if (!paymentProvider) {
@@ -145,11 +145,9 @@ export class PaymentEngineService {
           },
         });
 
-        logger.error(`[PAYMENT ENGINE] Payment initiation failed: ${result.error}`);
         throw new Error(result.error || 'Payment initiation failed');
       }
 
-      // Build update data matching your schema
       const updateData: any = {
         providerOrderId: result.orderId,
         merchantRequestId: result.orderId,
@@ -163,7 +161,6 @@ export class PaymentEngineService {
         },
       };
 
-      // For TUMA, also store checkout_request_id
       if (result.providerData?.checkout_request_id) {
         updateData.checkoutRequestId = result.providerData.checkout_request_id;
       }
@@ -173,7 +170,7 @@ export class PaymentEngineService {
         data: updateData,
       });
 
-      logger.info(`[PAYMENT ENGINE] Payment initiated: ${payment.id}. Provider: ${provider}`);
+      logger.info(`[PAYMENT ENGINE] Payment initiated: ${payment.id}`);
 
       return {
         success: true,
@@ -207,7 +204,7 @@ export class PaymentEngineService {
       if (payment.status === PaymentStatus.SUCCESSFUL) {
         return {
           status: PaymentStatus.SUCCESSFUL,
-          message: 'Payment already processed successfully',
+          message: 'Payment already processed',
           verified: true,
         };
       }
@@ -365,9 +362,8 @@ export class PaymentEngineService {
     const resultCode = payload.result_code;
     const mpesaReceiptNumber = payload.mpesa_receipt_number;
 
-    logger.info(`[TUMA CALLBACK] Merchant: ${merchantRequestId}, Checkout: ${checkoutRequestId}, Result: ${resultCode}`);
+    logger.info(`[TUMA CALLBACK] Merchant: ${merchantRequestId}, Result: ${resultCode}`);
 
-    // Find payment by merchant_request_id or checkout_request_id
     const payment = await prisma.payment.findFirst({
       where: {
         OR: [
@@ -388,7 +384,6 @@ export class PaymentEngineService {
       return { success: true, message: 'Already processed', paymentId: payment.id };
     }
 
-    // Per Tuma docs: result_code = 0 means success
     const isSuccess = resultCode === 0;
 
     if (isSuccess) {
@@ -402,7 +397,7 @@ export class PaymentEngineService {
         ...payload,
       });
 
-      logger.info(`[TUMA CALLBACK] Payment ${payment.id} processed successfully. Receipt: ${mpesaReceiptNumber}`);
+      logger.info(`[TUMA CALLBACK] Payment ${payment.id} processed successfully.`);
     } else {
       await prisma.payment.update({
         where: { id: payment.id },
@@ -417,7 +412,7 @@ export class PaymentEngineService {
         },
       });
 
-      logger.warn(`[TUMA CALLBACK] Payment ${payment.id} failed. Reason: ${payload.result_desc}`);
+      logger.warn(`[TUMA CALLBACK] Payment ${payment.id} failed.`);
     }
 
     await prisma.callbackAudit.update({
@@ -457,7 +452,6 @@ export class PaymentEngineService {
 
     const finalAmount = providerPayload.amount || payment.amount;
 
-    // 1. Update Payment record - NO paidAt field
     await prisma.payment.update({
       where: { id: paymentId },
       data: {
@@ -477,7 +471,6 @@ export class PaymentEngineService {
       },
     });
 
-    // 2. Update Bill record
     const updatedAmountPaid = payment.bill.amountPaid + finalAmount;
     const newBalance = Math.max(0, payment.bill.totalAmount - updatedAmountPaid);
     const newBillStatus = newBalance <= 0 ? BillStatus.PAID : BillStatus.PARTIAL;
@@ -495,16 +488,14 @@ export class PaymentEngineService {
       },
     });
 
-    logger.info(`[PAYMENT ENGINE] Bill ${payment.bill.billNumber} updated to ${newBillStatus}. New balance: ${newBalance}`);
+    logger.info(`[PAYMENT ENGINE] Bill ${payment.bill.billNumber} updated to ${newBillStatus}`);
 
-    // 3. Generate Receipt
     try {
       await receiptService.generateReceipt(payment.id);
     } catch (error) {
       logger.error('[PAYMENT ENGINE] Receipt generation failed:', error);
     }
 
-    // 4. Send Notification
     try {
       await notificationService.sendPaymentSuccessNotification(
         payment.residentId,
@@ -515,7 +506,6 @@ export class PaymentEngineService {
       logger.error('[PAYMENT ENGINE] Notification failed:', error);
     }
 
-    // 5. Socket.IO Broadcast
     this.broadcastUpdates(payment.residentId, payment.billId, payment.id);
   }
 
@@ -532,6 +522,7 @@ export class PaymentEngineService {
     const services: Record<string, any> = {};
     const startTime = Date.now();
 
+    // 1. Backend API
     services.backendApi = {
       status: 'ONLINE',
       message: 'API is responding correctly',
@@ -539,6 +530,7 @@ export class PaymentEngineService {
       version: process.env.npm_package_version || '1.0.0'
     };
 
+    // 2. PostgreSQL Database
     try {
       const dbStart = Date.now();
       await prisma.$queryRaw`SELECT 1`;
@@ -554,21 +546,114 @@ export class PaymentEngineService {
       };
     }
 
-    for (const [name, provider] of this.providers) {
-      const isConfigured = provider.isConfigured();
-      services[`${name.toLowerCase()}Api`] = {
+    // 3. Payment Providers - Check ALL providers
+    // Check Pesapal
+    const pesapalProvider = this.providers.get('PESAPAL');
+    if (pesapalProvider) {
+      const isConfigured = pesapalProvider.isConfigured();
+      services.pesapalApi = {
         status: isConfigured ? 'ONLINE' : 'OFFLINE',
-        message: isConfigured ? `${name} provider is configured` : `${name} provider is not configured`,
+        message: isConfigured ? 'PESAPAL provider is configured' : 'PESAPAL provider is not configured',
         configured: isConfigured,
+      };
+    } else {
+      services.pesapalApi = {
+        status: 'OFFLINE',
+        message: 'PESAPAL provider not initialized',
+        configured: false,
       };
     }
 
+    // Check TUMA
+    const tumaProvider = this.providers.get('TUMA');
+    if (tumaProvider) {
+      const isConfigured = tumaProvider.isConfigured();
+      services.tumaApi = {
+        status: isConfigured ? 'ONLINE' : 'OFFLINE',
+        message: isConfigured ? 'TUMA provider is configured' : 'TUMA provider is not configured',
+        configured: isConfigured,
+      };
+    } else {
+      services.tumaApi = {
+        status: 'OFFLINE',
+        message: 'TUMA provider not initialized',
+        configured: false,
+      };
+    }
+
+    // 4. Payment Callback Endpoint
+    const callbackUrl = process.env.PAYMENT_CALLBACK_URL || process.env.PESAPAL_CALLBACK_URL;
+    services.callbackEndpoint = {
+      status: callbackUrl ? 'ONLINE' : 'OFFLINE',
+      message: callbackUrl ? `Callback URL is configured` : 'Callback URL is not configured',
+      configSummary: {
+        urlSet: !!callbackUrl,
+        ipnIdSet: !!process.env.PESAPAL_IPN_ID,
+      }
+    };
+
+    // 5. Email Service (SMTP/Brevo)
+    const hasEmailConfig = !!(process.env.SMTP_USER && process.env.SMTP_PASS) || !!process.env.BREVO_API_KEY;
+    services.emailService = {
+      status: hasEmailConfig ? 'ONLINE' : 'OFFLINE',
+      message: hasEmailConfig ? 'Email service is configured' : 'Email service is not configured',
+      configSummary: {
+        smtpUser: !!process.env.SMTP_USER,
+        smtpPass: !!process.env.SMTP_PASS,
+        brevoApiKey: !!process.env.BREVO_API_KEY,
+      }
+    };
+
+    // 6. Environment Variables
+    const requiredVars = [
+      'DATABASE_URL',
+      'JWT_ACCESS_SECRET',
+      'JWT_REFRESH_SECRET',
+      'PESAPAL_CONSUMER_KEY',
+      'PESAPAL_CONSUMER_SECRET',
+    ];
+    
+    const optionalVars = [
+      'TUMA_BUSINESS_EMAIL',
+      'TUMA_API_KEY',
+      'PAYMENT_CALLBACK_URL',
+      'BREVO_API_KEY',
+      'SMTP_USER',
+      'SMTP_PASS',
+    ];
+
+    const missingRequired = requiredVars.filter(v => !process.env[v]);
+    const missingOptional = optionalVars.filter(v => !process.env[v]);
+    
+    const tumaConfigured = !!(process.env.TUMA_BUSINESS_EMAIL && process.env.TUMA_API_KEY);
+    
+    services.environmentVariables = {
+      status: missingRequired.length === 0 ? 'ONLINE' : 'WARNING',
+      message: missingRequired.length === 0 
+        ? 'All required environment variables are set' 
+        : `Missing required: ${missingRequired.join(', ')}`,
+      configSummary: {
+        required: requiredVars.reduce((acc, v) => ({ ...acc, [v]: !!process.env[v] }), {}),
+        optional: optionalVars.reduce((acc, v) => ({ ...acc, [v]: !!process.env[v] }), {}),
+        tumaConfigured: tumaConfigured,
+      }
+    };
+
+    const allOnline = Object.values(services).every((s: any) => s.status === 'ONLINE');
+    const hasWarnings = Object.values(services).some((s: any) => s.status === 'WARNING');
+
     return {
-      status: 'ONLINE',
+      status: allOnline ? 'ONLINE' : (hasWarnings ? 'WARNING' : 'OFFLINE'),
       timestamp: new Date().toISOString(),
       serverTime: new Date().toISOString(),
       timezone: 'Africa/Nairobi',
-      services
+      services,
+      summary: {
+        totalServices: Object.keys(services).length,
+        online: Object.values(services).filter((s: any) => s.status === 'ONLINE').length,
+        offline: Object.values(services).filter((s: any) => s.status === 'OFFLINE').length,
+        warnings: Object.values(services).filter((s: any) => s.status === 'WARNING').length,
+      }
     };
   }
-}
+    }
