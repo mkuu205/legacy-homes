@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { XCircleIcon } from '@heroicons/react/24/solid';
+import { XCircle } from 'lucide-react';
 import Link from 'next/link';
 
 interface FailureDetails {
@@ -11,9 +11,8 @@ interface FailureDetails {
   isLoaded: boolean;
 }
 
-export default function PaymentFailurePage() {
+function PaymentFailureContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const [failureDetails, setFailureDetails] = useState<FailureDetails>({
     reason: null,
     trackingId: null,
@@ -53,7 +52,7 @@ export default function PaymentFailurePage() {
             <div className="flex justify-center mb-4">
               <div className="relative">
                 <div className="absolute inset-0 bg-red-400 rounded-full opacity-20 animate-pulse"></div>
-                <XCircleIcon
+                <XCircle
                   className="h-20 w-20 text-white relative z-10"
                   aria-label="Payment failed"
                 />
@@ -157,5 +156,20 @@ export default function PaymentFailurePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PaymentFailurePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-rose-50 px-4 sm:px-6 lg:px-8">
+        <div className="animate-pulse text-center">
+          <div className="h-16 w-16 bg-gray-300 rounded-full mx-auto mb-4"></div>
+          <div className="h-4 bg-gray-300 rounded w-48 mx-auto"></div>
+        </div>
+      </div>
+    }>
+      <PaymentFailureContent />
+    </Suspense>
   );
 }
