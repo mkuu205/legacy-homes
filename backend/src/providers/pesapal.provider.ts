@@ -286,17 +286,29 @@ export class PesapalProvider implements PaymentProvider {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  /**
+   * Validate request - PHONE NUMBER IS OPTIONAL for Pesapal
+   */
   private validateRequest(request: PaymentInitiationRequest): void {
+    // 1. Validate merchant reference (required)
     const ref = request.externalReference;
-    if (!ref) throw new Error('Merchant reference is required');
-    if (ref.length > 50) throw new Error('Merchant reference exceeds 50 characters');
+    if (!ref) {
+      throw new Error('Merchant reference is required');
+    }
+    if (ref.length > 50) {
+      throw new Error('Merchant reference exceeds 50 characters');
+    }
     if (!/^[a-zA-Z0-9\-_\.:]+$/.test(ref)) {
-      throw new Error('Merchant reference contains invalid characters');
+      throw new Error('Merchant reference contains invalid characters. Allowed: alphanumeric, -, _, ., :');
     }
 
+    // 2. Validate description (optional, max 100 chars)
     const description = (request as any).description || `Payment - ${ref}`;
-    if (description.length > 100) throw new Error('Description exceeds 100 characters');
+    if (description.length > 100) {
+      throw new Error('Description exceeds 100 characters');
+    }
 
+    // 3. Phone number is OPTIONAL for Pesapal - only validate if provided
     if (request.phoneNumber) {
       const phone = request.phoneNumber.replace(/\D/g, '');
       if (!phone.startsWith('254') || phone.length !== 12) {
@@ -304,6 +316,7 @@ export class PesapalProvider implements PaymentProvider {
       }
     }
 
+    // 4. Validate amount (required)
     if (!request.amount || request.amount <= 0) {
       throw new Error('Amount must be greater than zero');
     }
@@ -335,18 +348,27 @@ export class PesapalProvider implements PaymentProvider {
       const firstName = nameParts[0] || 'Resident';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Legacy Homes';
 
+      // Build billing address - phone is OPTIONAL
       const billingAddress: any = {
         first_name: firstName,
         last_name: lastName,
         country_code: 'KE',
       };
 
+      // Only add phone if provided
       if (request.phoneNumber) {
         billingAddress.phone_number = this.sanitizePhoneNumber(request.phoneNumber);
       }
-      
+
+      // Only add email if provided
       if ((request as any).residentEmail) {
         billingAddress.email_address = (request as any).residentEmail;
+      }
+
+      // Pesapal requires at least ONE of phone_number or email_address
+      // If neither is provided, add a default email
+      if (!billingAddress.phone_number && !billingAddress.email_address) {
+        billingAddress.email_address = 'resident@legacyhomes.co.ke';
       }
 
       const payload = {
@@ -665,4 +687,4 @@ export class PesapalProvider implements PaymentProvider {
   getCircuitState(): string {
     return this.circuitState;
   }
-        }
+}
