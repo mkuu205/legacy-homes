@@ -35,14 +35,15 @@ export class PaymentEngineService {
       const tuma = new TumaProvider();
       if (tuma.isConfigured()) {
         this.providers.set('TUMA', tuma);
-        logger.info('[PAYMENT ENGINE] TUMA provider initialized');
+        logger.info('[PAYMENT ENGINE] TUMA provider initialized successfully');
+        logger.info(`[PAYMENT ENGINE] TUMA using API: ${process.env.TUMA_API_URL || 'https://api.tuma.co.ke'}`);
       } else {
         const config = tuma.getConfigStatus();
-        logger.warn('[PAYMENT ENGINE] TUMA not configured - missing:', {
-          email: !config.email ? 'TUMA_EMAIL' : null,
-          apiKey: !config.apiKey ? 'TUMA_API_KEY' : null,
-          callbackUrl: !config.callbackUrl ? 'TUMA_CALLBACK_URL' : null,
-        });
+        const missing = [];
+        if (!config.email) missing.push('TUMA_BUSINESS_EMAIL');
+        if (!config.apiKey) missing.push('TUMA_API_KEY');
+        if (!config.callbackUrl) missing.push('PAYMENT_CALLBACK_URL');
+        logger.warn(`[PAYMENT ENGINE] TUMA not configured - missing: ${missing.join(', ')}`);
       }
     } catch (error) {
       logger.error('[PAYMENT ENGINE] Failed to initialize TUMA:', error);
@@ -138,7 +139,11 @@ export class PaymentEngineService {
       // 4. Get provider
       const paymentProvider = this.getProvider(provider);
       if (!paymentProvider) {
-        throw new Error(`Provider ${provider} not configured`);
+        const configured = this.getConfiguredProviders();
+        throw new Error(
+          `Provider ${provider} not configured. Available providers: ${configured.join(', ') || 'NONE'}. ` +
+          `Please check your environment variables.`
+        );
       }
 
       // 5. Initiate payment through provider
@@ -627,4 +632,4 @@ export class PaymentEngineService {
       services
     };
   }
-      }
+            }
