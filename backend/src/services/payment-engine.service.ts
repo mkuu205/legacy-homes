@@ -1,6 +1,8 @@
+// src/services/payment-engine.service.ts
 import prisma from '../config/prisma';
 import { PaymentProvider } from '../providers/payment-provider.interface';
 import { PesapalProvider } from '../providers/pesapal.provider';
+import { TumaProvider } from '../providers/tuma.provider';
 import { logger } from '../utils/logger';
 import { PaymentProviderType, PaymentStatus, PaymentMethodType, BillStatus } from '@prisma/client';
 import { notificationService } from './notification.service';
@@ -15,7 +17,39 @@ export class PaymentEngineService {
   }
 
   private initializeProviders(): void {
-    this.providers.set('PESAPAL', new PesapalProvider());
+    // Initialize Pesapal
+    try {
+      const pesapal = new PesapalProvider();
+      if (pesapal.isConfigured()) {
+        this.providers.set('PESAPAL', pesapal);
+        logger.info('[PAYMENT ENGINE] Pesapal provider initialized');
+      } else {
+        logger.warn('[PAYMENT ENGINE] Pesapal not configured - missing credentials');
+      }
+    } catch (error) {
+      logger.error('[PAYMENT ENGINE] Failed to initialize Pesapal:', error);
+    }
+
+    // Initialize TUMA
+    try {
+      const tuma = new TumaProvider();
+      if (tuma.isConfigured()) {
+        this.providers.set('TUMA', tuma);
+        logger.info('[PAYMENT ENGINE] TUMA provider initialized');
+      } else {
+        const config = tuma.getConfigStatus();
+        logger.warn('[PAYMENT ENGINE] TUMA not configured - missing:', {
+          email: !config.email ? 'TUMA_EMAIL' : null,
+          apiKey: !config.apiKey ? 'TUMA_API_KEY' : null,
+          callbackUrl: !config.callbackUrl ? 'TUMA_CALLBACK_URL' : null,
+        });
+      }
+    } catch (error) {
+      logger.error('[PAYMENT ENGINE] Failed to initialize TUMA:', error);
+    }
+
+    const configured = this.getConfiguredProviders();
+    logger.info(`[PAYMENT ENGINE] Configured providers: ${configured.join(', ') || 'NONE'}`);
   }
 
   /**
@@ -84,7 +118,6 @@ export class PaymentEngineService {
       }
 
       // 3. Create payment record
-      // Map frontend 'CARD' to Prisma 'VISA' if necessary, or ensure it matches schema
       const normalizedMethod = paymentMethod === 'CARD' ? PaymentMethodType.VISA : paymentMethod;
 
       const payment = await prisma.payment.create({
@@ -115,10 +148,10 @@ export class PaymentEngineService {
         billId,
         residentId,
         externalReference: payment.id,
-        // @ts-ignore - Pass extra fields for Pesapal v3
         billNumber: bill.billNumber,
         residentName: bill.resident.fullName,
         residentEmail: bill.resident.email,
+        description: `Payment for bill ${bill.billNumber}`,
       });
 
       if (!result.success) {
@@ -141,12 +174,18 @@ export class PaymentEngineService {
         data: {
           providerOrderId: result.orderId,
           providerPayload: result as any,
-          // Legacy field support
           merchantRequestId: result.orderId,
+          // For TUMA, store both IDs
+          ...(result.providerData && {
+            providerPayload: {
+              ...result.providerData,
+              checkoutUrl: result.checkoutUrl,
+            },
+          }),
         },
       });
 
-      logger.info(`[PAYMENT ENGINE] Payment initiated successfully: ${payment.id}. Redirect URL: ${result.checkoutUrl}`);
+      logger.info(`[PAYMENT ENGINE] Payment initiated successfully: ${payment.id}. Provider: ${provider}`);
 
       return {
         success: true,
@@ -155,6 +194,7 @@ export class PaymentEngineService {
         checkoutUrl: result.checkoutUrl,
         redirectUrl: result.checkoutUrl,
         message: result.message,
+        providerData: result.providerData,
       };
     } catch (error) {
       logger.error('[PAYMENT ENGINE] Payment initiation error:', error);
@@ -269,8 +309,11 @@ export class PaymentEngineService {
         throw new Error(`Provider ${provider} not configured`);
       }
 
+      // Handle different providers
       if (provider === 'PESAPAL') {
         return await this.handlePesapalCallback(payload, auditId);
+      } else if (provider === 'TUMA') {
+        return await this.handleTumaCallback(payload, auditId);
       }
 
       throw new Error(`Unsupported provider for callback: ${provider}`);
@@ -296,6 +339,9 @@ export class PaymentEngineService {
     }
   }
 
+  /**
+   * Handle Pesapal callback
+   */
   private async handlePesapalCallback(payload: Record<string, any>, auditId: string) {
     const orderTrackingId = payload.OrderTrackingId || payload.order_tracking_id;
 
@@ -304,7 +350,7 @@ export class PaymentEngineService {
       return { success: false, message: 'Missing OrderTrackingId' };
     }
 
-    // 1. Idempotency Check
+    // Idempotency Check
     const payment = await prisma.payment.findFirst({
       where: { providerOrderId: orderTrackingId },
     });
@@ -319,11 +365,11 @@ export class PaymentEngineService {
       return { success: true, message: 'Already processed', paymentId: payment.id };
     }
 
-    // 2. Always verify with official API
+    // Always verify with official API
     logger.info(`[PESAPAL CALLBACK] Verifying status for payment ${payment.id}`);
     const verification = await this.verifyPaymentStatus(payment.id);
 
-    // 3. Update Audit
+    // Update Audit
     await prisma.callbackAudit.update({
       where: { id: auditId },
       data: {
@@ -341,7 +387,98 @@ export class PaymentEngineService {
     };
   }
 
+  /**
+   * Handle TUMA callback
+   */
+  private async handleTumaCallback(payload: Record<string, any>, auditId: string) {
+    const merchantRequestId = payload.merchant_request_id;
+    const checkoutRequestId = payload.checkout_request_id;
+    const resultCode = payload.result_code;
+    const mpesaReceiptNumber = payload.mpesa_receipt_number;
 
+    logger.info(`[TUMA CALLBACK] Merchant: ${merchantRequestId}, Checkout: ${checkoutRequestId}, Result: ${resultCode}`);
+
+    // Find payment by merchant_request_id or checkout_request_id
+    const payment = await prisma.payment.findFirst({
+      where: {
+        OR: [
+          { providerOrderId: merchantRequestId },
+          { merchantRequestId: merchantRequestId },
+          { providerPayload: { path: ['merchant_request_id'], equals: merchantRequestId } },
+        ],
+      },
+    });
+
+    if (!payment) {
+      logger.warn(`[TUMA CALLBACK] Payment not found for MerchantRequestId: ${merchantRequestId}`);
+      return { success: false, message: 'Payment not found' };
+    }
+
+    if (payment.status === PaymentStatus.SUCCESSFUL) {
+      logger.info(`[TUMA CALLBACK] Payment ${payment.id} already processed successfully`);
+      return { success: true, message: 'Already processed', paymentId: payment.id };
+    }
+
+    // Process based on result_code
+    // Per Tuma docs: result_code = 0 means success
+    const isSuccess = resultCode === 0;
+
+    if (isSuccess) {
+      // Process successful payment
+      await this.processSuccessfulPayment(payment.id, {
+        confirmation_code: mpesaReceiptNumber,
+        amount: payload.amount,
+        merchant_request_id: merchantRequestId,
+        checkout_request_id: checkoutRequestId,
+        result_desc: payload.result_desc,
+        timestamp: payload.timestamp,
+        ...payload,
+      });
+
+      logger.info(`[TUMA CALLBACK] Payment ${payment.id} processed successfully. Receipt: ${mpesaReceiptNumber}`);
+    } else {
+      // Update as failed
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: PaymentStatus.FAILED,
+          providerStatus: 'FAILED',
+          providerMessage: payload.result_desc || 'Payment failed',
+          failureReason: payload.failure_reason || payload.result_desc,
+          providerPayload: payload as any,
+          verificationTimestamp: new Date(),
+        },
+      });
+
+      logger.warn(`[TUMA CALLBACK] Payment ${payment.id} failed. Reason: ${payload.result_desc}`);
+    }
+
+    // Update Audit
+    await prisma.callbackAudit.update({
+      where: { id: auditId },
+      data: {
+        processed: true,
+        paymentId: payment.id,
+        processingResult: JSON.stringify({
+          success: isSuccess,
+          status: isSuccess ? PaymentStatus.SUCCESSFUL : PaymentStatus.FAILED,
+          receiptNumber: mpesaReceiptNumber,
+        }),
+      },
+    });
+
+    return {
+      success: isSuccess,
+      paymentId: payment.id,
+      status: isSuccess ? PaymentStatus.SUCCESSFUL : PaymentStatus.FAILED,
+      receiptNumber: mpesaReceiptNumber,
+      message: payload.result_desc || (isSuccess ? 'Payment successful' : 'Payment failed'),
+    };
+  }
+
+  /**
+   * Process successful payment
+   */
   private async processSuccessfulPayment(paymentId: string, providerPayload: any) {
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
@@ -350,7 +487,11 @@ export class PaymentEngineService {
 
     if (!payment || payment.status === PaymentStatus.SUCCESSFUL) return;
 
-    const confirmationCode = providerPayload.confirmation_code || providerPayload.mpesa_receipt_number || payment.confirmationCode;
+    const confirmationCode = providerPayload.confirmation_code || 
+                           providerPayload.mpesa_receipt_number || 
+                           providerPayload.confirmationCode || 
+                           payment.confirmationCode;
+
     const finalAmount = providerPayload.amount || payment.amount;
 
     // 1. Update Payment record
@@ -364,8 +505,9 @@ export class PaymentEngineService {
         confirmationCode: confirmationCode,
         providerPayload: providerPayload as any,
         verificationTimestamp: new Date(),
-        verifiedBy: 'PESAPAL_API',
+        verifiedBy: 'PROVIDER_API',
         receiptNumber: confirmationCode,
+        paidAt: new Date(),
       },
     });
 
@@ -408,6 +550,9 @@ export class PaymentEngineService {
     this.broadcastUpdates(payment.residentId, payment.billId, payment.id);
   }
 
+  /**
+   * Broadcast updates via Socket.IO
+   */
   private broadcastUpdates(residentId: string, billId: string, paymentId: string) {
     const room = `user_${residentId}`;
     io.to(room).emit('payment_completed', { paymentId, billId });
@@ -417,11 +562,14 @@ export class PaymentEngineService {
     io.to('admin_room').emit('dashboard_updated');
   }
 
+  /**
+   * Check system health
+   */
   async checkSystemHealth() {
     const services: Record<string, any> = {};
     const startTime = Date.now();
 
-    // 1. Backend API (Self)
+    // 1. Backend API
     services.backendApi = {
       status: 'ONLINE',
       message: 'API is responding correctly',
@@ -429,7 +577,7 @@ export class PaymentEngineService {
       version: process.env.npm_package_version || '1.0.0'
     };
 
-    // 2. Database (PostgreSQL)
+    // 2. Database
     try {
       const dbStart = Date.now();
       await prisma.$queryRaw`SELECT 1`;
@@ -445,64 +593,17 @@ export class PaymentEngineService {
       };
     }
 
-    // 3. Pesapal API
-    const pesapal = this.getProvider('PESAPAL');
-    if (pesapal) {
-      const isConfigured = pesapal.isConfigured();
-      let apiStatus = 'OFFLINE';
-      let apiMessage = 'Pesapal is not configured';
-      let responseTime = undefined;
-
-      if (isConfigured) {
-        try {
-          const pStart = Date.now();
-          // @ts-ignore - calling private/internal method for health check
-          await (pesapal as any).getAccessToken();
-          apiStatus = 'ONLINE';
-          apiMessage = 'Pesapal API is reachable and credentials are valid';
-          responseTime = `${Date.now() - pStart}ms`;
-        } catch (error) {
-          apiStatus = 'WARNING';
-          apiMessage = `Pesapal API error: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        }
-      }
-
-      services.pesapalApi = {
-        status: apiStatus,
-        message: apiMessage,
-        responseTime,
-        configSummary: {
-          consumerKey: !!process.env.PESAPAL_CONSUMER_KEY,
-          consumerSecret: !!process.env.PESAPAL_CONSUMER_SECRET,
-          ipnId: !!process.env.PESAPAL_IPN_ID,
-          callbackUrl: !!process.env.PESAPAL_CALLBACK_URL
-        }
+    // 3. Payment Providers
+    for (const [name, provider] of this.providers) {
+      const isConfigured = provider.isConfigured();
+      services[`${name.toLowerCase()}Api`] = {
+        status: isConfigured ? 'ONLINE' : 'OFFLINE',
+        message: isConfigured ? `${name} provider is configured` : `${name} provider is not configured`,
+        configured: isConfigured,
       };
     }
 
-    // 4. Payment Callback Endpoint
-    const callbackUrl = process.env.PESAPAL_CALLBACK_URL;
-    services.callbackEndpoint = {
-      status: callbackUrl ? 'ONLINE' : 'OFFLINE',
-      message: callbackUrl ? `Callback URL is set to ${callbackUrl}` : 'Callback URL is not configured',
-      configSummary: {
-        urlSet: !!callbackUrl,
-        ipnIdSet: !!process.env.PESAPAL_IPN_ID
-      }
-    };
-
-    // 5. Email Service (Brevo)
-    const brevoKey = process.env.BREVO_API_KEY;
-    services.emailService = {
-      status: brevoKey ? 'ONLINE' : 'OFFLINE',
-      message: brevoKey ? 'Brevo API key is configured' : 'Brevo API key is missing',
-      configSummary: {
-        apiKey: !!brevoKey,
-        senderEmail: true // Hardcoded in email.ts
-      }
-    };
-
-    // 6. Environment Variables
+    // 4. Environment Variables
     const requiredVars = [
       'DATABASE_URL',
       'JWT_ACCESS_SECRET',
@@ -514,9 +615,8 @@ export class PaymentEngineService {
     const missingVars = requiredVars.filter(v => !process.env[v]);
     
     services.environmentVariables = {
-      status: missingVars.length === 0 ? 'ONLINE' : (missingVars.length === requiredVars.length ? 'OFFLINE' : 'WARNING'),
+      status: missingVars.length === 0 ? 'ONLINE' : 'WARNING',
       message: missingVars.length === 0 ? 'All critical environment variables are set' : `Missing: ${missingVars.join(', ')}`,
-      configSummary: requiredVars.reduce((acc, v) => ({ ...acc, [v]: !!process.env[v] }), {})
     };
 
     return {
@@ -527,4 +627,4 @@ export class PaymentEngineService {
       services
     };
   }
-}
+      }
