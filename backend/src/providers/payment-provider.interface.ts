@@ -1,39 +1,36 @@
-/**
- * PaymentProvider Interface
- * Defines the contract for all payment providers (Pesapal)
- */
-
+// src/providers/payment-provider.interface.ts
 export interface PaymentInitiationRequest {
   amount: number;
   phoneNumber: string;
-  billId: string;
-  residentId: string;
-  externalReference: string;
+  billId?: string;
+  residentId?: string;
+  externalReference?: string;
+  description?: string;
+  [key: string]: any; // Allow extra fields
 }
 
 export interface PaymentInitiationResponse {
   success: boolean;
-  transactionId?: string;
   orderId?: string;
-  checkoutUrl?: string;
+  checkoutUrl?: string | null;
   message?: string;
   error?: string;
+  providerData?: any;
 }
 
 export interface PaymentStatusRequest {
-  transactionId?: string;
   orderId?: string;
-  reference?: string;
+  transactionId?: string;
 }
 
 export interface PaymentStatusResponse {
-  status: 'PENDING' | 'SUCCESSFUL' | 'FAILED' | 'CANCELLED';
-  transactionId?: string;
-  orderId?: string;
-  amount?: number;
+  status: 'PENDING' | 'SUCCESSFUL' | 'FAILED' | 'CANCELLED' | 'REVERSED' | 'INVALID';
   message?: string;
+  orderId?: string;
+  transactionId?: string;
+  amount?: number;
   timestamp?: Date;
-  providerData?: Record<string, any>;
+  providerData?: any;
 }
 
 export interface CallbackVerificationRequest {
@@ -45,34 +42,17 @@ export interface CallbackVerificationRequest {
 export interface CallbackVerificationResponse {
   valid: boolean;
   transactionId?: string;
-  status?: string;
+  status?: 'PENDING' | 'SUCCESSFUL' | 'FAILED' | 'CANCELLED' | 'REVERSED' | 'INVALID';
   amount?: number;
   message?: string;
+  timestamp?: Date;
+  providerData?: any;
 }
 
 export interface PaymentProvider {
-  /**
-   * Initialize a payment request
-   */
   initiatePayment(request: PaymentInitiationRequest): Promise<PaymentInitiationResponse>;
-
-  /**
-   * Verify payment status
-   */
   verifyPaymentStatus(request: PaymentStatusRequest): Promise<PaymentStatusResponse>;
-
-  /**
-   * Verify callback payload authenticity
-   */
   verifyCallback(request: CallbackVerificationRequest): Promise<CallbackVerificationResponse>;
-
-  /**
-   * Get provider name
-   */
   getProviderName(): string;
-
-  /**
-   * Check if provider is configured
-   */
   isConfigured(): boolean;
 }
