@@ -31,24 +31,10 @@ export default function LoginPage() {
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
-  const [pollingActive, setPollingActive] = useState(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
-
-  // Initial health check on mount
-  useEffect(() => {
-    const performInitialCheck = async () => {
-      try {
-        await checkBackendHealth();
-      } catch (error) {
-        console.warn('Initial health check failed:', error);
-      }
-    };
-
-    performInitialCheck();
-  }, []);
 
   // Monitor backend status and update maintenance mode
   useEffect(() => {
@@ -62,56 +48,13 @@ export default function LoginPage() {
     
     if (isOffline) {
       setLastChecked(new Date());
-      // Start polling for recovery
-      if (!pollingActive) {
-        startPolling();
-      }
     }
-  }, [backendStatus, pollingActive]);
-
-  // Polling mechanism for automatic recovery
-  const startPolling = () => {
-    setPollingActive(true);
-    let pollCount = 0;
-    const maxPollsAt30s = 10; // 5 minutes at 30s intervals
-
-    const poll = async () => {
-      try {
-        await checkBackendHealth();
-        pollCount++;
-
-        // After 5 minutes, switch to 60s intervals
-        if (pollCount >= maxPollsAt30s) {
-          clearInterval(interval30s);
-          interval60s = setInterval(poll, 60000);
-        }
-      } catch (error) {
-        console.warn('Polling health check failed:', error);
-        pollCount++;
-
-        if (pollCount >= maxPollsAt30s) {
-          clearInterval(interval30s);
-          interval60s = setInterval(poll, 60000);
-        }
-      }
-    };
-
-    let interval30s = setInterval(poll, 30000);
-    let interval60s: NodeJS.Timeout;
-
-    // Cleanup on unmount
-    return () => {
-      clearInterval(interval30s);
-      clearInterval(interval60s);
-      setPollingActive(false);
-    };
-  };
+  }, [backendStatus]);
 
   // Listen for backend recovery
   useEffect(() => {
     const unsubscribe = backendEvents.on('backend-online', () => {
       setIsMaintenanceMode(false);
-      setPollingActive(false);
       toast({
         type: 'success',
         title: 'Service Restored',
@@ -416,13 +359,13 @@ export default function LoginPage() {
                   right: '12px',
                   top: '50%',
                   transform: 'translateY(-50%)',
+                  color: 'var(--t3)',
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  color: 'var(--t2)',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  justifyContent: 'center'
                 }}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -444,24 +387,24 @@ export default function LoginPage() {
           >
             {isLoading ? (
               <>
-                <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
                 Signing in...
               </>
             ) : (
               <>
                 Sign In
-                <ArrowRight size={18} />
+                <ArrowRight size={16} />
               </>
             )}
           </button>
         </form>
 
         {/* Footer */}
-        <div style={{ marginTop: '24px', textAlign: 'center' }}>
-          <p style={{ fontSize: '13px', color: 'var(--t2)' }}>
+        <div style={{ marginTop: '26px', textAlign: 'center' }}>
+          <p style={{ fontSize: '14px', color: 'var(--t2)' }}>
             Don't have an account?{' '}
             <Link href="/register" style={{ fontWeight: 600, color: 'var(--ac)', textDecoration: 'none' }}>
-              Contact Admin
+              Create an account
             </Link>
           </p>
         </div>

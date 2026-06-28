@@ -1,16 +1,15 @@
 'use client';
 
-import { useEffect, ReactNode } from 'react';
+import { useEffect, useRef, ReactNode } from 'react';
 import { checkBackendHealth } from '@/lib/api';
 import { useSystemStatusStore } from '@/stores/system-status.store';
 
 export function HealthCheckProvider({ children }: { children: ReactNode }) {
   const status = useSystemStatusStore((state) => state.status);
   const outageDuration = useSystemStatusStore((state) => state.outageDuration);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
     const performHealthCheck = async () => {
       try {
         await checkBackendHealth();
@@ -19,6 +18,12 @@ export function HealthCheckProvider({ children }: { children: ReactNode }) {
         console.warn('Background health check failed', error);
       }
     };
+
+    // Clear any existing timer before creating a new one
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
 
     // Calculate polling interval based on adaptive strategy
     let pollingInterval = 30000; // default 30 seconds
@@ -34,12 +39,18 @@ export function HealthCheckProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Initial check on mount
+    // Initial check on mount or when status/duration changes
+    // We only perform the initial check if it's the first time or status changed to offline
     performHealthCheck();
 
-    intervalId = setInterval(performHealthCheck, pollingInterval);
+    timerRef.current = setInterval(performHealthCheck, pollingInterval);
 
-    return () => clearInterval(intervalId);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   }, [status, outageDuration]);
 
   return <>{children}</>;
