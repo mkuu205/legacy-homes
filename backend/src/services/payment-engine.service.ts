@@ -17,7 +17,6 @@ export class PaymentEngineService {
   }
 
   private initializeProviders(): void {
-    // Initialize Pesapal
     try {
       const pesapal = new PesapalProvider();
       if (pesapal.isConfigured()) {
@@ -30,13 +29,11 @@ export class PaymentEngineService {
       logger.error('[PAYMENT ENGINE] Failed to initialize Pesapal:', error);
     }
 
-    // Initialize TUMA
     try {
       const tuma = new TumaProvider();
       if (tuma.isConfigured()) {
         this.providers.set('TUMA', tuma);
         logger.info('[PAYMENT ENGINE] TUMA provider initialized successfully');
-        logger.info(`[PAYMENT ENGINE] TUMA using API: ${process.env.TUMA_API_URL || 'https://api.tuma.co.ke'}`);
       } else {
         const config = tuma.getConfigStatus();
         const missing = [];
@@ -53,9 +50,6 @@ export class PaymentEngineService {
     logger.info(`[PAYMENT ENGINE] Configured providers: ${configured.join(', ') || 'NONE'}`);
   }
 
-  /**
-   * Get a payment provider by type
-   */
   getProvider(providerType: PaymentProviderType): PaymentProvider | null {
     const provider = this.providers.get(providerType);
     if (!provider) {
@@ -65,9 +59,6 @@ export class PaymentEngineService {
     return provider;
   }
 
-  /**
-   * Get all configured providers
-   */
   getConfiguredProviders(): PaymentProviderType[] {
     const configured: PaymentProviderType[] = [];
     for (const [name, provider] of this.providers) {
@@ -78,9 +69,6 @@ export class PaymentEngineService {
     return configured;
   }
 
-  /**
-   * Initiate a payment through a specific provider
-   */
   async initiatePayment(
     billId: string,
     residentId: string,
@@ -90,7 +78,6 @@ export class PaymentEngineService {
     amount: number
   ) {
     try {
-      // 1. Get bill and resident details
       const bill = await prisma.bill.findUnique({
         where: { id: billId },
         include: { resident: true },
@@ -112,13 +99,11 @@ export class PaymentEngineService {
         throw new Error(`Amount exceeds outstanding balance of KES ${bill.balance}`);
       }
 
-      // 2. Resolve phone number
       let finalPhoneNumber = phoneNumber || bill.resident.phone;
       if (!finalPhoneNumber) {
         throw new Error('Phone number not found for resident.');
       }
 
-      // 3. Create payment record
       const normalizedMethod = paymentMethod === 'CARD' ? PaymentMethodType.VISA : paymentMethod;
 
       const payment = await prisma.payment.create({
@@ -136,17 +121,14 @@ export class PaymentEngineService {
 
       logger.info(`[PAYMENT ENGINE] Created payment record: ${payment.id} for bill ${bill.billNumber}`);
 
-      // 4. Get provider
       const paymentProvider = this.getProvider(provider);
       if (!paymentProvider) {
         const configured = this.getConfiguredProviders();
         throw new Error(
-          `Provider ${provider} not configured. Available providers: ${configured.join(', ') || 'NONE'}. ` +
-          `Please check your environment variables.`
+          `Provider ${provider} not configured. Available providers: ${configured.join(', ') || 'NONE'}`
         );
       }
 
-      // 5. Initiate payment through provider
       const result = await paymentProvider.initiatePayment({
         amount,
         phoneNumber: finalPhoneNumber,
@@ -173,21 +155,22 @@ export class PaymentEngineService {
         throw new Error(result.error || 'Payment initiation failed');
       }
 
-      // 6. Update payment with provider references
+      const updateData: any = {
+        providerOrderId: result.orderId,
+        providerPayload: result as any,
+        merchantRequestId: result.orderId,
+      };
+
+      if (result.providerData) {
+        updateData.providerPayload = {
+          ...result.providerData,
+          checkoutUrl: result.checkoutUrl,
+        };
+      }
+
       await prisma.payment.update({
         where: { id: payment.id },
-        data: {
-          providerOrderId: result.orderId,
-          providerPayload: result as any,
-          merchantRequestId: result.orderId,
-          // For TUMA, store both IDs
-          ...(result.providerData && {
-            providerPayload: {
-              ...result.providerData,
-              checkoutUrl: result.checkoutUrl,
-            },
-          }),
-        },
+        data: updateData,
       });
 
       logger.info(`[PAYMENT ENGINE] Payment initiated successfully: ${payment.id}. Provider: ${provider}`);
@@ -207,9 +190,6 @@ export class PaymentEngineService {
     }
   }
 
-  /**
-   * Verify payment status
-   */
   async verifyPaymentStatus(paymentId: string): Promise<{
     status: PaymentStatus;
     message: string;
@@ -224,7 +204,6 @@ export class PaymentEngineService {
         throw new Error('Payment not found');
       }
 
-      // If already successful, just return
       if (payment.status === PaymentStatus.SUCCESSFUL) {
         return {
           status: PaymentStatus.SUCCESSFUL,
@@ -238,7 +217,6 @@ export class PaymentEngineService {
         throw new Error(`Provider ${payment.provider} not configured`);
       }
 
-      // Verify with provider
       const result = await provider.verifyPaymentStatus({
         transactionId: payment.providerTransactionId || undefined,
         orderId: payment.providerOrderId || undefined,
@@ -256,7 +234,6 @@ export class PaymentEngineService {
           status = PaymentStatus.PENDING;
       }
 
-      // If status is SUCCESSFUL, process it
       if (status === PaymentStatus.SUCCESSFUL) {
         await this.processSuccessfulPayment(payment.id, result.providerData);
       } else if (status === PaymentStatus.FAILED) {
@@ -284,9 +261,6 @@ export class PaymentEngineService {
     }
   }
 
-  /**
-   * Handle provider callback (IPN)
-   */
   async handleCallback(
     provider: PaymentProviderType,
     payload: Record<string, any>,
@@ -296,7 +270,6 @@ export class PaymentEngineService {
     let auditId: string | null = null;
 
     try {
-      // 1. Audit every callback request
       const audit = await prisma.callbackAudit.create({
         data: {
           provider,
@@ -314,7 +287,6 @@ export class PaymentEngineService {
         throw new Error(`Provider ${provider} not configured`);
       }
 
-      // Handle different providers
       if (provider === 'PESAPAL') {
         return await this.handlePesapalCallback(payload, auditId);
       } else if (provider === 'TUMA') {
@@ -344,9 +316,6 @@ export class PaymentEngineService {
     }
   }
 
-  /**
-   * Handle Pesapal callback
-   */
   private async handlePesapalCallback(payload: Record<string, any>, auditId: string) {
     const orderTrackingId = payload.OrderTrackingId || payload.order_tracking_id;
 
@@ -355,7 +324,6 @@ export class PaymentEngineService {
       return { success: false, message: 'Missing OrderTrackingId' };
     }
 
-    // Idempotency Check
     const payment = await prisma.payment.findFirst({
       where: { providerOrderId: orderTrackingId },
     });
@@ -370,11 +338,9 @@ export class PaymentEngineService {
       return { success: true, message: 'Already processed', paymentId: payment.id };
     }
 
-    // Always verify with official API
     logger.info(`[PESAPAL CALLBACK] Verifying status for payment ${payment.id}`);
     const verification = await this.verifyPaymentStatus(payment.id);
 
-    // Update Audit
     await prisma.callbackAudit.update({
       where: { id: auditId },
       data: {
@@ -392,24 +358,18 @@ export class PaymentEngineService {
     };
   }
 
-  /**
-   * Handle TUMA callback
-   */
   private async handleTumaCallback(payload: Record<string, any>, auditId: string) {
     const merchantRequestId = payload.merchant_request_id;
     const checkoutRequestId = payload.checkout_request_id;
     const resultCode = payload.result_code;
-    const mpesaReceiptNumber = payload.mpesa_receipt_number;
 
     logger.info(`[TUMA CALLBACK] Merchant: ${merchantRequestId}, Checkout: ${checkoutRequestId}, Result: ${resultCode}`);
 
-    // Find payment by merchant_request_id or checkout_request_id
     const payment = await prisma.payment.findFirst({
       where: {
         OR: [
           { providerOrderId: merchantRequestId },
           { merchantRequestId: merchantRequestId },
-          { providerPayload: { path: ['merchant_request_id'], equals: merchantRequestId } },
         ],
       },
     });
@@ -424,14 +384,11 @@ export class PaymentEngineService {
       return { success: true, message: 'Already processed', paymentId: payment.id };
     }
 
-    // Process based on result_code
-    // Per Tuma docs: result_code = 0 means success
     const isSuccess = resultCode === 0;
 
     if (isSuccess) {
-      // Process successful payment
       await this.processSuccessfulPayment(payment.id, {
-        confirmation_code: mpesaReceiptNumber,
+        confirmation_code: payload.mpesa_receipt_number,
         amount: payload.amount,
         merchant_request_id: merchantRequestId,
         checkout_request_id: checkoutRequestId,
@@ -440,9 +397,8 @@ export class PaymentEngineService {
         ...payload,
       });
 
-      logger.info(`[TUMA CALLBACK] Payment ${payment.id} processed successfully. Receipt: ${mpesaReceiptNumber}`);
+      logger.info(`[TUMA CALLBACK] Payment ${payment.id} processed successfully.`);
     } else {
-      // Update as failed
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
@@ -458,7 +414,6 @@ export class PaymentEngineService {
       logger.warn(`[TUMA CALLBACK] Payment ${payment.id} failed. Reason: ${payload.result_desc}`);
     }
 
-    // Update Audit
     await prisma.callbackAudit.update({
       where: { id: auditId },
       data: {
@@ -467,7 +422,6 @@ export class PaymentEngineService {
         processingResult: JSON.stringify({
           success: isSuccess,
           status: isSuccess ? PaymentStatus.SUCCESSFUL : PaymentStatus.FAILED,
-          receiptNumber: mpesaReceiptNumber,
         }),
       },
     });
@@ -476,14 +430,10 @@ export class PaymentEngineService {
       success: isSuccess,
       paymentId: payment.id,
       status: isSuccess ? PaymentStatus.SUCCESSFUL : PaymentStatus.FAILED,
-      receiptNumber: mpesaReceiptNumber,
       message: payload.result_desc || (isSuccess ? 'Payment successful' : 'Payment failed'),
     };
   }
 
-  /**
-   * Process successful payment
-   */
   private async processSuccessfulPayment(paymentId: string, providerPayload: any) {
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
@@ -499,7 +449,6 @@ export class PaymentEngineService {
 
     const finalAmount = providerPayload.amount || payment.amount;
 
-    // 1. Update Payment record
     await prisma.payment.update({
       where: { id: paymentId },
       data: {
@@ -512,11 +461,9 @@ export class PaymentEngineService {
         verificationTimestamp: new Date(),
         verifiedBy: 'PROVIDER_API',
         receiptNumber: confirmationCode,
-        paidAt: new Date(),
       },
     });
 
-    // 2. Update Bill record
     const updatedAmountPaid = payment.bill.amountPaid + finalAmount;
     const newBalance = Math.max(0, payment.bill.totalAmount - updatedAmountPaid);
     const newBillStatus = newBalance <= 0 ? BillStatus.PAID : BillStatus.PARTIAL;
@@ -531,16 +478,14 @@ export class PaymentEngineService {
       },
     });
 
-    logger.info(`[PAYMENT ENGINE] Bill ${payment.bill.billNumber} updated to ${newBillStatus}. New balance: ${newBalance}`);
+    logger.info(`[PAYMENT ENGINE] Bill ${payment.bill.billNumber} updated to ${newBillStatus}`);
 
-    // 3. Generate Receipt
     try {
       await receiptService.generateReceipt(payment.id);
     } catch (error) {
       logger.error('[PAYMENT ENGINE] Receipt generation failed:', error);
     }
 
-    // 4. Send Notification
     try {
       await notificationService.sendPaymentSuccessNotification(
         payment.residentId,
@@ -551,13 +496,9 @@ export class PaymentEngineService {
       logger.error('[PAYMENT ENGINE] Notification failed:', error);
     }
 
-    // 5. Socket.IO Broadcast
     this.broadcastUpdates(payment.residentId, payment.billId, payment.id);
   }
 
-  /**
-   * Broadcast updates via Socket.IO
-   */
   private broadcastUpdates(residentId: string, billId: string, paymentId: string) {
     const room = `user_${residentId}`;
     io.to(room).emit('payment_completed', { paymentId, billId });
@@ -567,14 +508,10 @@ export class PaymentEngineService {
     io.to('admin_room').emit('dashboard_updated');
   }
 
-  /**
-   * Check system health
-   */
   async checkSystemHealth() {
     const services: Record<string, any> = {};
     const startTime = Date.now();
 
-    // 1. Backend API
     services.backendApi = {
       status: 'ONLINE',
       message: 'API is responding correctly',
@@ -582,7 +519,6 @@ export class PaymentEngineService {
       version: process.env.npm_package_version || '1.0.0'
     };
 
-    // 2. Database
     try {
       const dbStart = Date.now();
       await prisma.$queryRaw`SELECT 1`;
@@ -598,7 +534,6 @@ export class PaymentEngineService {
       };
     }
 
-    // 3. Payment Providers
     for (const [name, provider] of this.providers) {
       const isConfigured = provider.isConfigured();
       services[`${name.toLowerCase()}Api`] = {
@@ -608,22 +543,6 @@ export class PaymentEngineService {
       };
     }
 
-    // 4. Environment Variables
-    const requiredVars = [
-      'DATABASE_URL',
-      'JWT_ACCESS_SECRET',
-      'JWT_REFRESH_SECRET',
-      'PESAPAL_CONSUMER_KEY',
-      'PESAPAL_CONSUMER_SECRET',
-      'BREVO_API_KEY'
-    ];
-    const missingVars = requiredVars.filter(v => !process.env[v]);
-    
-    services.environmentVariables = {
-      status: missingVars.length === 0 ? 'ONLINE' : 'WARNING',
-      message: missingVars.length === 0 ? 'All critical environment variables are set' : `Missing: ${missingVars.join(', ')}`,
-    };
-
     return {
       status: 'ONLINE',
       timestamp: new Date().toISOString(),
@@ -632,4 +551,4 @@ export class PaymentEngineService {
       services
     };
   }
-            }
+}
