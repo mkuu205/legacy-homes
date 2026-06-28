@@ -33,7 +33,8 @@ export default function SystemCheckPage() {
     queryKey: ['system-health'],
     queryFn: async () => {
       const res = await api.get('/payments/system-check');
-      return res.data.data;
+      // The backend returns { success: true, data: { ...healthData } }
+      return res.data.data || res.data;
     },
     refetchInterval: 30000,
   });

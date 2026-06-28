@@ -415,13 +415,112 @@ export class PaymentEngineService {
   }
 
   async checkSystemHealth() {
-    const results: Record<string, any> = {};
-    for (const [name, provider] of this.providers) {
-      results[name] = {
-        configured: provider.isConfigured(),
-        healthy: await (provider as any).validateCredentials?.() ?? true,
+    const services: Record<string, any> = {};
+    const startTime = Date.now();
+
+    // 1. Backend API (Self)
+    services.backendApi = {
+      status: 'ONLINE',
+      message: 'API is responding correctly',
+      responseTime: `${Date.now() - startTime}ms`,
+      version: process.env.npm_package_version || '1.0.0'
+    };
+
+    // 2. Database (PostgreSQL)
+    try {
+      const dbStart = Date.now();
+      await prisma.$queryRaw`SELECT 1`;
+      services.database = {
+        status: 'ONLINE',
+        message: 'Database connection is healthy',
+        responseTime: `${Date.now() - dbStart}ms`
+      };
+    } catch (error) {
+      services.database = {
+        status: 'OFFLINE',
+        message: error instanceof Error ? error.message : 'Database connection failed'
       };
     }
-    return results;
+
+    // 3. Pesapal API
+    const pesapal = this.getProvider('PESAPAL');
+    if (pesapal) {
+      const isConfigured = pesapal.isConfigured();
+      let apiStatus = 'OFFLINE';
+      let apiMessage = 'Pesapal is not configured';
+      let responseTime = undefined;
+
+      if (isConfigured) {
+        try {
+          const pStart = Date.now();
+          // @ts-ignore - calling private/internal method for health check
+          await (pesapal as any).getAccessToken();
+          apiStatus = 'ONLINE';
+          apiMessage = 'Pesapal API is reachable and credentials are valid';
+          responseTime = `${Date.now() - pStart}ms`;
+        } catch (error) {
+          apiStatus = 'WARNING';
+          apiMessage = `Pesapal API error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        }
+      }
+
+      services.pesapalApi = {
+        status: apiStatus,
+        message: apiMessage,
+        responseTime,
+        configSummary: {
+          consumerKey: !!process.env.PESAPAL_CONSUMER_KEY,
+          consumerSecret: !!process.env.PESAPAL_CONSUMER_SECRET,
+          ipnId: !!process.env.PESAPAL_IPN_ID,
+          callbackUrl: !!process.env.PESAPAL_CALLBACK_URL
+        }
+      };
+    }
+
+    // 4. Payment Callback Endpoint
+    const callbackUrl = process.env.PESAPAL_CALLBACK_URL;
+    services.callbackEndpoint = {
+      status: callbackUrl ? 'ONLINE' : 'OFFLINE',
+      message: callbackUrl ? `Callback URL is set to ${callbackUrl}` : 'Callback URL is not configured',
+      configSummary: {
+        urlSet: !!callbackUrl,
+        ipnIdSet: !!process.env.PESAPAL_IPN_ID
+      }
+    };
+
+    // 5. Email Service (Brevo)
+    const brevoKey = process.env.BREVO_API_KEY;
+    services.emailService = {
+      status: brevoKey ? 'ONLINE' : 'OFFLINE',
+      message: brevoKey ? 'Brevo API key is configured' : 'Brevo API key is missing',
+      configSummary: {
+        apiKey: !!brevoKey,
+        senderEmail: true // Hardcoded in email.ts
+      }
+    };
+
+    // 6. Environment Variables
+    const requiredVars = [
+      'DATABASE_URL',
+      'JWT_SECRET',
+      'PESAPAL_CONSUMER_KEY',
+      'PESAPAL_CONSUMER_SECRET',
+      'BREVO_API_KEY'
+    ];
+    const missingVars = requiredVars.filter(v => !process.env[v]);
+    
+    services.environmentVariables = {
+      status: missingVars.length === 0 ? 'ONLINE' : (missingVars.length === requiredVars.length ? 'OFFLINE' : 'WARNING'),
+      message: missingVars.length === 0 ? 'All critical environment variables are set' : `Missing: ${missingVars.join(', ')}`,
+      configSummary: requiredVars.reduce((acc, v) => ({ ...acc, [v]: !!process.env[v] }), {})
+    };
+
+    return {
+      status: 'ONLINE',
+      timestamp: new Date().toISOString(),
+      serverTime: new Date().toISOString(),
+      timezone: 'Africa/Nairobi',
+      services
+    };
   }
 }
