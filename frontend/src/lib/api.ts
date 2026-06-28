@@ -15,6 +15,13 @@ if (!API_URL) {
 
 const HEALTH_ENDPOINT = `${API_URL}/health`;
 
+// --- DEDICATED HEALTH API CLIENT (no interceptors) ---
+const healthApi = axios.create({
+  baseURL: API_URL,
+  timeout: 8000,
+  headers: { 'Content-Type': 'application/json' },
+});
+
 // --- TYPES ---
 export type BackendStatus = 
   | 'ONLINE'
@@ -147,6 +154,11 @@ export const api: AxiosInstance = axios.create({
 
 // --- REQUEST INTERCEPTOR ---
 api.interceptors.request.use((config) => {
+  // Skip auth for health endpoints
+  if (config.url?.includes('/health')) {
+    return config;
+  }
+
   if (typeof window !== 'undefined') {
     const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
     const sessionId = sessionStorage.getItem('sessionId') || localStorage.getItem('sessionId');
@@ -180,7 +192,7 @@ const isBackendUnreachable = (error: AxiosError): boolean => {
   
   // Gateway errors (backend unreachable)
   if (error.response?.status === 502) return true;
-  if (error.response?.status === 503) return true;
+  if (error.response?.status === 503 && !error.response?.data?.maintenance) return true;
   if (error.response?.status === 504) return true;
   
   return false;
@@ -218,25 +230,26 @@ const updateStoreStatus = (status: BackendStatus, details?: any) => {
 // --- RESPONSE INTERCEPTOR ---
 api.interceptors.response.use(
   (response) => {
-    // Successful response - backend is online
-    // ONLY update to ONLINE if it's NOT a health check or if health check was successful
-    // This prevents random successful requests from clearing maintenance state prematurely
+    // Skip health checks - let checkBackendHealth handle status
+    if (response.config.url?.includes('/health')) {
+      return response;
+    }
+
+    // Successful non-health response - backend is online
     const store = useSystemStatusStore.getState();
-    const isHealthCheck = response.config.url?.includes('/health');
-    
     if (store.status !== 'ONLINE' && store.status !== 'SLOW') {
-      // If it's a health check, we let checkBackendHealth handle it
-      // If it's a regular request that succeeded, it's a strong indicator we're online
-      if (!isHealthCheck) {
-        updateStoreStatus('ONLINE');
-        backendEvents.emit('backend-online');
-        replayQueuedRequests().catch(console.error);
-      }
+      updateStoreStatus('ONLINE');
+      // Only emit online status, no replay here - let health check handle it
     }
     return response;
   },
   async (error: AxiosError) => {
     const originalRequest = error.config as any;
+
+    // Skip health check errors - they're handled in checkBackendHealth
+    if (originalRequest?.url?.includes('/health')) {
+      return Promise.reject(error);
+    }
 
     // Check if browser is offline
     if (typeof window !== 'undefined' && !navigator.onLine) {
@@ -247,6 +260,13 @@ api.interceptors.response.use(
     // Check for maintenance mode
     if (isMaintenanceMode(error)) {
       updateStoreStatus('MAINTENANCE', error.response?.data);
+      return Promise.reject(error);
+    }
+
+    // Handle 429 rate limiting - DON'T treat as offline
+    if (error.response?.status === 429) {
+      console.warn('Rate limited - backend is alive but busy');
+      // Keep current status, don't change to OFFLINE
       return Promise.reject(error);
     }
 
@@ -329,7 +349,7 @@ api.interceptors.response.use(
 
         // Check if backend is reachable by making a health check
         try {
-          await axios.get(HEALTH_ENDPOINT, { timeout: 3000 });
+          await healthApi.get('/health', { timeout: 3000 });
           // Backend is reachable - genuine 401
           if (isGenuine401(refreshError as AxiosError)) {
             console.warn('Genuine 401 - logging out');
@@ -425,7 +445,6 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
     }
 
     // Update status to checking ONLY if we're not already in an outage state
-    // This prevents the maintenance screen from flickering/unmounting during polls
     const isOutage = currentStatus === 'OFFLINE' || 
                     currentStatus === 'MAINTENANCE' || 
                     currentStatus === 'NETWORK_OFFLINE' || 
@@ -435,7 +454,8 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
       updateStoreStatus('CHECKING');
     }
 
-    const response = await axios.get(HEALTH_ENDPOINT, {
+    // Use dedicated health API client - no interceptors, no auth
+    const response = await healthApi.get('/health', {
       timeout: 8000,
     });
     
@@ -481,10 +501,11 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
       backendStartedAt: healthData.startedAt ? new Date(healthData.startedAt).getTime() : undefined,
     });
     
-    // If online, replay queued requests
+    // ONLY emit backend-online here, nowhere else
     if (status === 'ONLINE' || status === 'SLOW') {
-      await replayQueuedRequests();
       backendEvents.emit('backend-online');
+      // Replay queued requests ONLY here, not in interceptor
+      await replayQueuedRequests();
     }
     
     // Record successful connection
@@ -512,6 +533,16 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
           message: data?.message || 'Service under maintenance',
           ...data?.maintenance
         }
+      };
+    }
+    
+    // Handle 429 specifically - don't change status
+    if (axiosError.response?.status === 429) {
+      console.warn('Health check rate limited - backend is alive');
+      // Return ONLINE status but don't change state
+      return {
+        status: 'ONLINE',
+        latency,
       };
     }
     
