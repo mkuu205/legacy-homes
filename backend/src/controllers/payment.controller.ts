@@ -133,7 +133,7 @@ export class PaymentController {
       );
       
       // Redirect to success or failure page
-      if (result.success) {
+      if (result.success && result.status === 'SUCCESSFUL') {
         const successUrl = process.env.PAYMENT_SUCCESS_URL || 'https://legacy-homes-frontend.vercel.app/payment/success';
         logger.info(`[PESAPAL CALLBACK] Redirecting to success: ${successUrl}`);
         res.redirect(`${successUrl}?paymentId=${result.paymentId}&tracking=${payload.OrderTrackingId}`);

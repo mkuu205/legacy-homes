@@ -480,7 +480,7 @@ export class PesapalProvider implements PaymentProvider {
         transactionId: response.confirmation_code || orderTrackingId,
         orderId: orderTrackingId,
         amount: response.amount,
-        message: response.message || statusDesc,
+        message: mappedStatus === PaymentStatus.SUCCESSFUL ? 'Payment successful' : response.message || statusDesc,
         timestamp: response.created_date ? new Date(response.created_date) : new Date(),
         providerData: {
           payment_method: response.payment_method,
