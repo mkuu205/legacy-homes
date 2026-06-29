@@ -646,12 +646,14 @@ export class PaymentEngineService {
         message: isConfigured ? 'TUMA provider is configured' : 'TUMA provider is not configured',
         configured: isConfigured,
       };
+      logger.info(`[PAYMENT ENGINE] TUMA health check: ${services.tumaApi.status} - ${services.tumaApi.message}`);
     } else {
       services.tumaApi = {
         status: 'OFFLINE',
         message: 'TUMA provider not initialized',
         configured: false,
       };
+      logger.warn(`[PAYMENT ENGINE] TUMA health check: ${services.tumaApi.status} - ${services.tumaApi.message}`);
     }
 
     const callbackUrl = process.env.PAYMENT_CALLBACK_URL || process.env.PESAPAL_CALLBACK_URL;
