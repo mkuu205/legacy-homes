@@ -32,6 +32,9 @@ router.put('/read-all', authenticate, notificationController.markAllAsRead.bind(
 
 router.delete('/delete-all', authenticate, notificationController.deleteAllMyNotifications.bind(notificationController));
 
+router.post('/register-device', authenticate, notificationController.registerDevice.bind(notificationController));
+router.post('/remove-device', authenticate, notificationController.removeDevice.bind(notificationController));
+
 // ─── Parameterized routes ────────────────────────────────────────────────────
 
 router.patch('/:id/read', authenticate, notificationController.markAsRead.bind(notificationController));

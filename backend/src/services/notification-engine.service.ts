@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma';
 import { logger } from '../utils/logger';
 import { NotificationType, NotificationChannel, NotificationStatus } from '@prisma/client';
+import pushNotificationService from './pushNotification.service';
 
 export class NotificationEngineService {
   /**
@@ -62,6 +63,13 @@ export class NotificationEngineService {
       }
 
       logger.info(`Notification created: ${notification.id} for ${users.length} users`);
+
+      // Trigger Firebase Push Notifications asynchronously
+      if (users.length > 0) {
+        this.triggerPushNotifications(users.map(u => u.id), title, message, type).catch(err => {
+          logger.error('Error triggering push notifications:', err);
+        });
+      }
 
       return {
         notification,
@@ -295,6 +303,41 @@ export class NotificationEngineService {
     } catch (error) {
       logger.error('Error sending receipt ready notification:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Internal helper to route push notifications based on type
+   */
+  private async triggerPushNotifications(userIds: string[], title: string, message: string, type: NotificationType) {
+    for (const userId of userIds) {
+      try {
+        switch (type) {
+          case NotificationType.PAYMENT_SUCCESSFUL:
+            await pushNotificationService.sendPaymentSuccess(userId, 0); // Amount can be extracted if needed
+            break;
+          case NotificationType.PAYMENT_FAILED:
+            await pushNotificationService.sendPaymentFailed(userId, 0);
+            break;
+          case NotificationType.BILL_GENERATED:
+            await pushNotificationService.sendBillGenerated(userId, 'current month', 0);
+            break;
+          case NotificationType.BILL_DUE_SOON:
+          case NotificationType.BILLING_REMINDER:
+          case NotificationType.PAYMENT_REMINDER:
+            await pushNotificationService.sendPaymentReminder(userId, 0, 'soon');
+            break;
+          case NotificationType.MAINTENANCE:
+          case NotificationType.WATER_OUTAGE:
+            await pushNotificationService.sendMaintenanceNotice(userId, message);
+            break;
+          default:
+            // For other types, use a generic sender if needed or just skip
+            break;
+        }
+      } catch (err) {
+        logger.error(`Failed to send push notification to user ${userId}:`, err);
+      }
     }
   }
 }

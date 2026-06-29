@@ -188,6 +188,7 @@ model User {
   meterReadings     MeterReading[]
   assignedTickets   Ticket[]           @relation("AssignedTickets")
   paymentMethods    PaymentMethod[]
+  deviceTokens      DeviceToken[]
 
   @@map("users")
 }
@@ -531,4 +532,24 @@ model CallbackAudit {
   errorMessage     String?
 
   @@map("callback_audits")
+}
+
+// ─────────────────────────────────────────────
+// DEVICE TOKENS (For FCM)
+// ─────────────────────────────────────────────
+
+model DeviceToken {
+  id         String   @id @default(uuid())
+  residentId String
+  token      String   @unique
+  platform   String?
+  deviceName String?
+  lastSeenAt DateTime @default(now())
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  resident   User     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  @@map("device_tokens")
 }

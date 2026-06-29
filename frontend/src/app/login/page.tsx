@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { Eye, EyeOff, Loader2, ArrowRight, AlertCircle, RefreshCw, Bell } from 'lucide-react';
 import { api, getErrorMessage, checkBackendHealth, backendEvents } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
+import { requestForToken } from '@/lib/firebase';
 import { useSystemStatusStore } from '@/stores/system-status.store';
 import { toast } from '@/components/ui/toaster';
 
@@ -112,7 +113,21 @@ export default function LoginPage() {
       const { user, tokens } = res.data.data;
       setAuth(user, tokens.accessToken, tokens.refreshToken);
       toast({ type: 'success', title: 'Welcome back!', description: `Hello, ${user.fullName}` });
+
+      // FCM Token Registration
       if (user.role === 'RESIDENT') {
+        try {
+          const token = await requestForToken();
+          if (token) {
+            await api.post('/notifications/register-device', {
+              token,
+              platform: 'web',
+              deviceName: navigator.userAgent,
+            });
+          }
+        } catch (fcmError) {
+          console.error('FCM Registration failed:', fcmError);
+        }
         router.push('/dashboard');
       } else {
         router.push('/admin');

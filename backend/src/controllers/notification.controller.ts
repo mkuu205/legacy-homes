@@ -1,6 +1,9 @@
 import { Response, NextFunction } from 'express';
 import { notificationService } from '../services/notification.service';
 import { AuthRequest } from '../middleware/auth';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export class NotificationController {
   async send(req: AuthRequest, res: Response, next: NextFunction) {
@@ -104,6 +107,50 @@ export class NotificationController {
       const result = await notificationService.adminDeleteAllNotifications();
       res.json({ success: true, ...result });
     } catch (error) { next(error); }
+  }
+
+  async registerDevice(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { token, platform, deviceName } = req.body;
+      const residentId = req.user!.userId;
+
+      const deviceToken = await prisma.deviceToken.upsert({
+        where: { token },
+        update: {
+          residentId,
+          platform,
+          deviceName,
+          active: true,
+          lastSeenAt: new Date(),
+        },
+        create: {
+          token,
+          residentId,
+          platform,
+          deviceName,
+          active: true,
+        },
+      });
+
+      res.json({ success: true, data: deviceToken });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async removeDevice(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { token } = req.body;
+      
+      await prisma.deviceToken.update({
+        where: { token },
+        data: { active: false },
+      });
+
+      res.json({ success: true, message: 'Device token removed' });
+    } catch (error) {
+      next(error);
+    }
   }
 }
 
