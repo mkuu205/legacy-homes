@@ -1,4 +1,6 @@
-import * as admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
+import type { Message, MulticastMessage } from 'firebase-admin/messaging';
 import { PrismaClient } from '@prisma/client';
 import winston from 'winston';
 
@@ -15,9 +17,13 @@ class FirebaseService {
     try {
       if (process.env.FIREBASE_SERVICE_ACCOUNT) {
         const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-        });
+        
+        if (getApps().length === 0) {
+          initializeApp({
+            credential: cert(serviceAccount),
+          });
+        }
+        
         this.initialized = true;
         winston.info('Firebase Admin initialized successfully');
       } else {
@@ -32,7 +38,7 @@ class FirebaseService {
     if (!this.initialized) return;
 
     try {
-      const message: admin.messaging.Message = {
+      const message: Message = {
         token,
         notification: {
           title,
@@ -46,7 +52,7 @@ class FirebaseService {
         },
       };
 
-      await admin.messaging().send(message);
+      await getMessaging().send(message);
     } catch (error: any) {
       winston.error(`Error sending Firebase message to token ${token}:`, error);
       // Remove invalid tokens automatically
@@ -60,7 +66,7 @@ class FirebaseService {
     if (!this.initialized || tokens.length === 0) return;
 
     try {
-      const message: admin.messaging.MulticastMessage = {
+      const message: MulticastMessage = {
         tokens,
         notification: {
           title,
@@ -74,7 +80,7 @@ class FirebaseService {
         },
       };
 
-      const response = await admin.messaging().sendEachForMulticast(message);
+      const response = await getMessaging().sendEachForMulticast(message);
       
       if (response.failureCount > 0) {
         const invalidTokens: string[] = [];
