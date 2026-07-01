@@ -21,6 +21,10 @@ router.post('/register', authLimiter, authController.register.bind(authControlle
 router.post('/verify-otp', authLimiter, authController.verifyOTP.bind(authController));
 router.post('/resend-otp', otpLimiter, authController.resendOTP.bind(authController));
 router.post('/login', authLimiter, authController.login.bind(authController));
+
+// Outage notification (Public)
+import { outageController } from '../controllers/outage.controller';
+router.post('/notify-outage', outageController.subscribe.bind(outageController));
 router.post('/refresh-token', authController.refreshToken.bind(authController));
 router.post('/logout', authController.logout.bind(authController));
 router.post('/forgot-password', authLimiter, authController.forgotPassword.bind(authController));

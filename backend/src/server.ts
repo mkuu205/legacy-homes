@@ -9,6 +9,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import rateLimit from 'express-rate-limit';
 
 import { logger } from './utils/logger';
+import { outageService } from './services/outage.service';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
 
@@ -280,6 +281,9 @@ httpServer.listen(PORT, () => {
   logger.info(`📞 TUMA Callback URL: ${process.env.PAYMENT_CALLBACK_URL || 'NOT SET'}`);
   logger.info(`📞 PESAPAL Callback URL: ${process.env.PESAPAL_IPN_URL || 'NOT SET'}`);
   logger.info(`📞 PESAPAL Consumer Key: ${process.env.PESAPAL_CONSUMER_KEY ? '✅ Set' : '❌ Missing'}`);
+  
+  // Start the outage recovery monitor
+  outageService.startRecoveryMonitor();
 });
 
 export default app;

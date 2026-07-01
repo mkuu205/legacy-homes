@@ -239,7 +239,9 @@ api.interceptors.response.use(
     const store = useSystemStatusStore.getState();
     if (store.status !== 'ONLINE' && store.status !== 'SLOW') {
       updateStoreStatus('ONLINE');
-      // Only emit online status, no replay here - let health check handle it
+      backendEvents.emit('backend-online');
+      replayQueuedRequests().catch(console.error);
+      processOutageSubscriptionQueue().catch(console.error);
     }
     return response;
   },
@@ -432,6 +434,40 @@ export const clearPendingRequests = (): void => {
   isReplaying = false;
 };
 
+/**
+ * Process any outage subscriptions that were queued while the backend was offline
+ */
+export const processOutageSubscriptionQueue = async (): Promise<void> => {
+  if (typeof window === 'undefined') return;
+  
+  const queue = JSON.parse(localStorage.getItem('outage_subscription_queue') || '[]');
+  if (queue.length === 0) return;
+  
+  console.log(`Processing ${queue.length} queued outage subscriptions...`);
+  
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://legacy-homes.onrender.com/api';
+  
+  for (const item of queue) {
+    try {
+      const res = await fetch(`${API_URL}/auth/notify-outage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: item.email }),
+      });
+      
+      if (res.ok) {
+        console.log(`Successfully synced queued subscription for ${item.email}`);
+        // Remove from queue
+        const currentQueue = JSON.parse(localStorage.getItem('outage_subscription_queue') || '[]');
+        const updatedQueue = currentQueue.filter((q: any) => q.email !== item.email);
+        localStorage.setItem('outage_subscription_queue', JSON.stringify(updatedQueue));
+      }
+    } catch (error) {
+      console.error(`Failed to sync queued subscription for ${item.email}:`, error);
+    }
+  }
+};
+
 export const checkBackendHealth = async (): Promise<HealthResponse> => {
   const startTime = Date.now();
   const store = useSystemStatusStore.getState();
@@ -445,6 +481,7 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
     }
 
     // Update status to checking ONLY if we're not already in an outage state
+    // This prevents the maintenance screen from flickering/unmounting during polls
     const isOutage = currentStatus === 'OFFLINE' || 
                     currentStatus === 'MAINTENANCE' || 
                     currentStatus === 'NETWORK_OFFLINE' || 
@@ -506,6 +543,7 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
       backendEvents.emit('backend-online');
       // Replay queued requests ONLY here, not in interceptor
       await replayQueuedRequests();
+      await processOutageSubscriptionQueue();
     }
     
     // Record successful connection

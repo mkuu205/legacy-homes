@@ -459,31 +459,31 @@ model Notification {
   id          String                @id @default(uuid())
   title       String
   message     String
-  type        NotificationType
-  channels    NotificationChannel[]
+  type        NotificationType      @default(MAINTENANCE)
+  channel     NotificationChannel   @default(IN_APP)
+  sentAt      DateTime              @default(now())
   sentBy      String?
-  targetAll   Boolean               @default(false)
-  targetGroup String?
   createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
 
-  userNotifications UserNotification[]
+  recipients  UserNotification[]
 
   @@map("notifications")
 }
 
 model UserNotification {
   id             String             @id @default(uuid())
-  notificationId String
   userId         String
-  channel        NotificationChannel
+  notificationId String
   status         NotificationStatus @default(PENDING)
   readAt         DateTime?
-  deliveredAt    DateTime?
   createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
-  notification   Notification       @relation(fields: [notificationId], references: [id], onDelete: Cascade)
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification   Notification       @relation(fields: [notificationId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, notificationId])
   @@map("user_notifications")
 }
 
@@ -552,4 +552,21 @@ model DeviceToken {
   resident   User     @relation(fields: [residentId], references: [id], onDelete: Cascade)
 
   @@map("device_tokens")
+}
+
+// ─────────────────────────────────────────────
+// OUTAGE NOTIFICATIONS
+// ─────────────────────────────────────────────
+
+model OutageSubscription {
+  id           String    @id @default(uuid())
+  email        String
+  subscribedAt DateTime  @default(now())
+  notifiedAt   DateTime?
+  isNotified   Boolean   @default(false)
+  isActive     Boolean   @default(true)
+
+  @@index([email])
+  @@index([isNotified, isActive])
+  @@map("outage_subscriptions")
 }

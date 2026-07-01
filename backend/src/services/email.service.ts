@@ -181,13 +181,28 @@ export class EmailService {
   }
 
   /**
+   * Send system back online email
+   */
+  async sendSystemBackOnlineEmail(email: string) {
+    try {
+      const subject = 'Legacy Homes is Back Online';
+      const html = this.generateSystemBackOnlineTemplate();
+
+      await this.sendEmail(email, subject, html);
+      logger.info(`Recovery email sent to ${email}`);
+    } catch (error) {
+      logger.error(`Error sending recovery email to ${email}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Send generic email
    */
   private async sendEmail(to: string, subject: string, html: string): Promise<void> {
     try {
-      // TODO: Implement actual email sending using a service like SendGrid, AWS SES, etc.
-      // For now, just log it
-      logger.info(`Email would be sent to ${to}: ${subject}`);
+      const { sendEmail: sendViaBrevo } = await import('../utils/email');
+      await sendViaBrevo({ to, subject, html });
     } catch (error) {
       logger.error('Error sending email:', error);
       throw error;
@@ -464,4 +479,43 @@ export class EmailService {
       </html>
     `;
   }
+
+  /**
+   * Generate system back online template
+   */
+  private generateSystemBackOnlineTemplate(): string {
+    return `
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #00C6A7; color: white; padding: 20px; border-radius: 8px; text-align: center; }
+            .content { padding: 20px; background: #f9f9f9; margin: 20px 0; border-radius: 8px; }
+            .footer { text-align: center; color: #999; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Legacy Homes is Back Online</h1>
+            </div>
+            <div class="content">
+              <p>Hello,</p>
+              <p>Good news!</p>
+              <p>Legacy Homes is now back online.</p>
+              <p>You can now sign in and continue managing your water account.</p>
+              <p>Thank you for your patience.</p>
+              <p>Legacy Homes Team</p>
+            </div>
+            <div class="footer">
+              <p>© 2026 Legacy Homes. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+  }
 }
+
+export const emailService = new EmailService();
