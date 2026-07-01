@@ -55,7 +55,7 @@ export class ResidentController {
         res.status(400).json({ success: false, message: 'No file uploaded' });
         return;
       }
-      const result = await residentService.updateProfilePicture(req.user!.userId, req.file.path);
+      const result = await residentService.updateProfilePicture(req.user!.userId, req.file.buffer);
       res.json({ success: true, data: result });
     } catch (error) { next(error); }
   }

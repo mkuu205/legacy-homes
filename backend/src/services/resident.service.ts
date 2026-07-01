@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../config/prisma';
 import { AppError } from '../middleware/errorHandler';
-import { uploadToCloudinary } from '../utils/cloudinary';
+import { uploadToCloudinary, uploadBufferToCloudinary } from '../utils/cloudinary';
 import { generateAccountNumber } from '../utils/jwt';
 
 export class ResidentService {
@@ -150,11 +150,11 @@ export class ResidentService {
     };
   }
 
-  async updateProfilePicture(userId: string, filePath: string) {
-    const url = await uploadToCloudinary(filePath, 'profile-pictures');
+  async updateProfilePicture(userId: string, fileBuffer: Buffer) {
+    const uploadResult = await uploadBufferToCloudinary(fileBuffer, 'profile-pictures');
     return prisma.user.update({
       where: { id: userId },
-      data: { profilePicture: url },
+      data: { profilePicture: uploadResult.url },
       select: { id: true, profilePicture: true },
     });
   }
