@@ -38,13 +38,14 @@ export class AuthService {
       throw new AppError('Phone number already registered', 409);
     }
 
-    const house = await prisma.house.findUnique({
+    const house = await prisma.house.upsert({
       where: { houseNumber },
+      update: {},
+      create: {
+        houseNumber,
+        occupancyStatus: 'OCCUPIED',
+      },
     });
-
-    if (!house) {
-      throw new AppError(`House ${houseNumber} not found. Please check your house number and try again.`, 400);
-    }
 
     const existingResident = await prisma.user.findUnique({
       where: { houseId: house.id },
