@@ -194,22 +194,13 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path.startsWith('/auth'),
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: {
-    success: false,
-    message: 'Too many login attempts, please try again later.',
+  skip: (req) => {
+    const path = req.path;
+    return path.startsWith('/auth') || path.startsWith('/health') || path === '/api/health';
   },
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
 app.use('/api/', limiter);
-app.use('/api/auth', authLimiter);
 
 app.get('/deployment-test', (_req, res) => {
   res.json({

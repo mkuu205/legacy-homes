@@ -13,8 +13,6 @@ if (!API_URL) {
   );
 }
 
-const HEALTH_ENDPOINT = `${API_URL}/health`;
-
 // --- DEDICATED HEALTH API CLIENT (no interceptors) ---
 const healthApi = axios.create({
   baseURL: API_URL,
@@ -145,6 +143,22 @@ const isReplayableRequest = (config: any): boolean => {
 let pendingRequests: PendingRequest[] = [];
 let isReplaying = false;
 
+// --- TOKEN REFRESH QUEUE ---
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
+  refreshSubscribers.push(cb);
+};
+
+const onTokenRefreshed = (token: string) => {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+};
+
+// --- REQUEST DEDUPLICATION ---
+const inflightRequests = new Map<string, Promise<any>>();
+
 // --- API CLIENT ---
 export const api: AxiosInstance = axios.create({
   baseURL: API_URL,
@@ -230,6 +244,10 @@ const updateStoreStatus = (status: BackendStatus, details?: any) => {
 // --- RESPONSE INTERCEPTOR ---
 api.interceptors.response.use(
   (response) => {
+    // Clear inflight request
+    const requestKey = `${response.config.method}:${response.config.url}`;
+    inflightRequests.delete(requestKey);
+
     // Skip health checks - let checkBackendHealth handle status
     if (response.config.url?.includes('/health')) {
       return response;
@@ -247,6 +265,12 @@ api.interceptors.response.use(
   },
   async (error: AxiosError) => {
     const originalRequest = error.config as any;
+
+    // Clear inflight request on error too
+    if (originalRequest) {
+      const requestKey = `${originalRequest.method}:${originalRequest.url}`;
+      inflightRequests.delete(requestKey);
+    }
 
     // Skip health check errors - they're handled in checkBackendHealth
     if (originalRequest?.url?.includes('/health')) {
@@ -311,11 +335,22 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      try {
-        if (typeof window === 'undefined') {
-          return Promise.reject(error);
-        }
+      if (typeof window === 'undefined') {
+        return Promise.reject(error);
+      }
 
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          subscribeTokenRefresh((token: string) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            resolve(api(originalRequest));
+          });
+        });
+      }
+
+      isRefreshing = true;
+
+      try {
         const refreshToken = sessionStorage.getItem('refreshToken') || localStorage.getItem('refreshToken');
 
         if (!refreshToken) {
@@ -343,10 +378,13 @@ api.interceptors.response.use(
           localStorage.setItem('refreshToken', newRefreshToken);
         }
 
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        onTokenRefreshed(accessToken);
+        isRefreshing = false;
 
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
+        isRefreshing = false;
         console.error('Token refresh failed:', refreshError);
 
         // Check if backend is reachable by making a health check
@@ -390,6 +428,22 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// --- DEDUPLICATED API WRAPPER ---
+// Only for /auth/me or other critical read endpoints that might be called multiple times
+const originalGet = api.get;
+api.get = function <T = any, R = any>(url: string, config?: any): Promise<R> {
+  if (url.includes('/auth/me')) {
+    const requestKey = `GET:${url}`;
+    if (inflightRequests.has(requestKey)) {
+      return inflightRequests.get(requestKey)!;
+    }
+    const promise = originalGet.call(this, url, config);
+    inflightRequests.set(requestKey, promise);
+    return promise;
+  }
+  return originalGet.call(this, url, config);
+} as any;
 
 // --- PUBLIC FUNCTIONS ---
 
@@ -480,125 +534,47 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
       throw new Error('Network offline');
     }
 
-    // Update status to checking ONLY if we're not already in an outage state
-    // This prevents the maintenance screen from flickering/unmounting during polls
-    const isOutage = currentStatus === 'OFFLINE' || 
-                    currentStatus === 'MAINTENANCE' || 
-                    currentStatus === 'NETWORK_OFFLINE' || 
-                    currentStatus === 'WAKING_UP';
+    const response = await healthApi.get<HealthResponse>('/health');
+    const data = response.data;
+    const latency = Date.now() - startTime;
     
-    if (!isOutage) {
-      updateStoreStatus('CHECKING');
+    // Check for maintenance mode in response
+    if (data.status === 'MAINTENANCE') {
+      updateStoreStatus('MAINTENANCE', data.maintenance);
+      return { ...data, latency };
     }
 
-    // Use dedicated health API client - no interceptors, no auth
-    const response = await healthApi.get('/health', {
-      timeout: 8000,
-    });
-    
+    // Check for slow response
+    if (latency > 5000) {
+      updateStoreStatus('SLOW', { latency });
+    } else if (currentStatus !== 'ONLINE') {
+      updateStoreStatus('ONLINE');
+    }
+
+    return { ...data, latency };
+  } catch (error: any) {
     const latency = Date.now() - startTime;
-    const data = response.data;
-    const healthData = data.data || data;
     
-    // Determine backend status
-    let status: BackendStatus = 'ONLINE';
-    
-    if (healthData.status === 'MAINTENANCE') {
-      status = 'MAINTENANCE';
-    } else if (healthData.status === 'WAKING_UP') {
-      status = 'WAKING_UP';
-    } else if (healthData.status === 'OFFLINE') {
-      status = 'OFFLINE';
-    } else if (latency > 3000) {
-      status = 'SLOW';
+    // If it's a maintenance response (503)
+    if (error.response?.status === 503) {
+      const data = error.response?.data;
+      if (data?.maintenance || data?.status === 'MAINTENANCE') {
+        updateStoreStatus('MAINTENANCE', data.maintenance);
+        return { 
+          status: 'MAINTENANCE', 
+          maintenance: data.maintenance,
+          latency 
+        };
+      }
     }
-    
-    // Build health response
-    const healthResponse: HealthResponse = {
-      status: status === 'ONLINE' ? 'ONLINE' : 
-              status === 'MAINTENANCE' ? 'MAINTENANCE' : 
-              status === 'WAKING_UP' ? 'WAKING_UP' : 'OFFLINE',
-      version: healthData.version,
-      startedAt: healthData.startedAt,
-      latency,
-      services: healthData.services || {
-        database: healthData.database || 'UNKNOWN',
-        smtp: healthData.smtp || 'UNKNOWN',
-        tuma: healthData.tuma || 'UNKNOWN',
-        pesapal: healthData.pesapal || 'UNKNOWN',
-      },
-      maintenance: healthData.maintenance,
-    };
-    
-    // Update store with health details
-    updateStoreStatus(status, {
-      version: healthData.version,
-      latency,
-      details: healthData,
-      backendStartedAt: healthData.startedAt ? new Date(healthData.startedAt).getTime() : undefined,
-    });
-    
-    // ONLY emit backend-online here, nowhere else
-    if (status === 'ONLINE' || status === 'SLOW') {
-      backendEvents.emit('backend-online');
-      // Replay queued requests ONLY here, not in interceptor
-      await replayQueuedRequests();
-      await processOutageSubscriptionQueue();
-    }
-    
-    // Record successful connection
-    store.recordSuccessfulConnection(latency, healthData.version, healthResponse.services);
-    
-    return healthResponse;
-    
-  } catch (error) {
-    const latency = Date.now() - startTime;
-    const axiosError = error as AxiosError;
-    
-    // Check for network errors
-    if (typeof window !== 'undefined' && !navigator.onLine) {
-      updateStoreStatus('NETWORK_OFFLINE');
-      throw new Error('Network offline');
-    }
-    
-    // Check if maintenance
-    if (isMaintenanceMode(axiosError)) {
-      const data = axiosError.response?.data as any;
-      updateStoreStatus('MAINTENANCE', data);
-      return {
-        status: 'MAINTENANCE',
-        maintenance: {
-          message: data?.message || 'Service under maintenance',
-          ...data?.maintenance
-        }
-      };
-    }
-    
-    // Handle 429 specifically - don't change status
-    if (axiosError.response?.status === 429) {
-      console.warn('Health check rate limited - backend is alive');
-      // Return ONLINE status but don't change state
-      return {
-        status: 'ONLINE',
-        latency,
-      };
-    }
-    
-    // Default to offline for errors
-    // But preserve current state if it's already an outage state
-    if (currentStatus !== 'MAINTENANCE' && currentStatus !== 'NETWORK_OFFLINE' && currentStatus !== 'WAKING_UP') {
+
+    // If it's a network error or other failure
+    if (currentStatus === 'ONLINE' || currentStatus === 'SLOW') {
+      updateStoreStatus('WAKING_UP');
+    } else if (currentStatus !== 'WAKING_UP' && currentStatus !== 'MAINTENANCE') {
       updateStoreStatus('OFFLINE');
     }
-    
-    store.recordFailedConnection();
-    throw error;
-  }
-};
 
-export const getErrorMessage = (error: any): string => {
-  if (axios.isAxiosError(error)) {
-    const data = error.response?.data as any;
-    return data?.message || error.message || 'An unexpected error occurred';
+    return { status: 'OFFLINE', latency };
   }
-  return error.message || 'An unexpected error occurred';
 };
