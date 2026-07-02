@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../config/prisma';
 import { AppError } from '../middleware/errorHandler';
+import { logger } from '../utils/logger';
 import { uploadToCloudinary, uploadBufferToCloudinary } from '../utils/cloudinary';
 import { generateAccountNumber } from '../utils/jwt';
 import { logger } from '../utils/logger';

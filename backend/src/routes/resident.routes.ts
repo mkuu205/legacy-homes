@@ -23,6 +23,7 @@ const upload = multer({
 
 // Wrap multer so MulterError / fileFilter rejections become 400, not 500.
 const profilePictureUpload: import('express').RequestHandler = (req, res, next) => {
+  // Try both 'profilePicture' and 'file' to be safe, though frontend uses 'profilePicture'
   upload.single('profilePicture')(req, res, (err: unknown) => {
     if (!err) return next();
     if (err instanceof multer.MulterError) {
