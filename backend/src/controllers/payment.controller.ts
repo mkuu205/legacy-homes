@@ -1,6 +1,7 @@
 // src/controllers/payment.controller.ts
 import { Request, Response, NextFunction } from 'express';
 import { paymentService } from '../services/payment.service';
+import { AppError } from '../middleware/errorHandler';
 import { PaymentEngineService } from '../services/payment-engine.service';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
@@ -223,12 +224,22 @@ export class PaymentController {
    */
   async deletePayment(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const result = await paymentService.deletePayment(req.params.id);
+      const paymentId = req.params.id;
+      const userId = req.user!.userId;
+      const userRole = req.user!.role;
+
+      // If not admin, check if user owns the payment
+      if (userRole !== 'SUPER_ADMIN' && userRole !== 'ADMIN') {
+        const payment = await paymentService.checkPaymentStatus(paymentId, userId);
+        if (!payment) throw new AppError('Payment not found', 404);
+      }
+
+      const result = await paymentService.deletePayment(paymentId);
       await auditService.logAction({
         userId: req.user!.userId,
         action: 'DELETE_PAYMENT',
         resource: 'Payment',
-        resourceId: req.params.id,
+        resourceId: paymentId,
         ipAddress: req.ip,
       }).catch(() => {});
       res.json({ success: true, ...result });
