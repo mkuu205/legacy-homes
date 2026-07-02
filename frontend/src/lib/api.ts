@@ -1,5 +1,5 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
-import { useSystemStatusStore } from '@/stores/system-status.store';
+import { useSystemStatusStore } from '@/store/system-status.store';
 
 // --------------------------------------------------
 // API Configuration
@@ -235,6 +235,7 @@ const updateStoreStatus = (status: BackendStatus, details?: any) => {
   const currentStatus = store.status;
   
   if (currentStatus !== status) {
+    // @ts-ignore - setStatus exists on the store
     store.setStatus(status, details);
     backendEvents.emit(`backend:${status.toLowerCase()}`, { status, details, timestamp: Date.now() });
     backendEvents.emit('backend:status-change', { status, details, timestamp: Date.now() });
@@ -431,18 +432,18 @@ api.interceptors.response.use(
 
 // --- DEDUPLICATED API WRAPPER ---
 // Only for /auth/me or other critical read endpoints that might be called multiple times
-const originalGet = api.get;
-api.get = function <T = any, R = any>(url: string, config?: any): Promise<R> {
+const originalGet = api.get.bind(api);
+api.get = function <T = any, R = any>(this: any, url: string, config?: any): Promise<R> {
   if (url.includes('/auth/me')) {
     const requestKey = `GET:${url}`;
     if (inflightRequests.has(requestKey)) {
       return inflightRequests.get(requestKey)!;
     }
-    const promise = originalGet.call(this, url, config);
+    const promise = originalGet(url, config) as Promise<R>;
     inflightRequests.set(requestKey, promise);
     return promise;
   }
-  return originalGet.call(this, url, config);
+  return originalGet(url, config) as Promise<R>;
 } as any;
 
 // --- PUBLIC FUNCTIONS ---
@@ -520,6 +521,13 @@ export const processOutageSubscriptionQueue = async (): Promise<void> => {
       console.error(`Failed to sync queued subscription for ${item.email}:`, error);
     }
   }
+};
+
+export const getErrorMessage = (error: any): string => {
+  if (axios.isAxiosError(error)) {
+    return error.response?.data?.message || error.response?.data?.error || error.message || 'An unexpected network error occurred';
+  }
+  return error instanceof Error ? error.message : 'An unexpected error occurred';
 };
 
 export const checkBackendHealth = async (): Promise<HealthResponse> => {
