@@ -3,6 +3,7 @@ import prisma from '../config/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { uploadToCloudinary, uploadBufferToCloudinary } from '../utils/cloudinary';
 import { generateAccountNumber } from '../utils/jwt';
+import { logger } from '../utils/logger';
 
 export class ResidentService {
   async getAllResidents(query: { page?: number; limit?: number; search?: string; status?: string }) {

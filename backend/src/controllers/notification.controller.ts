@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { notificationService } from '../services/notification.service';
 import { AuthRequest } from '../middleware/auth';
 import { PrismaClient } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
