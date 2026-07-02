@@ -35,7 +35,9 @@ export const uploadBufferToCloudinary = (
   transform?: Record<string, unknown>,
 ): Promise<CloudinaryUploadResult> => {
   if (MISSING_ENV.length) {
-    return Promise.reject(new Error(`Cloudinary not configured: missing ${MISSING_ENV.join(', ')}`));
+    const error = new Error(`Cloudinary not configured: missing ${MISSING_ENV.join(', ')}`);
+    (error as any).statusCode = 503; // Service Unavailable
+    return Promise.reject(error);
   }
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(

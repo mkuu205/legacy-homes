@@ -151,12 +151,20 @@ export class ResidentService {
   }
 
   async updateProfilePicture(userId: string, fileBuffer: Buffer) {
-    const uploadResult = await uploadBufferToCloudinary(fileBuffer, 'profile-pictures');
-    return prisma.user.update({
-      where: { id: userId },
-      data: { profilePicture: uploadResult.url },
-      select: { id: true, profilePicture: true },
-    });
+    try {
+      const uploadResult = await uploadBufferToCloudinary(fileBuffer, 'profile-pictures');
+      return await prisma.user.update({
+        where: { id: userId },
+        data: { profilePicture: uploadResult.url },
+        select: { id: true, profilePicture: true },
+      });
+    } catch (error: any) {
+      logger.error('[RESIDENT_SERVICE] Failed to update profile picture', { error, userId });
+      if (error.statusCode === 503) {
+        throw new AppError('Profile picture upload is temporarily unavailable (Cloudinary not configured)', 503);
+      }
+      throw error;
+    }
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
