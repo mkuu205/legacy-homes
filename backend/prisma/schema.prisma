@@ -460,13 +460,15 @@ model Notification {
   title       String
   message     String
   type        NotificationType      @default(MAINTENANCE)
-  channel     NotificationChannel   @default(IN_APP)
+  channels    NotificationChannel[]
+  targetAll   Boolean               @default(false)
+  targetGroup String?
   sentAt      DateTime              @default(now())
   sentBy      String?
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
 
-  recipients  UserNotification[]
+  userNotifications UserNotification[]
 
   @@map("notifications")
 }
@@ -475,15 +477,17 @@ model UserNotification {
   id             String             @id @default(uuid())
   userId         String
   notificationId String
+  channel        NotificationChannel @default(IN_APP)
   status         NotificationStatus @default(PENDING)
   readAt         DateTime?
+  deliveredAt    DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   notification   Notification       @relation(fields: [notificationId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, notificationId])
+  @@unique([userId, notificationId, channel])
   @@map("user_notifications")
 }
 
