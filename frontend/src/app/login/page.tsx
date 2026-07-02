@@ -114,19 +114,28 @@ export default function LoginPage() {
       setAuth(user, tokens.accessToken, tokens.refreshToken);
       toast({ type: 'success', title: 'Welcome back!', description: `Hello, ${user.fullName}` });
 
-      // FCM Token Registration
+      // FCM Token Registration (non-blocking)
       if (user.role === 'RESIDENT') {
         try {
           const token = await requestForToken();
           if (token) {
-            await api.post('/notifications/register-device', {
-              token,
-              platform: 'web',
-              deviceName: navigator.userAgent,
-            });
+            try {
+              await api.post('/notifications/register-device', {
+                token,
+                platform: 'web',
+                deviceName: navigator.userAgent,
+              });
+              console.log('FCM token registered successfully');
+            } catch (registrationError) {
+              console.warn('Failed to register FCM token with backend:', registrationError);
+              // Don't block login if registration fails
+            }
+          } else {
+            console.info('FCM token request was denied or unavailable');
           }
         } catch (fcmError) {
-          console.error('FCM Registration failed:', fcmError);
+          console.warn('FCM token request failed:', fcmError);
+          // Don't block login if FCM is unavailable
         }
         router.push('/dashboard');
       } else {
