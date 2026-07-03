@@ -14,6 +14,7 @@ export default function AdminBillingPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [generateMonth, setGenerateMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [generateResidentId, setGenerateResidentId] = useState('');
   const [forceGenerate, setForceGenerate] = useState(false);
   const [generateDueDate, setGenerateDueDate] = useState('');
   const [generateWaterUnitRate, setGenerateWaterUnitRate] = useState('');
@@ -36,12 +37,22 @@ export default function AdminBillingPage() {
     },
   });
 
+  const { data: residentsData } = useQuery({
+    queryKey: ['admin-residents-list'],
+    queryFn: async () => {
+      const res = await api.get('/residents?limit=100');
+      return res.data.data.residents;
+    },
+    enabled: showGenerateModal,
+  });
+
   const bills = data?.bills || [];
   const pagination = data?.pagination;
 
   const generateBillsMutation = useMutation({
-    mutationFn: async ({ billingMonth, force }: { billingMonth: string; force: boolean }) => {
+    mutationFn: async ({ billingMonth, force, residentId }: { billingMonth: string; force: boolean; residentId?: string }) => {
       const payload: any = { billingMonth, force };
+      if (residentId) payload.residentId = residentId;
       if (generateDueDate) payload.dueDate = generateDueDate;
       if (generateWaterUnitRate) payload.waterUnitRate = Number(generateWaterUnitRate);
       if (generateLateFee) payload.lateFee = Number(generateLateFee);
@@ -55,6 +66,7 @@ export default function AdminBillingPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-bills'] });
       setShowGenerateModal(false);
       setForceGenerate(false);
+      setGenerateResidentId('');
       setShowPreviewSummary(false);
       setGenerateDueDate('');
       setGenerateWaterUnitRate('');
@@ -279,9 +291,20 @@ export default function AdminBillingPage() {
             <p style={{ fontSize: '12px', color: 'var(--t2)', marginBottom: '16px' }}>Configure billing parameters. Fields marked optional use system defaults if left blank.</p>
 
             {/* Required */}
-            <div className="fg" style={{ marginBottom: '12px' }}>
-              <label className="lbl">Billing Month *</label>
-              <input type="month" value={generateMonth} onChange={e => setGenerateMonth(e.target.value)} className="inp" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+              <div className="fg">
+                <label className="lbl">Billing Month *</label>
+                <input type="month" value={generateMonth} onChange={e => setGenerateMonth(e.target.value)} className="inp" />
+              </div>
+              <div className="fg">
+                <label className="lbl">Target Resident <span style={{ fontSize: '10px', color: 'var(--t3)' }}>(optional)</span></label>
+                <select value={generateResidentId} onChange={e => setGenerateResidentId(e.target.value)} className="sel">
+                  <option value="">All Residents</option>
+                  {residentsData?.map((r: any) => (
+                    <option key={r.id} value={r.id}>{r.fullName} ({r.houseNumber || 'No House'})</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Optional overrides */}
@@ -328,10 +351,10 @@ export default function AdminBillingPage() {
               </label>
             )}
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => { setShowGenerateModal(false); setForceGenerate(false); setGenerateDueDate(''); setGenerateWaterUnitRate(''); setGenerateLateFee(''); setGeneratePeriodStart(''); setGeneratePeriodEnd(''); }} className="btn bs" style={{ flex: 1 }}>Cancel</button>
-              <button onClick={() => generateBillsMutation.mutate({ billingMonth: generateMonth, force: forceGenerate })} disabled={generateBillsMutation.isPending || !generateMonth} className="btn bp" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <button onClick={() => { setShowGenerateModal(false); setForceGenerate(false); setGenerateResidentId(''); setGenerateDueDate(''); setGenerateWaterUnitRate(''); setGenerateLateFee(''); setGeneratePeriodStart(''); setGeneratePeriodEnd(''); }} className="btn bs" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={() => generateBillsMutation.mutate({ billingMonth: generateMonth, force: forceGenerate, residentId: generateResidentId })} disabled={generateBillsMutation.isPending || !generateMonth} className="btn bp" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                 {generateBillsMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} />}
-                Generate Bills
+                {generateResidentId ? 'Generate for Resident' : 'Generate All Bills'}
               </button>
             </div>
           </div>

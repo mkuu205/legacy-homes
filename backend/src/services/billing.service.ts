@@ -35,6 +35,7 @@ export class BillingService {
     billingMonth: string,
     force = false,
     options?: {
+      residentId?: string;       // target specific resident
       dueDate?: string;          // ISO date string e.g. '2026-07-31'
       waterUnitRate?: number;    // override unit rate for this batch
       lateFee?: number;          // late fee amount (stored for reference, not yet a schema field)
@@ -43,15 +44,21 @@ export class BillingService {
     }
   ) {
     // Duplicate prevention: check if bills already exist for this month
-    const existingCount = await prisma.bill.count({ where: { billingMonth } });
+    const whereClause: any = { billingMonth };
+    if (options?.residentId) {
+      whereClause.residentId = options.residentId;
+    }
+
+    const existingCount = await prisma.bill.count({ where: whereClause });
     if (existingCount > 0 && !force) {
-      throw new AppError(`DUPLICATE:Bills for ${billingMonth} already exist (${existingCount} bills). Use force=true to regenerate.`, 409);
+      const targetMsg = options?.residentId ? `for resident ${options.residentId}` : '';
+      throw new AppError(`DUPLICATE:Bills for ${billingMonth} ${targetMsg} already exist (${existingCount} bills). Use force=true to regenerate.`, 409);
     }
 
     // Force regenerate: delete existing unpaid/overdue bills for this month first
     if (existingCount > 0 && force) {
       const existingBills = await prisma.bill.findMany({
-        where: { billingMonth, status: { in: ['UNPAID', 'OVERDUE'] } },
+        where: { ...whereClause, status: { in: ['UNPAID', 'OVERDUE'] } },
         select: { id: true, readingId: true },
       });
       const billIds = existingBills.map((b) => b.id);
@@ -66,8 +73,20 @@ export class BillingService {
       logger.info(`Force regenerate: deleted ${billIds.length} existing unpaid bills for ${billingMonth}`);
     }
 
+    const readingsWhere: any = { billingMonth, billId: null };
+    if (options?.residentId) {
+      // If residentId is provided, we need to filter readings by meter belonging to that resident's house
+      readingsWhere.meter = {
+        house: {
+          resident: {
+            id: options.residentId
+          }
+        }
+      };
+    }
+
     const readings = await prisma.meterReading.findMany({
-      where: { billingMonth, billId: null },
+      where: readingsWhere,
       select: {
         id: true,
         meterId: true,
