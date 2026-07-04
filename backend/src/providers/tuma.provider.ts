@@ -163,12 +163,12 @@ export class TumaProvider implements PaymentProvider {
     }
   }
 
-  private isRetryableError(error: AxiosError): boolean {
-    const status = error.response?.status;
-    const code = error.code;
+  private isRetryableError(axiosError: AxiosError): boolean {
+    const status = axiosError.response?.status;
+    const code = axiosError.code;
     if (status && RETRYABLE_STATUSES.has(status)) return true;
     if (code && RETRYABLE_ERRORS.has(code)) return true;
-    if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) return true;
+    if (axiosError.message?.includes('timeout') || axiosError.message?.includes('ETIMEDOUT')) return true;
     return false;
   }
 
@@ -217,6 +217,14 @@ export class TumaProvider implements PaymentProvider {
         };
       }
 
+      if (!this.callbackUrl) {
+        logger.error('[TUMA] Callback URL is not configured. Payment cannot be initiated.');
+        return {
+          success: false,
+          error: 'Callback URL is not configured',
+        };
+      }
+
       this.validateRequest(request);
       const formattedPhone = this.formatPhoneNumber(request.phoneNumber!);
 
@@ -238,13 +246,30 @@ export class TumaProvider implements PaymentProvider {
         dataKeys: response.data ? Object.keys(response.data) : []
       });
 
-      // Check for success indicators in the response
-      const isSuccess = response.success === true || 
-                        response.status === 'success' ||
-                        response.data?.merchant_request_id ||
-                        response.data?.checkout_request_id;
+      // Validate response structure matches API documentation
+      if (!response.success) {
+        const errorMsg = response.message || 'Failed to initiate STK push';
+        
+        // Check if it's a sandbox error and provide a better message
+        if (errorMsg.toLowerCase().includes('sandbox mode')) {
+          logger.error(`[TUMA] Account is in sandbox mode: ${errorMsg}`);
+          return {
+            success: false,
+            error: 'TUMA account is currently in sandbox mode. Please ensure the TUMA_API_URL is set to production and the account is verified.',
+          };
+        }
 
-      if (isSuccess && (response.data?.merchant_request_id || response.data?.checkout_request_id)) {
+        logger.error(`[TUMA] STK Push failed: ${errorMsg}`);
+        return {
+          success: false,
+          error: errorMsg,
+        };
+      }
+
+      // Check for required fields in response
+      const hasRequiredFields = response.data?.merchant_request_id || response.data?.checkout_request_id;
+
+      if (hasRequiredFields) {
         const orderId = response.data.merchant_request_id || response.data.checkout_request_id;
         logger.info(`[TUMA] STK Push initiated successfully. Order ID: ${orderId}`);
 
@@ -261,33 +286,11 @@ export class TumaProvider implements PaymentProvider {
         };
       }
 
-      // If we got a success flag but no order ID
-      if (response.success === true) {
-        logger.warn(`[TUMA] Response indicates success but no order ID found`);
-        return {
-          success: true,
-          orderId: `tuma-${Date.now()}`,
-          checkoutUrl: null,
-          message: response.message || 'STK Push initiated',
-          providerData: response.data || response,
-        };
-      }
-
-      const errorMsg = response.message || response.error || 'Failed to initiate STK push';
-      
-      // Check if it's a sandbox error and provide a better message
-      if (errorMsg.toLowerCase().includes('sandbox mode')) {
-        logger.error(`[TUMA] Account is in sandbox mode: ${errorMsg}`);
-        return {
-          success: false,
-          error: 'TUMA account is currently in sandbox mode. Please ensure the TUMA_API_URL is set to production and the account is verified.',
-        };
-      }
-
-      logger.error(`[TUMA] STK Push failed: ${errorMsg}`);
+      // If success is true but no order ID, this is an error state
+      logger.error(`[TUMA] API returned success=true but missing merchant_request_id and checkout_request_id`);
       return {
         success: false,
-        error: errorMsg,
+        error: 'Invalid response from TUMA API: missing transaction IDs',
       };
     } catch (error) {
       logger.error('[TUMA] Initiation error:', error);
@@ -320,7 +323,26 @@ export class TumaProvider implements PaymentProvider {
     const timestamp = payload.timestamp;
     const status = payload.status;
 
-    logger.info(`[TUMA] Callback received. Merchant: ${merchantRequestId}, Checkout: ${checkoutRequestId}`);
+    // Validate required fields are present
+    if (resultCode === undefined || resultCode === null) {
+      logger.warn('[TUMA] Callback missing result_code');
+      return {
+        valid: false,
+        status: 'FAILED',
+        message: 'Invalid callback: missing result_code',
+      };
+    }
+
+    if (!status) {
+      logger.warn('[TUMA] Callback missing status field');
+      return {
+        valid: false,
+        status: 'FAILED',
+        message: 'Invalid callback: missing status field',
+      };
+    }
+
+    logger.info(`[TUMA] Callback received. Merchant: ${merchantRequestId}, Checkout: ${checkoutRequestId}, Result: ${resultCode}, Status: ${status}`);
 
     const isSuccess = resultCode === 0 && status === 'completed';
 
