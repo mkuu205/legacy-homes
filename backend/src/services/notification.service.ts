@@ -274,17 +274,17 @@ export class NotificationService {
           notificationId,
         });
 
-        await prisma.userNotification.updateMany({
-          where: {
-            notificationId,
-            userId: resident.id,
-            channel: 'IN_APP',
-          },
-          data: {
-            status: 'DELIVERED',
-            deliveredAt: new Date(),
-          },
-        });
+    await prisma.userNotification.updateMany({
+      where: {
+        notificationId,
+        userId: resident.id,
+        channel: 'IN_APP',
+      },
+      data: {
+        status: 'DELIVERED',
+        deliveredAt: new Date(),
+      },
+    }).catch(err => logger.error('[NOTIFICATION] Update delivered status failed', err));
       }
 
       if (channel === 'EMAIL') {
@@ -306,17 +306,17 @@ export class NotificationService {
           `,
         });
 
-        await prisma.userNotification.updateMany({
-          where: {
-            notificationId,
-            userId: resident.id,
-            channel: 'EMAIL',
-          },
-          data: {
-            status: 'DELIVERED',
-            deliveredAt: new Date(),
-          },
-        });
+    await prisma.userNotification.updateMany({
+      where: {
+        notificationId,
+        userId: resident.id,
+        channel: 'EMAIL',
+      },
+      data: {
+        status: 'DELIVERED',
+        deliveredAt: new Date(),
+      },
+    }).catch(err => logger.error('[NOTIFICATION] Update delivered status failed', err));
       }
 
       if (channel === 'SMS') {
@@ -625,7 +625,7 @@ export class NotificationService {
           status: 'DELIVERED',
           deliveredAt: new Date(),
         },
-      });
+      }).catch(err => logger.error('[NOTIFICATION] Create user notification failed', err));
 
       // Emit via Socket.io
       io.to(`user_${resident.id}`).emit('notification', {

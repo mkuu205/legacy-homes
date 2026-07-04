@@ -248,7 +248,7 @@ export class AuthController {
         // 10. Device tokens
         try {
           // @ts-ignore - table might not exist in some environments
-          await tx.deviceToken.deleteMany({ where: { residentId: user.id } });
+          await (tx as any).deviceToken.deleteMany({ where: { residentId: user.id } });
         } catch (e) {
           // Ignore if table doesn't exist
         }

@@ -274,6 +274,16 @@ export class TumaProvider implements PaymentProvider {
       }
 
       const errorMsg = response.message || response.error || 'Failed to initiate STK push';
+      
+      // Check if it's a sandbox error and provide a better message
+      if (errorMsg.toLowerCase().includes('sandbox mode')) {
+        logger.error(`[TUMA] Account is in sandbox mode: ${errorMsg}`);
+        return {
+          success: false,
+          error: 'TUMA account is currently in sandbox mode. Please ensure the TUMA_API_URL is set to production and the account is verified.',
+        };
+      }
+
       logger.error(`[TUMA] STK Push failed: ${errorMsg}`);
       return {
         success: false,

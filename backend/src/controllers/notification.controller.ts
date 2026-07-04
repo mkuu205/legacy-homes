@@ -121,7 +121,7 @@ export class NotificationController {
 
       // Wrap in try-catch to avoid 500 if the deviceToken table doesn't exist or has issues
       try {
-        const deviceToken = await prisma.deviceToken.upsert({
+        const deviceToken = await (prisma as any).deviceToken.upsert({
           where: { token },
           update: {
             residentId,
@@ -153,10 +153,14 @@ export class NotificationController {
     try {
       const { token } = req.body;
       
-      await prisma.deviceToken.update({
-        where: { token },
-        data: { active: false },
-      });
+      try {
+        await (prisma as any).deviceToken.update({
+          where: { token },
+          data: { active: false },
+        });
+      } catch (dbError) {
+        logger.error('[NOTIFICATION] Failed to remove device token from DB', { error: dbError });
+      }
 
       res.json({ success: true, message: 'Device token removed' });
     } catch (error) {

@@ -103,7 +103,7 @@ class FirebaseService {
 
   private async removeInvalidToken(token: string) {
     try {
-      await prisma.deviceToken.update({
+      await (prisma as any).deviceToken.update({
         where: { token },
         data: { active: false },
       });
@@ -115,7 +115,7 @@ class FirebaseService {
 
   private async removeInvalidTokens(tokens: string[]) {
     try {
-      await prisma.deviceToken.updateMany({
+      await (prisma as any).deviceToken.updateMany({
         where: { token: { in: tokens } },
         data: { active: false },
       });

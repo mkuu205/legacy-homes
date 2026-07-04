@@ -188,7 +188,6 @@ model User {
   meterReadings     MeterReading[]
   assignedTickets   Ticket[]           @relation("AssignedTickets")
   paymentMethods    PaymentMethod[]
-  deviceTokens      DeviceToken[]
 
   @@map("users")
 }
@@ -463,10 +462,8 @@ model Notification {
   channels    NotificationChannel[]
   targetAll   Boolean               @default(false)
   targetGroup String?
-  sentAt      DateTime              @default(now())
   sentBy      String?
   createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
 
   userNotifications UserNotification[]
 
@@ -482,7 +479,6 @@ model UserNotification {
   readAt         DateTime?
   deliveredAt    DateTime?
   createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
 
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   notification   Notification       @relation(fields: [notificationId], references: [id], onDelete: Cascade)
@@ -542,21 +538,21 @@ model CallbackAudit {
 // DEVICE TOKENS (For FCM)
 // ─────────────────────────────────────────────
 
-model DeviceToken {
-  id         String   @id @default(uuid())
-  residentId String
-  token      String   @unique
-  platform   String?
-  deviceName String?
-  lastSeenAt DateTime @default(now())
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  resident   User     @relation(fields: [residentId], references: [id], onDelete: Cascade)
-
-  @@map("device_tokens")
-}
+// model DeviceToken {
+//   id         String   @id @default(uuid())
+//   residentId String
+//   token      String   @unique
+//   platform   String?
+//   deviceName String?
+//   lastSeenAt DateTime @default(now())
+//   active     Boolean  @default(true)
+//   createdAt  DateTime @default(now())
+//   updatedAt  DateTime @updatedAt
+//
+//   resident   User     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+//
+//   @@map("device_tokens")
+// }
 
 // ─────────────────────────────────────────────
 // OUTAGE NOTIFICATIONS

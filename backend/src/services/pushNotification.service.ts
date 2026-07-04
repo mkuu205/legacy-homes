@@ -6,16 +6,21 @@ const prisma = new PrismaClient();
 
 class PushNotificationService {
   private async getResidentTokens(residentId: string): Promise<string[]> {
-    const tokens = await prisma.deviceToken.findMany({
-      where: {
-        residentId,
-        active: true,
-      },
-      select: {
-        token: true,
-      },
-    });
-    return tokens.map((t) => t.token);
+    try {
+      const tokens = await (prisma as any).deviceToken.findMany({
+        where: {
+          residentId,
+          active: true,
+        },
+        select: {
+          token: true,
+        },
+      });
+      return tokens.map((t: any) => t.token);
+    } catch (error) {
+      winston.error('[PUSH_NOTIFICATION] Failed to fetch resident tokens', error);
+      return [];
+    }
   }
 
   async sendPaymentSuccess(residentId: string, amount: number) {
