@@ -37,7 +37,15 @@ const httpServer = http.createServer(app);
 // ============================================
 const allowedOrigins = [
   'http://localhost:3000',
+  'http://localhost:5173',
+
+  'https://legacyhomes.co.ke',
+  'https://www.legacyhomes.co.ke',
+
   'https://legacy-homes-frontend.vercel.app',
+
+  'https://api.legacyhomes.co.ke',
+
   'https://pay.pesapal.com',
   'https://cybqa.pesapal.com',
   'https://*.pesapal.com',
@@ -53,9 +61,29 @@ if (process.env.FRONTEND_URL) {
 export const io = new SocketIOServer(httpServer, {
   cors: {
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || (origin && origin.endsWith('.vercel.app'))) {
+      // Allow requests with no origin (mobile apps, server-to-server)
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const isAllowed = allowedOrigins.some((allowed) => {
+        if (allowed.includes('*')) {
+          // Handle wildcard domains like *.pesapal.com
+          const pattern = allowed
+            .replace(/\./g, '\\.')
+            .replace(/\*/g, '.*');
+
+          return new RegExp(`^${pattern}$`).test(origin);
+        }
+
+        return allowed === origin || origin.endsWith('.vercel.app');
+      });
+
+      if (isAllowed) {
         callback(null, true);
       } else {
+        logger.warn(`Socket.IO CORS blocked: ${origin}`);
         callback(new Error('CORS not allowed'));
       }
     },
