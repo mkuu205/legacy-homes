@@ -32,7 +32,11 @@ export const authMiddleware = async (
       throw new AppError('Account is inactive or has been deleted', 401);
     }
 
-    req.user = payload;
+    req.user = {
+      ...payload,
+      email: user.email,
+      role: user.role,
+    };
     next();
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {

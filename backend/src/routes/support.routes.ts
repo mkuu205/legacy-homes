@@ -4,7 +4,19 @@ import { authenticate, authorize } from '../middleware/auth';
 import multer from 'multer';
 
 const router: import("express").Router = Router();
-const upload = multer({ dest: '/tmp/uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
+const SUPPORT_MIME_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'application/pdf',
+  'text/plain', 'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
+const upload = multer({
+  dest: '/tmp/uploads/',
+  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
+  fileFilter: (_req, file, cb) => {
+    if (SUPPORT_MIME_TYPES.has(file.mimetype.toLowerCase())) cb(null, true);
+    else cb(new Error('Unsupported attachment type'));
+  },
+});
 
 // Resident routes
 router.post('/', authenticate, upload.array('attachments', 5), supportController.createTicket.bind(supportController));

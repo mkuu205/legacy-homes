@@ -15,7 +15,8 @@
     "db:migrate:prod": "prisma migrate deploy",
     "db:seed": "ts-node prisma/seed.ts",
     "db:studio": "prisma studio",
-    "test:tuma": "node --require ts-node/register --test tuma-payment-integrity.test.ts"
+    "test:tuma": "node --require ts-node/register --test tuma-payment-integrity.test.ts",
+    "test:security": "node --require ts-node/register --test security-phase2.test.ts"
   },
   "keywords": [],
   "author": "",

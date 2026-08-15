@@ -47,16 +47,11 @@ export const useAuthStore = create<AuthState>()(
       sessionState: 'UNAUTHENTICATED',
       hydrated: false,
 
-      setAuth: (user, accessToken, refreshToken) => {
+      setAuth: (user, accessToken, _refreshToken) => {
         const sessionId = crypto.randomUUID();
 
         sessionStorage.setItem('accessToken', accessToken);
-        sessionStorage.setItem('refreshToken', refreshToken);
         sessionStorage.setItem('sessionId', sessionId);
-        
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
-        localStorage.setItem('sessionId', sessionId);
 
         set({
           user,
@@ -77,7 +72,6 @@ export const useAuthStore = create<AuthState>()(
 
       logout: (expired = false) => {
         sessionStorage.removeItem('accessToken');
-        sessionStorage.removeItem('refreshToken');
         sessionStorage.removeItem('sessionId');
         
         localStorage.removeItem('accessToken');
@@ -93,7 +87,6 @@ export const useAuthStore = create<AuthState>()(
 
       clearSession: () => {
         sessionStorage.removeItem('accessToken');
-        sessionStorage.removeItem('refreshToken');
         sessionStorage.removeItem('sessionId');
         
         localStorage.removeItem('accessToken');

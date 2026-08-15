@@ -1,11 +1,11 @@
 import { Router } from "express";
 import paymentReconciliationController from "../controllers/payment-reconciliation.controller";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, authorize } from "../middleware/auth";
 
 const router: import("express").Router = Router();
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(authMiddleware, authorize('SUPER_ADMIN'));
 
 // Payment reconciliation routes
 router.get("/unreconciled", paymentReconciliationController.getUnreconciledPayments.bind(paymentReconciliationController));

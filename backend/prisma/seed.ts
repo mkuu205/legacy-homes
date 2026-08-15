@@ -6,8 +6,14 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Create Super Admin
-  const adminPassword = await bcrypt.hash('Admin@Legacy2024!', 12);
+  const adminPasswordValue = process.env.SEED_ADMIN_PASSWORD;
+  const residentPasswordValue = process.env.SEED_RESIDENT_PASSWORD;
+  if (!adminPasswordValue || !residentPasswordValue) {
+    throw new Error('SEED_ADMIN_PASSWORD and SEED_RESIDENT_PASSWORD must be explicitly set before running the seed script.');
+  }
+
+  // Create Super Admin only with an explicitly supplied password.
+  const adminPassword = await bcrypt.hash(adminPasswordValue, 12);
   const admin = await prisma.user.upsert({
     where: { email: 'admin@legacyhomes.co.ke' },
     update: {},
@@ -33,7 +39,7 @@ async function main() {
     { name: 'Peter Ochieng', email: 'peter.ochieng@example.com', phone: '0734567890', house: 'B1' },
   ];
 
-  const residentPassword = await bcrypt.hash('Resident@2024!', 12);
+  const residentPassword = await bcrypt.hash(residentPasswordValue, 12);
 
   for (let i = 0; i < residents.length; i++) {
     const r = residents[i];
@@ -87,10 +93,7 @@ async function main() {
 
   console.log('✅ System settings created');
   console.log('🎉 Database seeded successfully!');
-  console.log('\n📋 Login Credentials:');
-  console.log('  Super Admin: admin@legacyhomes.co.ke / Admin@Legacy2024!');
-
-  console.log('  Residents: [email] / Resident@2024!');
+  console.log('\n📋 Seed users were created using the passwords supplied through environment variables.');
 }
 
 main()

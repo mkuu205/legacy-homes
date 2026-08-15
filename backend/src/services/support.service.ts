@@ -101,9 +101,9 @@ export class SupportService {
     return { tickets, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } };
   }
 
-  async getTicketById(id: string) {
-    const ticket = await prisma.ticket.findUnique({
-      where: { id },
+  async getTicketById(id: string, requesterId: string, isAdmin: boolean) {
+    const ticket = await prisma.ticket.findFirst({
+      where: { id, ...(isAdmin ? {} : { residentId: requesterId }) },
       include: {
         resident: { select: { fullName: true, email: true, accountNumber: true } },
         assignee: { select: { fullName: true } },
@@ -126,6 +126,9 @@ export class SupportService {
   }) {
     const ticket = await prisma.ticket.findUnique({ where: { id: data.ticketId } });
     if (!ticket) throw new AppError('Ticket not found', 404);
+    if (!data.isAdmin && ticket.residentId !== data.userId) {
+      throw new AppError('Ticket not found', 404);
+    }
 
     const attachments: string[] = [];
     if (data.attachmentFiles) {

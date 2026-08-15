@@ -28,8 +28,10 @@ let socket: Socket | null = null;
 
 export const getSocket = (userId?: string): Socket => {
   if (!socket) {
+    const accessToken = typeof window !== 'undefined' ? sessionStorage.getItem('accessToken') : null;
     socket = io(SOCKET_URL.toString(), {
       transports: ['websocket'],
+      auth: { token: accessToken },
 
       autoConnect: true,
 

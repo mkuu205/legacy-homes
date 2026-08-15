@@ -11,13 +11,15 @@ const router: import('express').Router = Router();
 // for /api/residents/profile/picture: multer threw `ENOENT` when the dir
 // didn't exist, which surfaced as a 500 before our handler even ran.
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
-    if (ALLOWED_MIME.has(file.mimetype.toLowerCase())) cb(null, true);
-    else cb(new Error(`Unsupported image type: ${file.mimetype}. Allowed: JPG, PNG, WEBP`));
+    const extension = file.originalname.slice(file.originalname.lastIndexOf('.')).toLowerCase();
+    if (ALLOWED_MIME.has(file.mimetype.toLowerCase()) && ALLOWED_EXTENSIONS.has(extension)) cb(null, true);
+    else cb(new Error('Unsupported image type. Allowed: JPG, PNG, WEBP'));
   },
 });
 

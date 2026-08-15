@@ -117,6 +117,14 @@ export class AuthService {
   }
 
   async verifyOTPAndActivate(userId: string, otp: string) {
+    const account = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { accountStatus: true, registrationStatus: true },
+    });
+    if (!account || account.accountStatus !== 'INACTIVE' || account.registrationStatus !== 'PENDING') {
+      throw new AppError('Account cannot be activated through OTP verification', 403);
+    }
+
     const otpRecord = await prisma.otpCode.findFirst({
       where: {
         userId,
@@ -283,7 +291,7 @@ export class AuthService {
       where: { email },
     });
 
-    if (!user) {
+    if (!user || user.accountStatus !== 'ACTIVE') {
       return {
         message: 'If this email is registered, you will receive a reset link.',
       };
@@ -329,6 +337,10 @@ export class AuthService {
   }
 
   async resetPassword(token: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 12 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      throw new AppError('Password must be at least 12 characters and include uppercase, lowercase, number, and special character', 400);
+    }
+
     const tokenHash = crypto
       .createHash('sha256')
       .update(token)
@@ -360,31 +372,39 @@ export class AuthService {
       throw new AppError('Invalid or expired reset token', 400);
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, accountStatus: true },
+    });
+    if (!user || user.accountStatus !== 'ACTIVE') {
+      throw new AppError('Account is inactive or has been deleted', 401);
+    }
+
     const passwordHash = await bcrypt.hash(newPassword, 12);
 
-    await prisma.user.update({
-      where: {
-        id: userId,
-      },
+    await prisma.$transaction([
+      prisma.user.update({
+        where: {
+          id: userId,
+        },
       data: {
         passwordHash,
-      },
-    });
-
-    await prisma.systemSetting.delete({
-      where: {
-        key: `reset_${userId}`,
-      },
-    });
-
-    await prisma.refreshToken.updateMany({
-      where: {
-        userId,
-      },
-      data: {
-        revoked: true,
-      },
-    });
+        },
+      }),
+      prisma.systemSetting.delete({
+        where: {
+          key: `reset_${userId}`,
+        },
+      }),
+      prisma.refreshToken.updateMany({
+        where: {
+          userId,
+        },
+        data: {
+          revoked: true,
+        },
+      }),
+    ]);
 
     return {
       message: 'Password reset successful.',

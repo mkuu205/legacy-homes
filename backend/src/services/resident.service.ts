@@ -186,6 +186,9 @@ export class ResidentService {
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 12 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      throw new AppError('Password must be at least 12 characters and include uppercase, lowercase, number, and special character', 400);
+    }
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError('User not found', 404);
 
@@ -193,7 +196,10 @@ export class ResidentService {
     if (!isValid) throw new AppError('Current password is incorrect', 400);
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+      prisma.refreshToken.updateMany({ where: { userId }, data: { revoked: true } }),
+    ]);
 
     return { message: 'Password changed successfully' };
   }
@@ -245,11 +251,17 @@ export class ResidentService {
   }
 
   async adminResetPassword(id: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 12 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      throw new AppError('Password must be at least 12 characters and include uppercase, lowercase, number, and special character', 400);
+    }
     const resident = await prisma.user.findFirst({ where: { id, role: 'RESIDENT' } });
     if (!resident) throw new AppError('Resident not found', 404);
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    await prisma.user.update({ where: { id }, data: { passwordHash } });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id }, data: { passwordHash } }),
+      prisma.refreshToken.updateMany({ where: { userId: id }, data: { revoked: true } }),
+    ]);
     return { message: 'Password reset successfully' };
   }
 

@@ -1,11 +1,11 @@
 import { Router } from "express";
 import residentApprovalController from "../controllers/resident-approval.controller";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, authorize } from "../middleware/auth";
 
 const router: import("express").Router = Router();
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(authMiddleware, authorize('SUPER_ADMIN'));
 
 // Resident approval routes
 router.get("/applications/pending", residentApprovalController.getPendingApplications.bind(residentApprovalController));

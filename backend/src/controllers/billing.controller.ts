@@ -39,7 +39,10 @@ export class BillingController {
 
   async getById(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const bill = await billingService.getBillById(req.params.id as string);
+      const bill = await billingService.getBillById(
+        req.params.id as string,
+        req.user!.role === 'SUPER_ADMIN' ? undefined : req.user!.userId
+      );
       res.json({ success: true, data: bill });
     } catch (error) { next(error); }
   }
@@ -53,7 +56,9 @@ export class BillingController {
 
   async getStatement(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const residentId = req.params.residentId as string || req.user!.userId;
+      const residentId = req.user!.role === 'SUPER_ADMIN'
+        ? (req.params.residentId as string || req.user!.userId)
+        : req.user!.userId;
       const statement = await billingService.getResidentStatement(residentId);
       res.json({ success: true, data: statement });
     } catch (error) { next(error); }
@@ -76,7 +81,10 @@ export class BillingController {
   async downloadInvoice(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const result = await billingService.generateInvoicePDF(id) as any;
+      const result = await billingService.generateInvoicePDF(
+        id,
+        req.user!.role === 'SUPER_ADMIN' ? undefined : req.user!.userId
+      ) as any;
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=${result.filename}`);
       res.send(result.pdfBuffer);
@@ -86,7 +94,10 @@ export class BillingController {
   async downloadReceipt(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { paymentId } = req.params;
-      const result = await billingService.generateReceiptPDF(paymentId) as any;
+      const result = await billingService.generateReceiptPDF(
+        paymentId,
+        req.user!.role === 'SUPER_ADMIN' ? undefined : req.user!.userId
+      ) as any;
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=${result.filename}`);
       res.send(result.pdfBuffer);

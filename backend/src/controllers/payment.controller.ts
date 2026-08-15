@@ -151,6 +151,10 @@ export class PaymentController {
   async checkStatus(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const paymentId = req.params.paymentId;
+      if (req.user!.role !== 'SUPER_ADMIN') {
+        const payment = await paymentService.checkPaymentStatus(paymentId, req.user!.userId);
+        if (!payment) throw new AppError('Payment not found', 404);
+      }
       const result = await paymentEngineService.verifyPaymentStatus(paymentId);
       res.json({ success: true, data: result });
     } catch (error) {

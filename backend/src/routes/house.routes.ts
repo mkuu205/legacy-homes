@@ -1,11 +1,11 @@
 import { Router } from "express";
 import houseController from "../controllers/house.controller";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, authorize } from "../middleware/auth";
 
 const router: import("express").Router = Router();
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(authMiddleware, authorize('SUPER_ADMIN'));
 
 // House management routes
 router.post("/", houseController.createHouse.bind(houseController));

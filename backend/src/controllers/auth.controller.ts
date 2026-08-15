@@ -5,6 +5,22 @@ import prisma from '../config/prisma';
 import bcrypt from 'bcryptjs';
 import { sendAccountDeletedEmail } from '../utils/email';
 import { auditService } from '../services/audit.service';
+import { AppError } from '../middleware/errorHandler';
+
+const refreshCookieName = 'legacy_refresh_token';
+const refreshCookieOptions = () => {
+  const secure = process.env.NODE_ENV === 'production';
+  const sameSite = process.env.COOKIE_SAMESITE || (secure ? 'none' : 'lax');
+  return `HttpOnly; Path=/api/auth; Max-Age=${7 * 24 * 60 * 60}; SameSite=${sameSite}${secure ? '; Secure' : ''}`;
+};
+const setRefreshCookie = (res: Response, refreshToken: string) => {
+  res.setHeader('Set-Cookie', `${refreshCookieName}=${encodeURIComponent(refreshToken)}; ${refreshCookieOptions()}`);
+};
+const clearRefreshCookie = (res: Response) => {
+  const secure = process.env.NODE_ENV === 'production';
+  const sameSite = process.env.COOKIE_SAMESITE || (secure ? 'none' : 'lax');
+  res.setHeader('Set-Cookie', `${refreshCookieName}=; HttpOnly; Path=/api/auth; Max-Age=0; SameSite=${sameSite}${secure ? '; Secure' : ''}`);
+};
 
 export class AuthController {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -39,7 +55,10 @@ export class AuthController {
             houseNumber: house?.houseNumber, // Return houseNumber for frontend
             profilePicture: result.user.profilePicture,
           },
-          tokens: result.tokens,
+          tokens: (() => {
+            setRefreshCookie(res, result.tokens.refreshToken);
+            return { accessToken: result.tokens.accessToken };
+          })(),
         },
       });
     } catch (error) {
@@ -87,7 +106,10 @@ export class AuthController {
             profilePicture: result.user.profilePicture,
             accountStatus: result.user.accountStatus,
           },
-          tokens: result.tokens,
+          tokens: (() => {
+            setRefreshCookie(res, result.tokens.refreshToken);
+            return { accessToken: result.tokens.accessToken };
+          })(),
         },
       });
     } catch (error) {
@@ -97,9 +119,13 @@ export class AuthController {
 
   async refreshToken(req: Request, res: Response, next: NextFunction) {
     try {
-      const { refreshToken } = req.body;
+      const cookieHeader = req.headers.cookie || '';
+      const cookieToken = cookieHeader.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${refreshCookieName}=`))?.split('=').slice(1).join('=');
+      const refreshToken = cookieToken ? decodeURIComponent(cookieToken) : req.body?.refreshToken;
+      if (!refreshToken) throw new AppError('Refresh session required', 401);
       const tokens = await authService.refreshTokens(refreshToken);
-      res.json({ success: true, data: tokens });
+      setRefreshCookie(res, tokens.refreshToken);
+      res.json({ success: true, data: { accessToken: tokens.accessToken } });
     } catch (error) {
       next(error);
     }
@@ -107,8 +133,11 @@ export class AuthController {
 
   async logout(req: Request, res: Response, next: NextFunction) {
     try {
-      const { refreshToken } = req.body;
-      await authService.logout(refreshToken);
+      const cookieHeader = req.headers.cookie || '';
+      const cookieToken = cookieHeader.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${refreshCookieName}=`))?.split('=').slice(1).join('=');
+      const refreshToken = cookieToken ? decodeURIComponent(cookieToken) : req.body?.refreshToken;
+      if (refreshToken) await authService.logout(refreshToken);
+      clearRefreshCookie(res);
       res.json({ success: true, message: 'Logged out successfully' });
     } catch (error) {
       next(error);

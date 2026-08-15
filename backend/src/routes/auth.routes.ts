@@ -6,9 +6,17 @@ import rateLimit from 'express-rate-limit';
 const router: import("express").Router = Router();
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
+  windowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 10),
+  skipSuccessfulRequests: true,
   message: { success: false, message: 'Too many auth attempts. Please try again in 15 minutes.' },
+});
+
+const refreshLimiter = rateLimit({
+  windowMs: Number(process.env.AUTH_REFRESH_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
+  max: Number(process.env.AUTH_REFRESH_RATE_LIMIT_MAX || 30),
+  skipSuccessfulRequests: true,
+  message: { success: false, message: 'Too many invalid refresh attempts. Please try again later.' },
 });
 
 const otpLimiter = rateLimit({
@@ -27,7 +35,7 @@ import { outageController } from '../controllers/outage.controller';
 router.post('/notify-outage', outageController.subscribe.bind(outageController));
 
 // Token refresh - NO RATE LIMIT
-router.post('/refresh-token', authController.refreshToken.bind(authController));
+router.post('/refresh-token', refreshLimiter, authController.refreshToken.bind(authController));
 
 router.post('/logout', authController.logout.bind(authController));
 

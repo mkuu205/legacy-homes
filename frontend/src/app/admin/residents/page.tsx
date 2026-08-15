@@ -11,7 +11,7 @@ export default function AdminResidentsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newResident, setNewResident] = useState({ fullName: '', email: '', phone: '', houseNumber: '', password: 'Resident@2024!' });
+  const [newResident, setNewResident] = useState({ fullName: '', email: '', phone: '', houseNumber: '', password: '' });
   const [selectedResident, setSelectedResident] = useState<any>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -59,7 +59,7 @@ export default function AdminResidentsPage() {
     onSuccess: () => {
       toast({ type: 'success', title: 'Resident added successfully!' });
       setShowAddModal(false);
-      setNewResident({ fullName: '', email: '', phone: '', houseNumber: '', password: 'Resident@2024!' });
+      setNewResident({ fullName: '', email: '', phone: '', houseNumber: '', password: '' });
       queryClient.invalidateQueries({ queryKey: ['admin-residents'] });
     },
     onError: (error) => toast({ type: 'error', title: 'Failed to add resident', description: getErrorMessage(error) }),

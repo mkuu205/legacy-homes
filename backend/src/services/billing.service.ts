@@ -321,9 +321,9 @@ export class BillingService {
     };
   }
 
-  async getBillById(id: string) {
-    const bill = await prisma.bill.findUnique({
-      where: { id },
+  async getBillById(id: string, residentId?: string) {
+    const bill = await prisma.bill.findFirst({
+      where: { id, ...(residentId ? { residentId } : {}) },
       select: {
         id: true,
         billNumber: true,
@@ -638,8 +638,8 @@ export class BillingService {
     };
   }
 
-  async generateInvoicePDF(billId: string) {
-    const bill = await this.getBillById(billId);
+  async generateInvoicePDF(billId: string, residentId?: string) {
+    const bill = await this.getBillById(billId, residentId);
     if (!bill) throw new AppError('Bill not found', 404);
 
     return new Promise((resolve, reject) => {
@@ -780,9 +780,9 @@ export class BillingService {
     });
   }
 
-  async generateReceiptPDF(paymentId: string) {
-    const payment = await prisma.payment.findUnique({
-      where: { id: paymentId },
+  async generateReceiptPDF(paymentId: string, residentId?: string) {
+    const payment = await prisma.payment.findFirst({
+      where: { id: paymentId, ...(residentId ? { residentId } : {}) },
       include: {
         bill: {
           include: {

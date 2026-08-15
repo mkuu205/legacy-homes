@@ -35,25 +35,14 @@ const httpServer = http.createServer(app);
 // ============================================
 // ALLOWED ORIGINS - Including Pesapal
 // ============================================
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-
-  'https://legacyhomes.co.ke',
-  'https://www.legacyhomes.co.ke',
-
-  'https://legacy-homes-frontend.vercel.app',
-
-  'https://api.legacyhomes.co.ke',
-
-  'https://pay.pesapal.com',
-  'https://cybqa.pesapal.com',
-  'https://*.pesapal.com',
-];
-
-if (process.env.FRONTEND_URL) {
-  allowedOrigins.push(process.env.FRONTEND_URL);
-}
+const configuredOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.ADMIN_FRONTEND_URL,
+  ...(process.env.NODE_ENV !== 'production'
+    ? ['http://localhost:3000', 'http://localhost:5173']
+    : []),
+].filter((origin): origin is string => Boolean(origin));
+const allowedOrigins = new Set(configuredOrigins);
 
 // ============================================
 // SOCKET.IO SETUP
@@ -67,18 +56,7 @@ export const io = new SocketIOServer(httpServer, {
         return;
       }
 
-      const isAllowed = allowedOrigins.some((allowed) => {
-        if (allowed.includes('*')) {
-          // Handle wildcard domains like *.pesapal.com
-          const pattern = allowed
-            .replace(/\./g, '\\.')
-            .replace(/\*/g, '.*');
-
-          return new RegExp(`^${pattern}$`).test(origin);
-        }
-
-        return allowed === origin || origin.endsWith('.vercel.app');
-      });
+      const isAllowed = allowedOrigins.has(origin);
 
       if (isAllowed) {
         callback(null, true);
@@ -93,15 +71,44 @@ export const io = new SocketIOServer(httpServer, {
 });
 
 // Socket.io connection handling
+io.use(async (socket, next) => {
+  try {
+    const token = typeof socket.handshake.auth?.token === 'string'
+      ? socket.handshake.auth.token
+      : socket.handshake.headers.authorization?.replace(/^Bearer\s+/i, '');
+    if (!token) return next(new Error('Authentication required'));
+    const { verifyAccessToken } = await import('./utils/jwt');
+    const payload = verifyAccessToken(token);
+    const { default: prisma } = await import('./config/prisma');
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, role: true, accountStatus: true },
+    });
+    if (!user || user.accountStatus !== 'ACTIVE') return next(new Error('Account inactive'));
+    socket.data.userId = user.id;
+    socket.data.isAdmin = user.role === 'SUPER_ADMIN';
+    next();
+  } catch {
+    next(new Error('Invalid socket authentication'));
+  }
+});
+
 io.on('connection', (socket) => {
   logger.info(`Socket connected: ${socket.id}`);
 
   socket.on('join', (roomName: string) => {
+    if (!socket.data.isAdmin || typeof roomName !== 'string' || !roomName.startsWith('admin_')) {
+      return;
+    }
     socket.join(roomName);
-    logger.info(`Socket ${socket.id} joined room: ${roomName}`);
+    logger.info(`Socket ${socket.id} joined admin room: ${roomName}`);
   });
 
   socket.on('join_room', (userId: string) => {
+    if (typeof userId !== 'string' || userId !== socket.data.userId) {
+      logger.warn(`Rejected unauthorized room join from socket ${socket.id}`);
+      return;
+    }
     socket.join(`user_${userId}`);
     logger.info(`User ${userId} joined their room`);
   });
@@ -123,21 +130,12 @@ app.use(helmet({
 // ============================================
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, server-to-server)
     if (!origin) {
       callback(null, true);
       return;
     }
-    
-    // Check if origin is allowed
-    const isAllowed = allowedOrigins.some(allowed => {
-      if (allowed.includes('*')) {
-        // Handle wildcards like *.pesapal.com
-        const pattern = allowed.replace(/\./g, '\\.').replace(/\*/g, '.*');
-        return new RegExp(`^${pattern}$`).test(origin);
-      }
-      return allowed === origin || origin.endsWith('.vercel.app');
-    });
+
+    const isAllowed = allowedOrigins.has(origin);
     
     if (isAllowed) {
       callback(null, true);
@@ -224,11 +222,24 @@ const limiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => {
     const path = req.path;
-    return path.startsWith('/auth') || path.startsWith('/health') || path === '/api/health';
+    return path.startsWith('/health') || path === '/api/health';
   },
 });
 
 app.use('/api/', limiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '10'),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many authentication attempts. Please try again later.' },
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/refresh-token', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
+app.use('/api/auth/verify-otp', authLimiter);
 
 app.get('/deployment-test', (_req, res) => {
   res.json({
@@ -238,31 +249,9 @@ app.get('/deployment-test', (_req, res) => {
   });
 });
 
-// ============================================
-// 🔥 CALLBACK DEBUGGING MIDDLEWARE
-// ============================================
-
-// Log all callback attempts
-app.use('/api/payments/callback', (req, res, next) => {
-  logger.info('🔥 CALLBACK HIT - RAW REQUEST');
-  logger.info('Method:', req.method);
-  logger.info('Headers:', JSON.stringify(req.headers));
-  logger.info('Query:', JSON.stringify(req.query));
-  logger.info('Body:', JSON.stringify(req.body));
-  next();
-});
-
-// Specific Pesapal callback logging
-app.use('/api/payments/pesapal/callback', (req, res, next) => {
-  logger.info('🔥 PESAPAL CALLBACK HIT');
-  logger.info('Query:', JSON.stringify(req.query));
-  next();
-});
-
-// Specific TUMA callback logging
-app.use('/api/payments/tuma/callback', (req, res, next) => {
-  logger.info('🔥 TUMA CALLBACK HIT');
-  logger.info('Body:', JSON.stringify(req.body));
+// Provider callbacks are public endpoints. Do not log raw bodies, headers, query strings, or tokens.
+app.use('/api/payments/callback', (req, _res, next) => {
+  logger.info('Payment callback received', { path: req.path, method: req.method });
   next();
 });
 

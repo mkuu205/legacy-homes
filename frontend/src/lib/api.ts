@@ -164,6 +164,7 @@ export const api: AxiosInstance = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
+  withCredentials: true,
 });
 
 // --- REQUEST INTERCEPTOR ---
@@ -352,32 +353,20 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = sessionStorage.getItem('refreshToken') || localStorage.getItem('refreshToken');
-
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
-        }
-
-        const response = await axios.post(
+                const response = await axios.post(
           `${API_URL}/auth/refresh-token`,
-          { refreshToken },
-          { timeout: 10000 }
+          {},
+          { timeout: 10000, withCredentials: true }
         );
 
         const accessToken = response.data?.data?.accessToken || response.data?.accessToken;
-        const newRefreshToken = response.data?.data?.refreshToken || response.data?.refreshToken;
-
-        if (!accessToken) {
+                if (!accessToken) {
           throw new Error('Invalid refresh response: No access token');
         }
 
         sessionStorage.setItem('accessToken', accessToken);
         localStorage.setItem('accessToken', accessToken);
 
-        if (newRefreshToken) {
-          sessionStorage.setItem('refreshToken', newRefreshToken);
-          localStorage.setItem('refreshToken', newRefreshToken);
-        }
 
         onTokenRefreshed(accessToken);
         isRefreshing = false;
@@ -396,7 +385,6 @@ api.interceptors.response.use(
             console.warn('Genuine 401 - logging out');
             
             sessionStorage.removeItem('accessToken');
-            sessionStorage.removeItem('refreshToken');
             sessionStorage.removeItem('sessionId');
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');

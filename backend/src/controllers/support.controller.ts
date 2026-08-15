@@ -55,7 +55,11 @@ export class SupportController {
 
   async getById(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const ticket = await supportService.getTicketById(req.params.id as string);
+      const ticket = await supportService.getTicketById(
+        req.params.id as string,
+        req.user!.userId,
+        req.user!.role === 'SUPER_ADMIN'
+      );
 
       res.json({
         success: true,
