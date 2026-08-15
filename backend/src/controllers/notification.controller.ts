@@ -119,31 +119,25 @@ export class NotificationController {
       }
       const residentId = req.user!.userId;
 
-      // Wrap in try-catch to avoid 500 if the deviceToken table doesn't exist or has issues
-      try {
-        const deviceToken = await (prisma as any).deviceToken.upsert({
-          where: { token },
-          update: {
-            residentId,
-            platform,
-            deviceName,
-            active: true,
-            lastSeenAt: new Date(),
-          },
-          create: {
-            token,
-            residentId,
-            platform,
-            deviceName,
-            active: true,
-          },
-        });
-        res.json({ success: true, data: deviceToken });
-      } catch (dbError) {
-        logger.error('[NOTIFICATION] Failed to register device token in DB', { error: dbError, residentId });
-        // Return 200 even if DB fails to prevent frontend crash, as push is non-critical
-        res.json({ success: true, message: 'Device registered (locally)', error: 'DB_STORAGE_FAILED' });
-      }
+      const deviceToken = await prisma.deviceToken.upsert({
+        where: { token },
+        update: {
+          residentId,
+          platform,
+          deviceName,
+          active: true,
+          lastSeenAt: new Date(),
+        },
+        create: {
+          token,
+          residentId,
+          platform,
+          deviceName,
+          active: true,
+        },
+      });
+
+      res.json({ success: true, data: deviceToken });
     } catch (error) {
       next(error);
     }
@@ -152,14 +146,22 @@ export class NotificationController {
   async removeDevice(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { token } = req.body;
-      
-      try {
-        await (prisma as any).deviceToken.update({
-          where: { token },
-          data: { active: false },
-        });
-      } catch (dbError) {
-        logger.error('[NOTIFICATION] Failed to remove device token from DB', { error: dbError });
+      if (!token || typeof token !== 'string') {
+        res.status(400).json({ success: false, message: 'Device token is required' });
+        return;
+      }
+
+      const result = await prisma.deviceToken.updateMany({
+        where: {
+          token,
+          residentId: req.user!.userId,
+        },
+        data: { active: false, lastSeenAt: new Date() },
+      });
+
+      if (result.count === 0) {
+        res.status(404).json({ success: false, message: 'Device token not found for this account' });
+        return;
       }
 
       res.json({ success: true, message: 'Device token removed' });

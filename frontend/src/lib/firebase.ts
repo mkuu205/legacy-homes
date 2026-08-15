@@ -38,9 +38,18 @@ if (firebaseConfig) {
 }
 
 let messaging: Messaging | null = null;
+let messagingServiceWorker: Promise<ServiceWorkerRegistration | undefined> | undefined;
 if (typeof window !== 'undefined' && app) {
   try {
     messaging = getMessaging(app);
+    if ('serviceWorker' in navigator && (window.isSecureContext || window.location.hostname === 'localhost')) {
+      const workerConfig = encodeURIComponent(JSON.stringify(firebaseConfig));
+      messagingServiceWorker = navigator.serviceWorker.register(`/firebase-messaging-sw.js?config=${workerConfig}`)
+        .catch((error) => {
+          console.warn('Firebase messaging service worker registration failed:', error);
+          return undefined;
+        });
+    }
   } catch (error) {
     console.warn('Firebase Messaging initialization failed:', error);
   }
@@ -57,6 +66,7 @@ export const requestForToken = async () => {
     if (permission === 'granted') {
       const currentToken = await getToken(messaging, {
         vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+        serviceWorkerRegistration: messagingServiceWorker ? await messagingServiceWorker : undefined,
       });
       if (currentToken) {
         return currentToken;

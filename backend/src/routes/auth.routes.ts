@@ -33,6 +33,7 @@ router.post('/login', authLimiter, authController.login.bind(authController));
 // Outage notification (Public)
 import { outageController } from '../controllers/outage.controller';
 router.post('/notify-outage', outageController.subscribe.bind(outageController));
+router.post('/outage-recovered', outageController.recover.bind(outageController));
 
 // Token refresh - NO RATE LIMIT
 router.post('/refresh-token', refreshLimiter, authController.refreshToken.bind(authController));

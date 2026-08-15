@@ -1,18 +1,16 @@
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
 
-// Initialize the Firebase app in the service worker by passing in the messagingSenderId.
-// Note: These values should be injected via environment variables at build time.
-// If they are not available, messaging will be gracefully disabled.
-
-const firebaseConfig = {
-  apiKey: self.FIREBASE_API_KEY || '',
-  authDomain: self.FIREBASE_AUTH_DOMAIN || '',
-  projectId: self.FIREBASE_PROJECT_ID || '',
-  storageBucket: self.FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: self.FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: self.FIREBASE_APP_ID || '',
-};
+// Firebase web configuration is public client configuration, supplied by the
+// page during service-worker registration. Firebase Admin credentials never
+// belong in this file.
+let firebaseConfig = {};
+try {
+  const rawConfig = new URL(self.location.href).searchParams.get('config');
+  firebaseConfig = rawConfig ? JSON.parse(decodeURIComponent(rawConfig)) : {};
+} catch {
+  firebaseConfig = {};
+}
 
 // Only initialize if we have a valid configuration
 if (firebaseConfig.messagingSenderId && firebaseConfig.projectId) {
@@ -21,14 +19,12 @@ if (firebaseConfig.messagingSenderId && firebaseConfig.projectId) {
     const messaging = firebase.messaging();
 
     messaging.onBackgroundMessage((payload) => {
-      console.log('[firebase-messaging-sw.js] Received background message ', payload);
-
       const notificationTitle = payload.notification?.title || 'Notification';
       const notificationOptions = {
         body: payload.notification?.body || '',
         icon: '/logo.png',
         data: {
-          url: payload.data?.link || '/dashboard/notifications',
+          url: new URL(payload.data?.link || '/dashboard/notifications', self.location.origin).href,
         },
       };
 

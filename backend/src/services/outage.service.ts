@@ -3,9 +3,6 @@ import { emailService } from './email.service';
 import { logger } from '../utils/logger';
 
 export class OutageService {
-  private isMonitoring = false;
-  private lastStatus: 'ONLINE' | 'OFFLINE' = 'ONLINE';
-
   /**
    * Subscribe to outage notifications
    */
@@ -18,9 +15,10 @@ export class OutageService {
       }
 
       // Check for existing active subscription that hasn't been notified yet
+      const normalizedEmail = email.trim().toLowerCase();
       const existing = await prisma.outageSubscription.findFirst({
         where: {
-          email,
+          email: normalizedEmail,
           isActive: true,
           isNotified: false,
         },
@@ -33,13 +31,13 @@ export class OutageService {
       // Create new subscription
       const subscription = await prisma.outageSubscription.create({
         data: {
-          email,
+          email: normalizedEmail,
           isActive: true,
           isNotified: false,
         },
       });
 
-      logger.info(`New outage subscription registered: ${email}`);
+      logger.info(`New outage subscription registered: ${normalizedEmail}`);
       return subscription;
     } catch (error) {
       logger.error(`Error subscribing to outage notifications for ${email}:`, error);
@@ -48,51 +46,13 @@ export class OutageService {
   }
 
   /**
-   * Start the recovery monitor
+   * Send recovery notifications for all pending subscriptions.
+   * This is intentionally invoked by an independent monitor after recovery.
    */
-  startRecoveryMonitor() {
-    if (this.isMonitoring) return;
-    
-    this.isMonitoring = true;
-    logger.info('Outage recovery monitor started');
-
-    // Initial check
-    this.checkHealth();
-
-    // Poll every 30 seconds
-    setInterval(() => {
-      this.checkHealth();
-    }, 30000);
-  }
-
-  /**
-   * Check internal health and detect recovery
-   */
-  private async checkHealth() {
-    try {
-      // Simple health check: can we query the database?
-      await prisma.$queryRaw`SELECT 1`;
-      
-      const currentStatus = 'ONLINE';
-      
-      if (this.lastStatus === 'OFFLINE' && currentStatus === 'ONLINE') {
-        logger.info('System recovery detected: OFFLINE -> ONLINE');
-        await this.notifySubscribers();
-      }
-      
-      this.lastStatus = currentStatus;
-    } catch (error) {
-      if (this.lastStatus === 'ONLINE') {
-        logger.warn('System outage detected: ONLINE -> OFFLINE');
-      }
-      this.lastStatus = 'OFFLINE';
-    }
-  }
-
   /**
    * Notify all active subscribers and mark as notified
    */
-  private async notifySubscribers() {
+  async notifySubscribers() {
     try {
       const subscribers = await prisma.outageSubscription.findMany({
         where: {

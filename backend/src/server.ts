@@ -9,7 +9,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import rateLimit from 'express-rate-limit';
 
 import { logger } from './utils/logger';
-import { outageService } from './services/outage.service';
+import prisma from './config/prisma';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
 
@@ -175,8 +175,16 @@ app.use(morgan('combined', {
 // ============================================
 // HEALTH HANDLER
 // ============================================
-const healthHandler = (_req: express.Request, res: express.Response) => {
+const healthHandler = async (_req: express.Request, res: express.Response) => {
   const memoryUsage = process.memoryUsage();
+  let database: 'ONLINE' | 'OFFLINE' = 'OFFLINE';
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    database = 'ONLINE';
+  } catch (error) {
+    logger.warn('Health check database dependency is unavailable');
+  }
+  const ready = database === 'ONLINE';
 
   res.set({
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
@@ -185,10 +193,12 @@ const healthHandler = (_req: express.Request, res: express.Response) => {
     'Surrogate-Control': 'no-store',
   });
 
-  res.status(200).json({
+  res.status(ready ? 200 : 503).json({
     success: true,
-    ready: true,
-    status: 'ONLINE',
+    ready,
+    status: ready ? 'ONLINE' : 'DEGRADED',
+    process: 'ONLINE',
+    dependencies: { database },
     service: 'Legacy Homes API',
     environment: process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString(),
@@ -289,9 +299,6 @@ httpServer.listen(PORT, () => {
   logger.info(`📞 TUMA Callback URL: ${process.env.PAYMENT_CALLBACK_URL || 'NOT SET'}`);
   logger.info(`📞 PESAPAL Callback URL: ${process.env.PESAPAL_IPN_URL || 'NOT SET'}`);
   logger.info(`📞 PESAPAL Consumer Key: ${process.env.PESAPAL_CONSUMER_KEY ? '✅ Set' : '❌ Missing'}`);
-  
-  // Start the outage recovery monitor
-  outageService.startRecoveryMonitor();
 });
 
 export default app;

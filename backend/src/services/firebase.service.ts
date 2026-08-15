@@ -1,10 +1,8 @@
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import type { Message, MulticastMessage } from 'firebase-admin/messaging';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma';
 import winston from 'winston';
-
-const prisma = new PrismaClient();
 
 class FirebaseService {
   private initialized = false;
@@ -103,9 +101,9 @@ class FirebaseService {
 
   private async removeInvalidToken(token: string) {
     try {
-      await (prisma as any).deviceToken.update({
+      await prisma.deviceToken.updateMany({
         where: { token },
-        data: { active: false },
+        data: { active: false, lastSeenAt: new Date() },
       });
       winston.info(`Marked invalid token as inactive: ${token}`);
     } catch (error) {
@@ -115,9 +113,9 @@ class FirebaseService {
 
   private async removeInvalidTokens(tokens: string[]) {
     try {
-      await (prisma as any).deviceToken.updateMany({
+      await prisma.deviceToken.updateMany({
         where: { token: { in: tokens } },
-        data: { active: false },
+        data: { active: false, lastSeenAt: new Date() },
       });
       winston.info(`Marked ${tokens.length} invalid tokens as inactive`);
     } catch (error) {

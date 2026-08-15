@@ -15,22 +15,35 @@ interface EmailOptions {
 }
 
 export const sendEmail = async (options: EmailOptions): Promise<void> => {
-  try {
-    await apiInstance.sendTransacEmail({
-      sender: {
-        email: 'legacyhomesk@gmail.com',
-        name: 'Legacy Homes',
-      },
-      to: [{ email: options.to }],
-      subject: options.subject,
-      htmlContent: options.html,
-      textContent: options.text,
-    });
-    logger.info(`Email sent to ${options.to}: ${options.subject}`);
-  } catch (error) {
-    logger.error(`Failed to send email to ${options.to}:`, error);
-    throw error;
+  const maxAttempts = Math.max(1, Math.min(Number(process.env.EMAIL_MAX_ATTEMPTS || 3), 5));
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await apiInstance.sendTransacEmail({
+        sender: {
+          email: 'legacyhomesk@gmail.com',
+          name: 'Legacy Homes',
+        },
+        to: [{ email: options.to }],
+        subject: options.subject,
+        htmlContent: options.html,
+        textContent: options.text,
+      });
+      logger.info(`Email sent to ${options.to}: ${options.subject}`);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts) {
+        const delayMs = 250 * (2 ** (attempt - 1));
+        logger.warn(`Email delivery attempt ${attempt} failed; retrying in ${delayMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
   }
+
+  logger.error(`Failed to send email after ${maxAttempts} attempts to ${options.to}`);
+  throw lastError;
 };
 
 // ─── Shared Design Tokens ─────────────────────────────────────────────────────
