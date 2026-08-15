@@ -84,9 +84,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ['resident-dashboard'] });
       });
 
-      socket.on('unread_count_update', (data: any) => {
-        queryClient.setQueryData(['unread-notifications-count'], { count: data.unreadCount });
-        queryClient.invalidateQueries({ queryKey: ['resident-dashboard'] });
+      socket.on('unread_count_update', () => {
+        // The socket event is only a refetch trigger. The authenticated API remains the source of truth.
+        queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       });
 
       // Listen for explicit reconnect triggers from connection-recovery-provider

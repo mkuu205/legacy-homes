@@ -74,7 +74,7 @@ export default function DashboardLayout({
 
         const res = await api.get('/notifications/my?limit=1');
         // Note: The resident endpoint returns 'unread' field, not 'unreadCount'
-        setUnreadCount(res.data.data?.unread || res.data.data?.unreadCount || 0);
+        setUnreadCount(res.data.data?.unread ?? res.data.data?.unreadCount ?? 0);
       } catch (error: any) {
         // 4. Stop polling on 401 (Unauthorized) or 403 (Forbidden)
         if (error.response?.status === 401 || error.response?.status === 403) {

@@ -281,7 +281,11 @@ export class ResidentService {
         take: 5,
       }),
       prisma.userNotification.count({
-        where: { userId, status: { not: 'READ' } },
+        where: {
+          userId,
+          channel: 'IN_APP',
+          status: { not: 'READ' },
+        },
       }),
     ]);
 
