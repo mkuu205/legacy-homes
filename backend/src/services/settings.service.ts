@@ -101,7 +101,7 @@ export class SettingsService {
       ]);
 
       return {
-        unitRate: parseFloat(unitRate || '250'),
+        unitRate: 250,
         standingCharge: parseFloat(standingCharge || '0'),
         vatRate: parseFloat(vatRate || '16'),
         billingCycle: billingCycle || 'MONTHLY',
@@ -124,7 +124,8 @@ export class SettingsService {
     try {
       const settings: Record<string, string> = {};
 
-      if (data.unitRate !== undefined) settings['UNIT_RATE'] = data.unitRate.toString();
+      // Unit rate is fixed by policy; ignore any client/database override.
+      settings['UNIT_RATE'] = '250';
       if (data.standingCharge !== undefined) settings['STANDING_CHARGE'] = data.standingCharge.toString();
       if (data.vatRate !== undefined) settings['VAT_RATE'] = data.vatRate.toString();
       if (data.billingCycle) settings['BILLING_CYCLE'] = data.billingCycle;

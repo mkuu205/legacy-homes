@@ -253,11 +253,14 @@ export class AuthController {
           // Ignore if table doesn't exist
         }
 
-        // 11. Unassign house before deleting user
-        await tx.user.update({ where: { id: user.id }, data: { houseId: null } });
-
-        // 12. Finally delete the user
-        await tx.user.delete({ where: { id: user.id } });
+        // 11. Release the house and permanently deactivate the account.
+        if (user.houseId) {
+          await tx.house.update({ where: { id: user.houseId }, data: { occupancyStatus: 'VACANT' } });
+        }
+        await tx.user.update({
+          where: { id: user.id },
+          data: { houseId: null, accountStatus: 'INACTIVE', registrationStatus: 'REJECTED', emailVerified: false },
+        });
       });
       res.json({ success: true, message: 'Your account has been permanently deleted.' });
     } catch (error) {

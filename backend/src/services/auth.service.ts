@@ -55,6 +55,11 @@ export class AuthService {
       throw new AppError('This house is already assigned', 409);
     }
 
+    await prisma.house.update({
+      where: { id: house.id },
+      data: { occupancyStatus: 'OCCUPIED' },
+    });
+
     const passwordHash = await bcrypt.hash(data.password, 12);
     const accountNumber = generateAccountNumber();
 
@@ -201,7 +206,7 @@ export class AuthService {
       throw new AppError('Your account has been suspended. Please contact support.', 403);
     }
 
-    if (user.accountStatus === 'INACTIVE') {
+    if (user.accountStatus !== 'ACTIVE') {
       throw new AppError('Your account is inactive. Please contact support.', 403);
     }
 
@@ -237,8 +242,12 @@ export class AuthService {
       },
     });
 
-    if (!user) {
-      throw new AppError('User not found', 404);
+    if (!user || user.accountStatus !== 'ACTIVE') {
+      await prisma.refreshToken.updateMany({
+        where: { userId: storedToken.userId },
+        data: { revoked: true },
+      });
+      throw new AppError('Account is inactive or has been deleted', 401);
     }
 
     await prisma.refreshToken.update({

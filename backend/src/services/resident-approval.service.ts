@@ -1,4 +1,4 @@
-import { RegistrationStatus, AccountStatus } from '@prisma/client';
+import { RegistrationStatus, AccountStatus, HouseStatus } from '@prisma/client';
 import prisma from '../config/prisma';
 import logger from '../utils/logger';
 import { sendEmail } from '../utils/email';
@@ -131,13 +131,29 @@ export class ResidentApprovalService {
   // Approve resident application
   async approveResident(residentId: string, assignedHouseId?: string) {
     try {
-      const resident = await prisma.user.update({
-        where: { id: residentId },
-        data: {
-          registrationStatus: RegistrationStatus.APPROVED,
-          accountStatus: AccountStatus.ACTIVE,
-          ...(assignedHouseId && { houseId: assignedHouseId }),
-        },
+      const resident = await prisma.$transaction(async (tx) => {
+        const current = await tx.user.findUnique({ where: { id: residentId } });
+        if (!current) throw new Error('Resident not found');
+
+        if (assignedHouseId) {
+          const target = await tx.house.findUnique({ where: { id: assignedHouseId } });
+          if (!target) throw new Error('House not found');
+          const occupant = await tx.user.findFirst({ where: { houseId: assignedHouseId, id: { not: residentId } } });
+          if (occupant) throw new Error('House is already assigned to another resident');
+          if (current.houseId && current.houseId !== assignedHouseId) {
+            await tx.house.update({ where: { id: current.houseId }, data: { occupancyStatus: HouseStatus.VACANT } });
+          }
+          await tx.house.update({ where: { id: assignedHouseId }, data: { occupancyStatus: HouseStatus.OCCUPIED } });
+        }
+
+        return tx.user.update({
+          where: { id: residentId },
+          data: {
+            registrationStatus: RegistrationStatus.APPROVED,
+            accountStatus: AccountStatus.ACTIVE,
+            ...(assignedHouseId && { houseId: assignedHouseId }),
+          },
+        });
       });
 
       // Fetch house info if assigned
@@ -329,13 +345,19 @@ export class ResidentApprovalService {
   // Assign house to resident
   async assignHouseToResident(residentId: string, houseId: string) {
     try {
-      // Check if house exists and is available
-      const house = await prisma.house.findUnique({ where: { id: houseId } });
-      if (!house) throw new Error('House not found');
+      const resident = await prisma.$transaction(async (tx) => {
+        const current = await tx.user.findUnique({ where: { id: residentId } });
+        if (!current) throw new Error('Resident not found');
+        const house = await tx.house.findUnique({ where: { id: houseId } });
+        if (!house) throw new Error('House not found');
+        const occupant = await tx.user.findFirst({ where: { houseId, id: { not: residentId } } });
+        if (occupant) throw new Error('House is already assigned to another resident');
 
-      const resident = await prisma.user.update({
-        where: { id: residentId },
-        data: { houseId },
+        if (current.houseId && current.houseId !== houseId) {
+          await tx.house.update({ where: { id: current.houseId }, data: { occupancyStatus: HouseStatus.VACANT } });
+        }
+        await tx.house.update({ where: { id: houseId }, data: { occupancyStatus: HouseStatus.OCCUPIED } });
+        return tx.user.update({ where: { id: residentId }, data: { houseId } });
       });
 
       logger.info(`House ${houseId} assigned to resident ${residentId}`);
@@ -349,9 +371,13 @@ export class ResidentApprovalService {
   // Unassign house from resident
   async unassignHouseFromResident(residentId: string) {
     try {
-      const resident = await prisma.user.update({
-        where: { id: residentId },
-        data: { houseId: null },
+      const resident = await prisma.$transaction(async (tx) => {
+        const current = await tx.user.findUnique({ where: { id: residentId } });
+        if (!current) throw new Error('Resident not found');
+        if (current.houseId) {
+          await tx.house.update({ where: { id: current.houseId }, data: { occupancyStatus: HouseStatus.VACANT } });
+        }
+        return tx.user.update({ where: { id: residentId }, data: { houseId: null } });
       });
 
       logger.info(`House unassigned from resident ${residentId}`);

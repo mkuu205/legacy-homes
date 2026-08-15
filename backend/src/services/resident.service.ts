@@ -118,37 +118,35 @@ export class ResidentService {
     return prisma.user.update({ where: { id }, data });
   }
 
-  async updateProfile(userId: string, data: {
+    async updateProfile(userId: string, data: {
     fullName?: string;
     phone?: string;
     email?: string;
     nationalId?: string;
+    houseNumber?: string;
   }) {
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data,
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        houseId: true,
-        accountNumber: true,
-        nationalId: true,
-        profilePicture: true,
-        accountStatus: true,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const current = await tx.user.findUnique({ where: { id: userId } });
+      if (!current) throw new AppError('User not found', 404);
+      const { houseNumber, ...profileData } = data;
+
+      if (houseNumber !== undefined) {
+        const normalizedHouseNumber = houseNumber.trim().toUpperCase();
+        const target = await tx.house.findUnique({ where: { houseNumber: normalizedHouseNumber } });
+        if (!target) throw new AppError(`House number ${normalizedHouseNumber} not found`, 400);
+        const occupant = await tx.user.findFirst({ where: { houseId: target.id, id: { not: userId } } });
+        if (occupant) throw new AppError(`House ${normalizedHouseNumber} is already assigned to another resident`, 409);
+        if (current.houseId && current.houseId !== target.id) {
+          await tx.house.update({ where: { id: current.houseId }, data: { occupancyStatus: 'VACANT' } });
+        }
+        await tx.house.update({ where: { id: target.id }, data: { occupancyStatus: 'OCCUPIED' } });
+        return tx.user.update({ where: { id: userId }, data: { ...profileData, houseId: target.id }, select: { id: true, fullName: true, email: true, phone: true, houseId: true, accountNumber: true, nationalId: true, profilePicture: true, accountStatus: true } });
+      }
+
+      return tx.user.update({ where: { id: userId }, data: profileData, select: { id: true, fullName: true, email: true, phone: true, houseId: true, accountNumber: true, nationalId: true, profilePicture: true, accountStatus: true } });
     });
-
-    // Fetch house for houseNumber
-    const house = updated.houseId
-      ? await prisma.house.findUnique({ where: { id: updated.houseId } })
-      : null;
-
-    return {
-      ...updated,
-      houseNumber: house?.houseNumber,
-    };
+    const house = updated.houseId ? await prisma.house.findUnique({ where: { id: updated.houseId } }) : null;
+    return { ...updated, houseNumber: house?.houseNumber };
   }
 
   async updateProfilePicture(userId: string, fileBuffer: Buffer) {
@@ -215,8 +213,14 @@ export class ResidentService {
       // 8. Delete OTP codes and refresh tokens
       await tx.otpCode.deleteMany({ where: { userId: id } });
       await tx.refreshToken.deleteMany({ where: { userId: id } });
-      // 9. Delete the user (houseId FK removed with user)
-      await tx.user.delete({ where: { id } });
+      // 9. Permanently deactivate the account while retaining its identity record.
+      if (resident.houseId) {
+        await tx.house.update({ where: { id: resident.houseId }, data: { occupancyStatus: 'VACANT' } });
+      }
+      await tx.user.update({
+        where: { id },
+        data: { houseId: null, accountStatus: 'INACTIVE', registrationStatus: 'REJECTED', emailVerified: false },
+      });
     });
     return { message: 'Resident and all associated data deleted successfully' };
   }

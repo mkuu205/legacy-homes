@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, JWTPayload } from '../utils/jwt';
 import { AppError } from './errorHandler';
+import prisma from '../config/prisma';
 
 export type AuthRequest = Request & {
   user?: JWTPayload;
@@ -8,11 +9,11 @@ export type AuthRequest = Request & {
   files?: any;
 };
 
-export const authMiddleware = (
+export const authMiddleware = async (
   req: AuthRequest,
   _res: Response,
   next: NextFunction
-): void => {
+): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -21,8 +22,17 @@ export const authMiddleware = (
     }
 
     const token = authHeader.split(' ')[1];
-    req.user = verifyAccessToken(token);
+    const payload = verifyAccessToken(token);
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, email: true, role: true, accountStatus: true },
+    });
 
+    if (!user || user.accountStatus !== 'ACTIVE') {
+      throw new AppError('Account is inactive or has been deleted', 401);
+    }
+
+    req.user = payload;
     next();
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
