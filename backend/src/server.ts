@@ -36,11 +36,15 @@ const httpServer = http.createServer(app);
 // ALLOWED ORIGINS - Including Pesapal
 // ============================================
 const configuredOrigins = [
+  ...(process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   process.env.FRONTEND_URL,
   process.env.ADMIN_FRONTEND_URL,
-  ...(process.env.NODE_ENV !== 'production'
-    ? ['http://localhost:3000', 'http://localhost:5173']
-    : []),
+  ...(process.env.NODE_ENV === 'production'
+    ? ['https://legacyhomes.co.ke', 'https://www.legacyhomes.co.ke']
+    : ['http://localhost:3000', 'http://localhost:5173']),
 ].filter((origin): origin is string => Boolean(origin));
 const allowedOrigins = new Set(configuredOrigins);
 
