@@ -1,6 +1,10 @@
 -- Tuma payment integrity: prevent duplicate provider identifiers and callback events.
 -- Nullable columns remain nullable; PostgreSQL permits multiple NULL values in these indexes.
 -- This migration intentionally does not delete or rewrite existing payment history.
+-- The initial production schema omitted callbackFingerprint even though the
+-- application schema requires it, so add it before creating its index.
+ALTER TABLE "callback_audits"
+  ADD COLUMN IF NOT EXISTS "callbackFingerprint" TEXT;
 
 CREATE UNIQUE INDEX "payments_providerTransactionId_key"
   ON "payments" ("providerTransactionId")
