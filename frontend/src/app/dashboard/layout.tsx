@@ -51,7 +51,7 @@ export default function DashboardLayout({
   const fetchUnreadCount = useCallback(async () => {
     try {
       const res = await api.get('/notifications/my?limit=1');
-      setUnreadCount(res.data.data?.unreadCount || 0);
+      setUnreadCount(res.data.data?.unread ?? res.data.data?.unreadCount ?? 0);
     } catch {}
   }, []);
 
@@ -293,6 +293,7 @@ export default function DashboardLayout({
                     <Link
                       key={href}
                       href={href}
+                      prefetch={href !== '/dashboard/support'}
                       onClick={() =>
                         setSidebarOpen(false)
                       }
@@ -324,6 +325,7 @@ export default function DashboardLayout({
                     <Link
                       key={href}
                       href={href}
+                      prefetch={href !== '/dashboard/support'}
                       onClick={() =>
                         setSidebarOpen(false)
                       }

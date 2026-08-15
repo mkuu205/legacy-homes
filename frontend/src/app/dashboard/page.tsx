@@ -174,6 +174,7 @@ export default function DashboardPage() {
           <Link
             key={label}
             href={href}
+            prefetch={label === 'Support' ? false : undefined}
             className="stat card-hover"
             style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
           >

@@ -8,6 +8,12 @@ import { Bell, CheckCheck, Info, AlertCircle, CheckCircle, Megaphone, Trash2, Ey
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
 
+  const invalidateNotificationQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+    queryClient.invalidateQueries({ queryKey: ['unread-notifications-count'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: ['my-notifications'],
     queryFn: async () => {
@@ -25,9 +31,7 @@ export default function NotificationsPage() {
       await api.patch('/notifications/mark-all-read');
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['unread-notifications-count'] });
-      queryClient.invalidateQueries({ queryKey: ['resident-dashboard'] });
+      invalidateNotificationQueries();
       toast({ type: 'success', title: 'All notifications marked as read' });
     },
   });
@@ -37,9 +41,7 @@ export default function NotificationsPage() {
       await api.patch(`/notifications/${id}/read`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['unread-notifications-count'] });
-      queryClient.invalidateQueries({ queryKey: ['resident-dashboard'] });
+      invalidateNotificationQueries();
     },
   });
 
@@ -48,7 +50,7 @@ export default function NotificationsPage() {
       await api.patch(`/notifications/${id}/unread`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+      invalidateNotificationQueries();
     },
   });
 
@@ -57,7 +59,7 @@ export default function NotificationsPage() {
       await api.delete(`/notifications/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+      invalidateNotificationQueries();
       toast({ type: 'success', title: 'Notification deleted' });
     },
     onError: (err) => {
@@ -70,7 +72,7 @@ export default function NotificationsPage() {
       await api.delete('/notifications/delete-all');
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+      invalidateNotificationQueries();
       toast({ type: 'success', title: 'All notifications deleted' });
     },
     onError: (err) => {
