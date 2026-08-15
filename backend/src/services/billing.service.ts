@@ -6,6 +6,7 @@ import logger from '../utils/logger';
 import PDFDocument from 'pdfkit';
 import axios from 'axios';
 
+import { toMoneyNumber, calculateBalance } from '../utils/money';
 /** Fallback hardcoded rate — only used when the DB has no UNIT_RATE setting yet. */
 const DEFAULT_UNIT_RATE = 250; // KES per unit
 
@@ -46,22 +47,10 @@ export class BillingService {
       throw new AppError(`DUPLICATE:Bills for ${billingMonth} ${targetMsg} already exist (${existingCount} bills). Use force=true to regenerate.`, 409);
     }
 
-    // Force regenerate: delete existing unpaid/overdue bills for this month first
+    // Never delete or overwrite financial history during regeneration. Existing bills
+    // must be corrected through an explicit, auditable correction workflow.
     if (existingCount > 0 && force) {
-      const existingBills = await prisma.bill.findMany({
-        where: { ...whereClause, status: { in: ['UNPAID', 'OVERDUE'] } },
-        select: { id: true, readingId: true },
-      });
-      const billIds = existingBills.map((b) => b.id);
-      // Delete associated payments first
-      await prisma.payment.deleteMany({ where: { billId: { in: billIds } } });
-      // Unlink readings from bills so they can be re-processed
-      await prisma.meterReading.updateMany({
-        where: { id: { in: existingBills.map((b) => b.readingId).filter(Boolean) as string[] } },
-        data: { billId: null },
-      });
-      await prisma.bill.deleteMany({ where: { id: { in: billIds } } });
-      logger.info(`Force regenerate: deleted ${billIds.length} existing unpaid bills for ${billingMonth}`);
+      throw new AppError(`CORRECTION_REQUIRED:Bills for ${billingMonth} already exist. Financial history cannot be deleted or regenerated in place.`, 409);
     }
 
     const readingsWhere: any = { billingMonth, billId: null };
@@ -170,14 +159,14 @@ export class BillingService {
             house.resident.email,
             house.resident.fullName,
             bill.billNumber,
-            bill.totalAmount,
+            toMoneyNumber(bill.totalAmount),
             billingMonth,
             dueDate.toLocaleDateString('en-KE')
           ),
           notificationService.sendBillGeneratedNotification(
             house.resident.id,
             bill.billNumber,
-            bill.totalAmount
+            toMoneyNumber(bill.totalAmount)
           )
         ]);
       } catch (err) {
@@ -571,8 +560,8 @@ export class BillingService {
       meterNumber: metersInfo[idx]?.meterNumber,
     }));
 
-    const totalBilled = bills.reduce((sum, bill) => sum + bill.totalAmount, 0);
-    const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const totalBilled = bills.reduce((sum, bill) => sum + toMoneyNumber(bill.totalAmount), 0);
+    const totalPaid = payments.reduce((sum, payment) => sum + toMoneyNumber(payment.amount), 0);
     const outstanding = totalBilled - totalPaid;
 
     return {
@@ -733,7 +722,7 @@ export class BillingService {
 
         y = tableRow('Previous Reading', `${bill.previousReading}`, '—', '—', false, y);
         y = tableRow('Current Reading', `${bill.currentReading}`, '—', '—', true, y);
-        y = tableRow('Units Consumed', `${bill.unitsConsumed}`, `${bill.unitRate.toFixed(2)}`, `${(bill.unitsConsumed * bill.unitRate).toFixed(2)}`, false, y);
+        y = tableRow('Units Consumed', `${bill.unitsConsumed}`, `${bill.unitRate.toFixed(2)}`, `${(bill.unitsConsumed * toMoneyNumber(bill.unitRate)).toFixed(2)}`, false, y);
 
         // Bottom border of table
         doc.moveTo(marginL, y).lineTo(pageW - marginR, y).lineWidth(1).stroke('#0a3d62');
@@ -919,41 +908,24 @@ export class BillingService {
     });
   }
 
-  // ─── Delete single bill ───────────────────────────────────────────────────
+  // Financial records are immutable. Corrections must be explicit and auditable;
+  // these legacy destructive endpoints now fail closed rather than deleting history.
   async deleteBill(id: string) {
-    const bill = await prisma.bill.findUnique({ where: { id } });
+    const bill = await prisma.bill.findUnique({ where: { id }, select: { id: true } });
     if (!bill) throw new AppError('Bill not found', 404);
-    await prisma.payment.deleteMany({ where: { billId: id } });
-    await prisma.bill.delete({ where: { id } });
-    return { message: 'Bill deleted successfully' };
+    throw new AppError('Financial bills cannot be deleted; use the audited correction workflow.', 409);
   }
 
-  // ─── Delete multiple bills ────────────────────────────────────────────────
-  async deleteBills(ids: string[]) {
-    await prisma.payment.deleteMany({ where: { billId: { in: ids } } });
-    const result = await prisma.bill.deleteMany({ where: { id: { in: ids } } });
-    return { deleted: result.count };
+  async deleteBills(_ids: string[]) {
+    throw new AppError('Financial bills cannot be deleted; use the audited correction workflow.', 409);
   }
 
-  // ─── Delete bills by month ────────────────────────────────────────────────
-  async deleteBillsByMonth(billingMonth: string) {
-    const bills = await prisma.bill.findMany({ where: { billingMonth }, select: { id: true } });
-    const ids = bills.map((b) => b.id);
-    await prisma.payment.deleteMany({ where: { billId: { in: ids } } });
-    const result = await prisma.bill.deleteMany({ where: { billingMonth } });
-    return { deleted: result.count };
+  async deleteBillsByMonth(_billingMonth: string) {
+    throw new AppError('Financial bills cannot be deleted; use the audited correction workflow.', 409);
   }
 
-  // ─── Delete all unpaid bills ──────────────────────────────────────────────
   async deleteAllUnpaidBills() {
-    const bills = await prisma.bill.findMany({
-      where: { status: { in: ['UNPAID', 'OVERDUE'] } },
-      select: { id: true },
-    });
-    const ids = bills.map((b) => b.id);
-    await prisma.payment.deleteMany({ where: { billId: { in: ids } } });
-    const result = await prisma.bill.deleteMany({ where: { status: { in: ['UNPAID', 'OVERDUE'] } } });
-    return { deleted: result.count };
+    throw new AppError('Financial bills cannot be deleted; use the audited correction workflow.', 409);
   }
 
   // ─── Export bills as CSV ──────────────────────────────────────────────────

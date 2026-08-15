@@ -9,6 +9,7 @@ import { PaymentProviderType, PaymentStatus, PaymentMethodType, BillStatus } fro
 import { notificationService } from './notification.service';
 import { receiptService } from './receipt.service';
 import { io } from '../server';
+import { toMoneyNumber, calculateBalance } from '../utils/money';
 
 export class PaymentEngineService {
   private providers: Map<string, PaymentProvider> = new Map();
@@ -123,8 +124,8 @@ export class PaymentEngineService {
         where: { billId, status: PaymentStatus.PENDING },
         _sum: { amount: true },
       });
-      const reservedAmount = pendingPayments._sum.amount || 0;
-      const availableBalance = Math.max(0, bill.balance - reservedAmount);
+      const reservedAmount = toMoneyNumber(pendingPayments._sum.amount);
+      const availableBalance = Math.max(0, toMoneyNumber(bill.balance) - reservedAmount);
 
       if (amount > availableBalance) {
         throw new Error(`Amount exceeds available outstanding balance of KES ${availableBalance}`);
@@ -525,8 +526,10 @@ export class PaymentEngineService {
     }
 
     if (verification.status === 'SUCCESSFUL') {
-      if (verification.amount === undefined || verification.amount !== payment.amount) {
-        return this.recordTumaMismatch(auditId, payment.id, payment.amount, verification.amount, normalized);
+      // Legacy assertion equivalent: verification.amount !== payment.amount.
+      // Compare through the exact monetary representation instead of a JS float.
+      if (verification.amount === undefined || verification.amount !== toMoneyNumber(payment.amount)) {
+        return this.recordTumaMismatch(auditId, payment.id, toMoneyNumber(payment.amount), verification.amount, normalized);
       }
 
       const settlement = await this.processSuccessfulPayment(payment.id, normalized);
@@ -610,7 +613,9 @@ export class PaymentEngineService {
       await tx.$queryRaw`SELECT id FROM bills WHERE id = ${payment.billId} FOR UPDATE`;
       const bill = await tx.bill.findUnique({ where: { id: payment.billId } });
       if (!bill) return { settled: false, reason: 'Bill not found' };
-      if (payment.amount > bill.balance) {
+      // Legacy assertion equivalent: if (payment.amount > bill.balance).
+      // Decimal comparison avoids binary floating-point rounding errors.
+      if (toMoneyNumber(payment.amount) > toMoneyNumber(bill.balance)) {
         await tx.payment.update({
           where: { id: payment.id },
           data: {
@@ -627,9 +632,10 @@ export class PaymentEngineService {
       }
 
       const confirmationCode = providerPayload.mpesa_receipt_number || providerPayload.confirmation_code || payment.confirmationCode;
-      const updatedAmountPaid = bill.amountPaid + payment.amount;
-      const newBalance = Math.max(0, bill.totalAmount - updatedAmountPaid);
-      const newBillStatus = newBalance <= 0 ? BillStatus.PAID : BillStatus.PARTIAL;
+      // Decimal equivalent of: updatedAmountPaid = bill.amountPaid + payment.amount
+      const updatedAmountPaid = bill.amountPaid.add(payment.amount);
+      const newBalance = calculateBalance(bill.totalAmount, updatedAmountPaid);
+      const newBillStatus = newBalance.isZero() ? BillStatus.PAID : BillStatus.PARTIAL;
 
       const updatedPayment = await tx.payment.update({
         where: { id: payment.id },
@@ -681,7 +687,7 @@ export class PaymentEngineService {
     try {
       await notificationService.sendPaymentSuccessNotification(
         settlement.payment.residentId,
-        settlement.amount,
+        toMoneyNumber(settlement.amount),
         settlement.confirmationCode || 'N/A'
       );
     } catch (error) {

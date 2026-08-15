@@ -16,7 +16,8 @@
     "db:seed": "ts-node prisma/seed.ts",
     "db:studio": "prisma studio",
     "test:tuma": "node --require ts-node/register --test tuma-payment-integrity.test.ts",
-    "test:security": "node --require ts-node/register --test security-phase2.test.ts"
+    "test:security": "node --require ts-node/register --test security-phase2.test.ts",
+    "test:billing": "node --require ts-node/register --test billing-integrity.test.ts"
   },
   "keywords": [],
   "author": "",

@@ -8,6 +8,7 @@ import {
   formatBillingPeriod,
 } from '../utils/timezone';
 import { DateTime } from 'luxon';
+import { toMoneyNumber, calculateBalance, calculateBillStatus } from '../utils/money';
 
 export class BillGenerationService {
   /**
@@ -23,9 +24,10 @@ export class BillGenerationService {
 
       // Get all active meters with readings for this month
       const readings = await prisma.meterReading.findMany({
-        where: {
-          billingMonth,
-        },
+      where: {
+        billingMonth,
+        billId: null,
+      },
         include: {
           meter: {
             include: {
@@ -191,19 +193,9 @@ export class BillGenerationService {
       // Calculate total paid
       const totalPaid = bill.payments
         .filter(p => p.status === 'SUCCESSFUL')
-        .reduce((sum, p) => sum + p.amount, 0);
+        .reduce((sum, p) => sum + toMoneyNumber(p.amount), 0);
 
-      // Determine status
-      let status;
-      if (totalPaid >= bill.totalAmount) {
-        status = 'PAID';
-      } else if (totalPaid > 0) {
-        status = 'PARTIAL';
-      } else if (isBillOverdue(bill.dueDate)) {
-        status = 'OVERDUE';
-      } else {
-        status = 'UNPAID';
-      }
+      const status = calculateBillStatus(bill.totalAmount, totalPaid, isBillOverdue(bill.dueDate));
 
       // Update bill
       const updatedBill = await prisma.bill.update({
@@ -211,8 +203,8 @@ export class BillGenerationService {
         data: {
           status,
           amountPaid: totalPaid,
-          balance: Math.max(0, bill.totalAmount - totalPaid),
-          paidAt: totalPaid >= bill.totalAmount ? new Date() : null,
+          balance: calculateBalance(bill.totalAmount, totalPaid),
+          paidAt: toMoneyNumber(bill.totalAmount) <= totalPaid ? new Date() : null,
         },
       });
 

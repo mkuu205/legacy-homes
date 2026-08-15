@@ -1,6 +1,7 @@
 import { PrismaClient, Payment, PaymentReconciliationStatus } from "@prisma/client";
 import { logger } from "../utils/logger";
 
+import { toMoneyNumber, calculateBalance } from '../utils/money';
 const prisma = new PrismaClient();
 
 export class PaymentReconciliationService {
@@ -137,8 +138,8 @@ export class PaymentReconciliationService {
           reconciled++;
         } else if (payment.bill && payment.amount < payment.bill.balance) {
           // Partial payment - still reconcile if within tolerance
-          const tolerance = payment.bill.balance * 0.01; // 1% tolerance
-          if (Math.abs(payment.amount - payment.bill.balance) <= tolerance) {
+          const tolerance = toMoneyNumber(payment.bill.balance) * 0.01; // 1% tolerance
+          if (Math.abs(toMoneyNumber(payment.amount) - toMoneyNumber(payment.bill.balance)) <= tolerance) {
             await this.reconcilePayment(payment.id, PaymentReconciliationStatus.RECONCILED);
             reconciled++;
           } else {
@@ -175,7 +176,7 @@ export class PaymentReconciliationService {
         period: { startDate, endDate },
         summary: {
           totalPayments: payments.length,
-          totalAmount: payments.reduce((sum, p) => sum + p.amount, 0),
+          totalAmount: payments.reduce((sum, p) => sum + toMoneyNumber(p.amount), 0),
           reconciled: payments.filter((p) => p.reconciliationStatus === PaymentReconciliationStatus.RECONCILED).length,
           pending: payments.filter((p) => p.reconciliationStatus === PaymentReconciliationStatus.PENDING).length,
           mismatched: payments.filter((p) => p.reconciliationStatus === PaymentReconciliationStatus.MISMATCH).length,

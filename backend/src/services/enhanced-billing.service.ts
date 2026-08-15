@@ -1,6 +1,7 @@
 import { PrismaClient, Bill, BillStatus } from "@prisma/client";
 import { logger } from "../utils/logger";
 
+import { toMoneyNumber, calculateBalance } from '../utils/money';
 const prisma = new PrismaClient();
 
 export class EnhancedBillingService {
@@ -185,8 +186,8 @@ export class EnhancedBillingService {
         },
       });
 
-      const totalUnpaid = unpaidBills.reduce((sum, bill) => sum + bill.balance, 0);
-      const totalOverdue = overdueBills.reduce((sum, bill) => sum + bill.balance, 0);
+      const totalUnpaid = unpaidBills.reduce((sum, bill) => sum + toMoneyNumber(bill.balance), 0);
+      const totalOverdue = overdueBills.reduce((sum, bill) => sum + toMoneyNumber(bill.balance), 0);
       const totalOutstanding = totalUnpaid + totalOverdue;
       const allOutstandingBills = [...unpaidBills, ...overdueBills];
       const averageOutstandingAmount =
@@ -275,8 +276,8 @@ export class EnhancedBillingService {
         const unpaid = bills.filter((b) => b.status === BillStatus.UNPAID).length;
         const partial = bills.filter((b) => b.status === BillStatus.PARTIAL).length;
 
-        const totalGenerated = bills.reduce((sum, b) => sum + b.totalAmount, 0);
-        const totalCollected = bills.reduce((sum, b) => sum + b.amountPaid, 0);
+        const totalGenerated = bills.reduce((sum, b) => sum + toMoneyNumber(b.totalAmount), 0);
+        const totalCollected = bills.reduce((sum, b) => sum + toMoneyNumber(b.amountPaid), 0);
         const collectionRate =
           totalGenerated > 0 ? (totalCollected / totalGenerated) * 100 : 0;
 

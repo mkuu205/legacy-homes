@@ -106,59 +106,31 @@ export class BillingController {
 
   async deleteBill(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const result = await billingService.deleteBill(req.params.id);
-      await auditService.logAction({
-        userId: req.user!.userId,
-        action: 'DELETE_BILL',
-        resource: 'Bill',
-        resourceId: req.params.id,
-        ipAddress: req.ip,
-      }).catch(() => {});
-      res.json({ success: true, ...result });
+      await billingService.deleteBill(req.params.id);
+      res.status(409).json({ success: false, error: 'Financial bills cannot be deleted; use the audited correction workflow.' });
     } catch (error) { next(error); }
   }
 
   async deleteBills(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { ids } = req.body;
-      const result = await billingService.deleteBills(ids);
-      await auditService.logAction({
-        userId: req.user!.userId,
-        action: 'BULK_DELETE_BILLS',
-        resource: 'Bill',
-        details: { ids, count: result.deleted },
-        ipAddress: req.ip,
-      }).catch(() => {});
-      res.json({ success: true, ...result });
+      await billingService.deleteBills(ids);
+      res.status(409).json({ success: false, error: 'Financial bills cannot be deleted; use the audited correction workflow.' });
     } catch (error) { next(error); }
   }
 
   async deleteBillsByMonth(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { billingMonth } = req.body;
-      const result = await billingService.deleteBillsByMonth(billingMonth);
-      await auditService.logAction({
-        userId: req.user!.userId,
-        action: 'DELETE_BILLS_BY_MONTH',
-        resource: 'Bill',
-        details: { billingMonth, count: result.deleted },
-        ipAddress: req.ip,
-      }).catch(() => {});
-      res.json({ success: true, ...result });
+      await billingService.deleteBillsByMonth(billingMonth);
+      res.status(409).json({ success: false, error: 'Financial bills cannot be deleted; use the audited correction workflow.' });
     } catch (error) { next(error); }
   }
 
   async deleteAllUnpaidBills(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const result = await billingService.deleteAllUnpaidBills();
-      await auditService.logAction({
-        userId: req.user!.userId,
-        action: 'DELETE_ALL_UNPAID_BILLS',
-        resource: 'Bill',
-        details: { count: result.deleted },
-        ipAddress: req.ip,
-      }).catch(() => {});
-      res.json({ success: true, ...result });
+      await billingService.deleteAllUnpaidBills();
+      res.status(409).json({ success: false, error: 'Financial bills cannot be deleted; use the audited correction workflow.' });
     } catch (error) { next(error); }
   }
 

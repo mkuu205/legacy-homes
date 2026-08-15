@@ -1,5 +1,5 @@
-import prisma from '../config/prisma';
-
+import { prisma } from '../config/prisma';
+import { toMoneyNumber } from '../utils/money';
 export class ReportService {
   async getBillingReport(query: { startMonth?: string; endMonth?: string }) {
     const where: any = {};
@@ -51,9 +51,9 @@ export class ReportService {
 
     const summary = {
       total: bills.length,
-      totalAmount: bills.reduce((s, b) => s + b.totalAmount, 0),
-      totalPaid: bills.reduce((s, b) => s + b.amountPaid, 0),
-      totalOutstanding: bills.reduce((s, b) => s + b.balance, 0),
+      totalAmount: bills.reduce((s, b) => s + toMoneyNumber(b.totalAmount), 0),
+      totalPaid: bills.reduce((s, b) => s + toMoneyNumber(b.amountPaid), 0),
+      totalOutstanding: bills.reduce((s, b) => s + toMoneyNumber(b.balance), 0),
       byStatus: {
         PAID: bills.filter((b) => b.status === 'PAID').length,
         PARTIAL: bills.filter((b) => b.status === 'PARTIAL').length,
@@ -107,10 +107,10 @@ export class ReportService {
     }
     payments.forEach((p) => {
       const key = `${p.createdAt.getFullYear()}-${(p.createdAt.getMonth() + 1).toString().padStart(2, '0')}`;
-      byMonth[key] = (byMonth[key] || 0) + p.amount;
+      byMonth[key] = (byMonth[key] || 0) + toMoneyNumber(p.amount);
     });
 
-    const totalRevenue = payments.reduce((s, p) => s + p.amount, 0);
+    const totalRevenue = payments.reduce((s, p) => s + toMoneyNumber(p.amount), 0);
 
     return { payments: paymentsWithResident, byMonth, totalRevenue, year };
   }
@@ -157,7 +157,7 @@ export class ReportService {
       })
     );
 
-    const totalOutstanding = overdueBills.reduce((s, b) => s + b.balance, 0);
+    const totalOutstanding = overdueBills.reduce((s, b) => s + toMoneyNumber(b.balance), 0);
     return { bills: billsWithDetails, total: overdueBills.length, totalOutstanding };
   }
 
@@ -259,12 +259,12 @@ export class ReportService {
       });
       revenueTrend.push({
         month: d.toLocaleDateString('en-KE', { month: 'short', year: 'numeric' }),
-        revenue: rev._sum.amount || 0,
+        revenue: toMoneyNumber(rev._sum.amount),
       });
     }
 
-    const currentRevenue = monthlyRevenue._sum.amount || 0;
-    const prevRevenue = lastMonthRevenue._sum.amount || 0;
+    const currentRevenue = toMoneyNumber(monthlyRevenue._sum.amount);
+    const prevRevenue = toMoneyNumber(lastMonthRevenue._sum.amount);
     const revenueGrowth = prevRevenue > 0 ? ((currentRevenue - prevRevenue) / prevRevenue) * 100 : 0;
 
     return {

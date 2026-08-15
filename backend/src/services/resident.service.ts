@@ -217,28 +217,20 @@ export class ResidentService {
 
     // Wrap in a transaction for full atomicity
     await prisma.$transaction(async (tx) => {
-      // 1. Delete payments (reference bills)
-      await tx.payment.deleteMany({ where: { residentId: id } });
-      // 2. Unlink meter readings from bills (readingId is unique FK on Bill)
-      const bills = await tx.bill.findMany({ where: { residentId: id }, select: { id: true } });
-      const billIds = bills.map((b) => b.id);
-      if (billIds.length > 0) {
-        await tx.meterReading.updateMany({ where: { billId: { in: billIds } }, data: { billId: null } });
-      }
-      // 3. Delete bills
-      await tx.bill.deleteMany({ where: { residentId: id } });
-      // 4. Delete user notifications
+      // Financial bills, payments, meter readings, and their relationships are
+      // retained permanently for auditability. Only non-financial session and
+      // account-access data is revoked below.
+      // Delete user notifications
       await tx.userNotification.deleteMany({ where: { userId: id } });
-      // 5. Delete support ticket replies
+      // Delete support ticket replies
       await tx.ticketReply.deleteMany({ where: { userId: id } });
-      // 6. Delete support tickets
+      // Delete support tickets
       await tx.ticket.deleteMany({ where: { residentId: id } });
-      // 7. Delete audit logs
-      await tx.auditLog.deleteMany({ where: { userId: id } });
-      // 8. Delete OTP codes and refresh tokens
+      // Preserve audit logs for historical accountability.
+      // Delete OTP codes and refresh tokens
       await tx.otpCode.deleteMany({ where: { userId: id } });
       await tx.refreshToken.deleteMany({ where: { userId: id } });
-      // 9. Permanently deactivate the account while retaining its identity record.
+      // Permanently deactivate the account while retaining its identity and financial history.
       if (resident.houseId) {
         await tx.house.update({ where: { id: resident.houseId }, data: { occupancyStatus: 'VACANT' } });
       }
@@ -247,7 +239,7 @@ export class ResidentService {
         data: { houseId: null, accountStatus: 'INACTIVE', registrationStatus: 'REJECTED', emailVerified: false },
       });
     });
-    return { message: 'Resident and all associated data deleted successfully' };
+    return { message: 'Resident account deactivated; financial history retained for audit.' };
   }
 
   async adminResetPassword(id: string, newPassword: string) {

@@ -1,6 +1,7 @@
 import { PrismaClient, Bill, BillStatus } from "@prisma/client";
 import logger from "../utils/logger";
 
+import { toMoneyNumber, calculateBalance } from '../utils/money';
 const prisma = new PrismaClient();
 
 export class CollectionService {
@@ -43,8 +44,8 @@ export class CollectionService {
 
       const totalBillsGenerated = allBills.length;
       const totalBillsCollected = allBills.filter((b) => b.status === BillStatus.PAID).length;
-      const totalAmountGenerated = allBills.reduce((sum, b) => sum + b.totalAmount, 0);
-      const totalAmountCollected = allBills.reduce((sum, b) => sum + b.amountPaid, 0);
+      const totalAmountGenerated = allBills.reduce((sum, b) => sum + toMoneyNumber(b.totalAmount), 0);
+      const totalAmountCollected = allBills.reduce((sum, b) => sum + toMoneyNumber(b.amountPaid), 0);
       const collectionRate =
         totalAmountGenerated > 0
           ? (totalAmountCollected / totalAmountGenerated) * 100
@@ -91,7 +92,7 @@ export class CollectionService {
 
       const debtors = residents
         .map((resident) => {
-          const totalDebt = resident.bills.reduce((sum, bill) => sum + bill.balance, 0);
+          const totalDebt = resident.bills.reduce((sum, bill) => sum + toMoneyNumber(bill.balance), 0);
           return {
             residentId: resident.id,
             fullName: resident.fullName,
@@ -126,8 +127,8 @@ export class CollectionService {
         orderBy: { createdAt: "desc" },
       });
 
-      const totalGenerated = bills.reduce((sum, b) => sum + b.totalAmount, 0);
-      const totalPaid = bills.reduce((sum, b) => sum + b.amountPaid, 0);
+      const totalGenerated = bills.reduce((sum, b) => sum + toMoneyNumber(b.totalAmount), 0);
+      const totalPaid = bills.reduce((sum, b) => sum + toMoneyNumber(b.amountPaid), 0);
       const totalOutstanding = totalGenerated - totalPaid;
 
       const paymentHistory = bills

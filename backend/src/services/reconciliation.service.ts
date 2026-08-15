@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma';
 import { logger } from '../utils/logger';
 import { PaymentReconciliationStatus, PaymentStatus } from '@prisma/client';
 
+import { toMoneyNumber, calculateBalance, calculateBillStatus } from '../utils/money';
 export class ReconciliationService {
   /**
    * Reconcile all pending payments
@@ -57,7 +58,7 @@ export class ReconciliationService {
         });
 
         // Update bill status
-        await this.updateBillStatus(payment.billId, payment.amount);
+        await this.updateBillStatus(payment.billId, toMoneyNumber(payment.amount));
 
         logger.info(`Payment reconciled: ${paymentId}`);
         return { status: 'RECONCILED', message: 'Payment reconciled' };
@@ -115,20 +116,13 @@ export class ReconciliationService {
       // Calculate total paid
       const totalPaid = bill.payments.reduce((sum, p) => {
         if (p.status === PaymentStatus.SUCCESSFUL) {
-          return sum + p.amount;
+          return sum + toMoneyNumber(p.amount);
         }
         return sum;
       }, 0);
 
       // Determine bill status
-      let status;
-      if (totalPaid >= bill.totalAmount) {
-        status = 'PAID';
-      } else if (totalPaid > 0) {
-        status = 'PARTIAL';
-      } else {
-        status = 'UNPAID';
-      }
+      const status = calculateBillStatus(bill.totalAmount, totalPaid, false);
 
       // Update bill
       await prisma.bill.update({
@@ -136,8 +130,8 @@ export class ReconciliationService {
         data: {
           status,
           amountPaid: totalPaid,
-          balance: Math.max(0, bill.totalAmount - totalPaid),
-          paidAt: totalPaid >= bill.totalAmount ? new Date() : null,
+          balance: calculateBalance(bill.totalAmount, totalPaid),
+          paidAt: status === 'PAID' ? new Date() : null,
         },
       });
 
@@ -170,10 +164,10 @@ export class ReconciliationService {
         pending: payments.filter(p => p.status === PaymentStatus.PENDING).length,
         cancelled: payments.filter(p => p.status === PaymentStatus.CANCELLED).length,
         refunded: payments.filter(p => p.status === PaymentStatus.REFUNDED).length,
-        totalAmount: payments.reduce((sum, p) => sum + p.amount, 0),
+        totalAmount: payments.reduce((sum, p) => sum + toMoneyNumber(p.amount), 0),
         successfulAmount: payments
           .filter(p => p.status === PaymentStatus.SUCCESSFUL)
-          .reduce((sum, p) => sum + p.amount, 0),
+          .reduce((sum, p) => sum + toMoneyNumber(p.amount), 0),
         reconciliationStatus: {
           reconciled: payments.filter(p => p.reconciliationStatus === PaymentReconciliationStatus.RECONCILED).length,
           pending: payments.filter(p => p.reconciliationStatus === PaymentReconciliationStatus.PENDING).length,

@@ -237,44 +237,25 @@ export class AuthController {
       // Explicitly delete all related records to avoid FK constraint violations
       // (schema-level cascades are not defined for all relations)
       await prisma.$transaction(async (tx) => {
-        // 1. Receipts reference payments (paymentId FK), delete receipts first
-        const userPayments = await tx.payment.findMany({ where: { residentId: user.id }, select: { id: true } });
-        const userPaymentIds = userPayments.map(p => p.id);
-        if (userPaymentIds.length > 0) {
-          await tx.receipt.deleteMany({ where: { paymentId: { in: userPaymentIds } } });
-        }
-
-        // 2. Delete payments
-        await tx.payment.deleteMany({ where: { residentId: user.id } });
-
-        // 3. Delete payment methods
+        // Financial records are immutable. Retain receipts, payments, bills,
+        // meter-reading links, and audit history for reconciliation and legal audit.
+        // Payment methods are not financial transactions and may be removed.
         await tx.paymentMethod.deleteMany({ where: { residentId: user.id } });
 
-        // 4. Unlink meter readings from bills
-        const userBills = await tx.bill.findMany({ where: { residentId: user.id }, select: { id: true } });
-        const userBillIds = userBills.map((b) => b.id);
-        if (userBillIds.length > 0) {
-          await tx.meterReading.updateMany({ where: { billId: { in: userBillIds } }, data: { billId: null } });
-        }
-
-        // 5. Delete bills
-        await tx.bill.deleteMany({ where: { residentId: user.id } });
-
-        // 6. Delete user notifications
+        // Delete user notifications
         await tx.userNotification.deleteMany({ where: { userId: user.id } });
 
-        // 7. Delete audit logs
-        await tx.auditLog.deleteMany({ where: { userId: user.id } });
+        // Preserve audit logs for historical accountability.
 
-        // 8. Support tickets
+        // Support tickets
         await tx.ticketReply.deleteMany({ where: { userId: user.id } });
         await tx.ticket.deleteMany({ where: { residentId: user.id } });
 
-        // 9. OTP codes and refresh tokens
+        // OTP codes and refresh tokens
         await tx.otpCode.deleteMany({ where: { userId: user.id } });
         await tx.refreshToken.deleteMany({ where: { userId: user.id } });
 
-        // 10. Device tokens
+        // Device tokens
         try {
           // @ts-ignore - table might not exist in some environments
           await (tx as any).deviceToken.deleteMany({ where: { residentId: user.id } });
@@ -282,7 +263,7 @@ export class AuthController {
           // Ignore if table doesn't exist
         }
 
-        // 11. Release the house and permanently deactivate the account.
+        // Release the house and permanently deactivate the account.
         if (user.houseId) {
           await tx.house.update({ where: { id: user.houseId }, data: { occupancyStatus: 'VACANT' } });
         }
@@ -291,7 +272,7 @@ export class AuthController {
           data: { houseId: null, accountStatus: 'INACTIVE', registrationStatus: 'REJECTED', emailVerified: false },
         });
       });
-      res.json({ success: true, message: 'Your account has been permanently deleted.' });
+      res.json({ success: true, message: 'Your account has been permanently deactivated; financial history retained for audit.' });
     } catch (error) {
       next(error);
     }
