@@ -677,6 +677,17 @@ export class PaymentEngineService {
       }
     };
 
+    const talksasaConfigured = !!process.env.TALKSASA_API_TOKEN;
+    services.talksasaSms = {
+      status: talksasaConfigured ? 'ONLINE' : 'OFFLINE',
+      message: talksasaConfigured ? 'TalkSasa SMS service is configured' : 'TalkSasa SMS service is not configured',
+      configSummary: {
+        apiToken: talksasaConfigured,
+        senderId: !!process.env.TALKSASA_SENDER_ID,
+        apiUrl: !!(process.env.TALKSASA_API_URL || 'https://bulksms.talksasa.com/api/v3/'),
+      }
+    };
+
     const requiredVars = [
       'DATABASE_URL',
       'JWT_ACCESS_SECRET',
@@ -692,6 +703,8 @@ export class PaymentEngineService {
       'BREVO_API_KEY',
       'SMTP_USER',
       'SMTP_PASS',
+      'TALKSASA_API_TOKEN',
+      'TALKSASA_SENDER_ID',
     ];
 
     const missingRequired = requiredVars.filter(v => !process.env[v]);

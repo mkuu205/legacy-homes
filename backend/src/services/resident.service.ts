@@ -111,11 +111,30 @@ export class ResidentService {
     fullName: string;
     phone: string;
     nationalId: string;
+    houseNumber: string;
   }>) {
     const resident = await prisma.user.findFirst({ where: { id, role: 'RESIDENT' } });
     if (!resident) throw new AppError('Resident not found', 404);
 
-    return prisma.user.update({ where: { id }, data });
+    const { houseNumber, ...profileData } = data;
+    const updated = await prisma.$transaction(async (tx) => {
+      if (houseNumber !== undefined) {
+        const normalizedHouseNumber = houseNumber.trim().toUpperCase();
+        const target = await tx.house.findUnique({ where: { houseNumber: normalizedHouseNumber } });
+        if (!target) throw new AppError(`House number ${normalizedHouseNumber} not found`, 400);
+        const occupant = await tx.user.findFirst({ where: { houseId: target.id, id: { not: id } } });
+        if (occupant) throw new AppError(`House ${normalizedHouseNumber} is already assigned to another resident`, 409);
+        if (resident.houseId && resident.houseId !== target.id) {
+          await tx.house.update({ where: { id: resident.houseId }, data: { occupancyStatus: 'VACANT' } });
+        }
+        await tx.house.update({ where: { id: target.id }, data: { occupancyStatus: 'OCCUPIED' } });
+        return tx.user.update({ where: { id }, data: { ...profileData, houseId: target.id } });
+      }
+      return tx.user.update({ where: { id }, data: profileData });
+    });
+
+    const house = updated.houseId ? await prisma.house.findUnique({ where: { id: updated.houseId } }) : null;
+    return { ...updated, houseNumber: house?.houseNumber };
   }
 
     async updateProfile(userId: string, data: {

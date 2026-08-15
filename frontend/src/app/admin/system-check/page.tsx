@@ -49,6 +49,7 @@ export default function SystemCheckPage() {
     { id: 'tumaApi', name: 'TUMA API', icon: <CreditCard size={20} />, data: services.tumaApi },
     { id: 'callbackEndpoint', name: 'Payment Callback Endpoint', icon: <Webhook size={20} />, data: services.callbackEndpoint },
     { id: 'emailService', name: 'Email Service (SMTP)', icon: <Mail size={20} />, data: services.emailService },
+    { id: 'talksasaSms', name: 'TalkSasa SMS', icon: <Phone size={20} />, data: services.talksasaSms },
     { id: 'environmentVariables', name: 'Environment Variables', icon: <Settings size={20} />, data: services.environmentVariables },
   ];
 

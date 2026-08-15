@@ -67,7 +67,7 @@ export default function AdminResidentsPage() {
 
   const editMutation = useMutation({
     mutationFn: async (data: any) => {
-      await api.put(`/residents/${data.id}`, { fullName: data.fullName, phone: data.phone });
+      await api.put(`/residents/${data.id}`, { fullName: data.fullName, phone: data.phone, houseNumber: data.houseNumber });
       const res = await api.patch(`/residents/${data.id}/status`, { status: data.accountStatus });
       return res.data.data;
     },
@@ -347,6 +347,10 @@ export default function AdminResidentsPage() {
               <div className="fg">
                 <label className="lbl">Phone</label>
                 <input value={editData.phone || ''} onChange={e => setEditData((d: any) => ({ ...d, phone: e.target.value }))} className="inp" />
+              </div>
+              <div className="fg">
+                <label className="lbl">House Number</label>
+                <input value={editData.houseNumber || ''} onChange={e => setEditData((d: any) => ({ ...d, houseNumber: e.target.value.toUpperCase() }))} className="inp" placeholder="e.g. A1" />
               </div>
               <div className="fg">
                 <label className="lbl">Account Status</label>
