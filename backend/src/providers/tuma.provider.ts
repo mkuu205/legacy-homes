@@ -21,6 +21,7 @@ export class TumaProvider implements PaymentProvider {
   private baseUrl: string;
   private token: string | null = null;
   private tokenExpiry: number = 0;
+  private tokenRequest: Promise<string> | null = null;
 
   constructor() {
     this.email = process.env.TUMA_BUSINESS_EMAIL || process.env.TUMA_EMAIL || '';
@@ -45,47 +46,47 @@ export class TumaProvider implements PaymentProvider {
       return this.token;
     }
 
+    if (this.tokenRequest) {
+      return this.tokenRequest;
+    }
+
+    this.tokenRequest = this.requestAccessToken();
+    try {
+      return await this.tokenRequest;
+    } finally {
+      this.tokenRequest = null;
+    }
+  }
+
+  private async requestAccessToken(): Promise<string> {
     try {
       logger.info('[TUMA] Requesting new access token');
-      
+
       const authUrl = process.env.TUMA_AUTH_URL || `${this.baseUrl}/auth/token`;
-      
       const response = await axios.post(
         authUrl,
-        {
-          email: this.email,
-          api_key: this.apiKey,
-        },
+        { email: this.email, api_key: this.apiKey },
         {
           timeout: 30000,
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
         }
       );
 
       logger.debug('[TUMA] Auth response status:', response.status);
       logger.debug('[TUMA] Auth response data keys:', Object.keys(response.data || {}));
 
-      // Check for token in response
-      if (response.data?.token) {
-        this.token = response.data.token;
-        this.tokenExpiry = Date.now() + (response.data.expires_in || 86400) * 1000;
-        logger.info(`[TUMA] Access token received. Expires in: ${response.data.expires_in || 86400}s`);
-        return this.token;
+      const token = response.data?.token || response.data?.data?.token;
+      if (!token) {
+        throw new Error(response.data?.message || 'No token in response from Tuma');
       }
 
-      // Some APIs might return token in a nested structure
-      if (response.data?.data?.token) {
-        this.token = response.data.data.token;
-        this.tokenExpiry = Date.now() + (response.data.data.expires_in || 86400) * 1000;
-        logger.info(`[TUMA] Access token received from nested data.`);
-        return this.token;
-      }
-
-      throw new Error(response.data?.message || 'No token in response from Tuma');
+      const expiresIn = response.data?.expires_in || response.data?.data?.expires_in || 86400;
+      this.token = token;
+      this.tokenExpiry = Date.now() + expiresIn * 1000;
+      logger.info(`[TUMA] Access token received. Expires in: ${expiresIn}s`);
+      return token;
     } catch (error) {
-      logger.error('[TUMA] Token request error:', error);
+      logger.error('[TUMA] Token request error:', error instanceof Error ? error.message : 'Unknown error');
       throw error;
     }
   }
@@ -312,57 +313,94 @@ export class TumaProvider implements PaymentProvider {
   }
 
   async verifyCallback(request: CallbackVerificationRequest): Promise<CallbackVerificationResponse> {
-    const payload = request.payload;
+    const payload = request.payload || {};
+    const merchantRequestId = this.readRequiredString(payload.merchant_request_id);
+    const checkoutRequestId = this.readRequiredString(payload.checkout_request_id);
+    const resultCode = this.readInteger(payload.result_code);
+    const resultDesc = this.readOptionalString(payload.result_desc);
+    const mpesaReceiptNumber = this.readOptionalString(payload.mpesa_receipt_number);
+    const timestamp = this.readTimestamp(payload.timestamp);
+    const rawStatus = this.readOptionalString(payload.status);
+    const amount = this.readAmount(payload.amount);
+    const failureReason = this.readOptionalString(payload.failure_reason);
+    const validStatuses = new Set(['success', 'successful', 'completed', 'failed', 'failure', 'cancelled', 'canceled', 'pending', 'processing', 'rejected']);
 
-    const merchantRequestId = payload.merchant_request_id;
-    const checkoutRequestId = payload.checkout_request_id;
-    const resultCode = payload.result_code;
-    const resultDesc = payload.result_desc;
-    const mpesaReceiptNumber = payload.mpesa_receipt_number;
-    const amount = payload.amount;
-    const timestamp = payload.timestamp;
-    const status = payload.status;
-
-    // Validate required fields are present
-    if (resultCode === undefined || resultCode === null) {
-      logger.warn('[TUMA] Callback missing result_code');
+    if (!merchantRequestId || !checkoutRequestId || resultCode === null || !timestamp || !rawStatus || !validStatuses.has(rawStatus.toLowerCase())) {
       return {
         valid: false,
         status: 'FAILED',
-        message: 'Invalid callback: missing result_code',
+        message: 'Invalid callback: identifiers, integer result_code, valid status, and timestamp are required',
       };
     }
 
-    if (!status) {
-      logger.warn('[TUMA] Callback missing status field');
+    const isSuccess = resultCode === 0;
+    if (amount === null) {
       return {
         valid: false,
         status: 'FAILED',
-        message: 'Invalid callback: missing status field',
+        message: 'Invalid callback: positive amount with at most two decimal places is required',
       };
     }
 
-    logger.info(`[TUMA] Callback received. Merchant: ${merchantRequestId}, Checkout: ${checkoutRequestId}, Result: ${resultCode}, Status: ${status}`);
+    const status = isSuccess ? 'SUCCESSFUL' : 'FAILED';
+    const normalizedStatus = rawStatus || status;
+    const normalized = {
+      status,
+      provider_status: normalizedStatus,
+      result_code: resultCode,
+      result_desc: resultDesc,
+      merchant_request_id: merchantRequestId,
+      checkout_request_id: checkoutRequestId,
+      amount,
+      mpesa_receipt_number: mpesaReceiptNumber,
+      timestamp,
+      failure_reason: failureReason || (!isSuccess ? resultDesc : undefined),
+      phone: this.readOptionalString(payload.phone || payload.phone_number || payload.msisdn),
+      external_reference: this.readOptionalString(payload.external_reference || payload.reference),
+    };
 
-    const isSuccess = resultCode === 0 && status === 'completed';
+    logger.info('[TUMA] Callback normalized', {
+      merchantRequestId,
+      checkoutRequestId,
+      resultCode,
+      status,
+    });
 
     return {
       valid: true,
       transactionId: mpesaReceiptNumber || checkoutRequestId,
-      status: isSuccess ? 'SUCCESSFUL' : 'FAILED',
-      amount: amount || 0,
+      status,
+      amount: amount ?? undefined,
       message: resultDesc || (isSuccess ? 'Payment successful' : 'Payment failed'),
-      timestamp: timestamp ? new Date(timestamp) : new Date(),
-      providerData: {
-        merchant_request_id: merchantRequestId,
-        checkout_request_id: checkoutRequestId,
-        result_code: resultCode,
-        result_desc: resultDesc,
-        mpesa_receipt_number: mpesaReceiptNumber,
-        failure_reason: payload.failure_reason,
-        status: status,
-      },
+      timestamp: timestamp || new Date(),
+      providerData: normalized,
     };
+  }
+
+  private readRequiredString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  }
+
+  private readOptionalString(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+  }
+
+  private readInteger(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isInteger(value)) return value;
+    if (typeof value === 'string' && /^-?\d+$/.test(value.trim())) return Number(value);
+    return null;
+  }
+
+  private readAmount(value: unknown): number | null {
+    const amount = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+    return Number.isFinite(amount) && amount > 0 && Math.round(amount * 100) === amount * 100 ? amount : null;
+  }
+
+  private readTimestamp(value: unknown): Date | undefined {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+    if (typeof value !== 'string' && typeof value !== 'number') return undefined;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }
 
   getProviderName(): string {

@@ -42,40 +42,27 @@ export class PaymentController {
     try {
       const payload = req.body;
       
-      logger.info('[TUMA CALLBACK] ===== CALLBACK RECEIVED =====');
-      logger.info(`[TUMA CALLBACK] Method: ${req.method}`);
-      logger.info(`[TUMA CALLBACK] Headers: ${JSON.stringify(req.headers)}`);
-      logger.info(`[TUMA CALLBACK] Body: ${JSON.stringify(payload)}`);
-      logger.info('[TUMA CALLBACK] =============================');
-      
-      // Always return 200 immediately to prevent TUMA from retrying
+      const result = await paymentEngineService.handleCallback(
+        'TUMA',
+        payload,
+        undefined,
+        req.headers as any
+      );
+
+      // Acknowledge every received callback without exposing payment data.
+      // Processing outcomes are persisted in CallbackAudit by the payment engine.
       res.status(200).json({
-        status: 'success',
-        message: 'Callback received',
+        status: result.success ? 'processed' : 'rejected',
+        message: result.message || 'Callback received',
         timestamp: new Date().toISOString(),
       });
       
-      // Process the callback asynchronously
-      setImmediate(async () => {
-        try {
-          const result = await paymentEngineService.handleCallback(
-            'TUMA',
-            payload,
-            undefined,
-            req.headers as any
-          );
-          logger.info(`[TUMA CALLBACK] Processed successfully:`, result);
-        } catch (error) {
-          logger.error('[TUMA CALLBACK] Async processing error:', error);
-        }
-      });
-      
     } catch (error) {
-      logger.error('[TUMA CALLBACK] Error:', error);
-      // Always return 200 to prevent TUMA from retrying
+      logger.error('[TUMA CALLBACK] Error:', error instanceof Error ? error.message : 'Unknown error');
+      // Acknowledge safely so Tuma does not retry indefinitely; the audit record retains the failure.
       res.status(200).json({
-        status: 'error',
-        message: 'Callback processing failed',
+        status: 'rejected',
+        message: 'Callback received for review',
       });
     }
   }
@@ -134,7 +121,7 @@ export class PaymentController {
       );
       
       // Redirect to success or failure page
-      if (result.success && result.status === 'SUCCESSFUL') {
+      if (result.success && 'status' in result && result.status === 'SUCCESSFUL') {
         const successUrl = process.env.PAYMENT_SUCCESS_URL || 'https://legacy-homes-frontend.vercel.app/payment/success';
         logger.info(`[PESAPAL CALLBACK] Redirecting to success: ${successUrl}`);
         res.redirect(`${successUrl}?paymentId=${result.paymentId}&tracking=${payload.OrderTrackingId}`);

@@ -332,7 +332,7 @@ model Payment {
   residentId            String
   billId                String
   merchantReference     String?
-  providerTransactionId String?
+  providerTransactionId String? @unique
   providerReference     String?
   providerOrderId       String?
   providerStatus        String?
@@ -346,8 +346,8 @@ model Payment {
   amount                Float
   status                PaymentStatus             @default(PENDING)
   reconciliationStatus  PaymentReconciliationStatus @default(PENDING)
-  merchantRequestId     String?
-  checkoutRequestId     String?
+  merchantRequestId     String? @unique
+  checkoutRequestId     String? @unique
   callbackPayload       Json?
   providerPayload       Json?
   failureReason         String?
@@ -528,6 +528,7 @@ model CallbackAudit {
   processed        Boolean  @default(false)
   paymentId        String?
   provider         String   @default("TUMA")
+  callbackFingerprint String? @unique
   processingResult String?
   errorMessage     String?
 

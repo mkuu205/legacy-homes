@@ -1,4 +1,5 @@
 // src/services/payment-engine.service.ts
+import { createHash } from 'crypto';
 import prisma from '../config/prisma';
 import { PaymentProvider } from '../providers/payment-provider.interface';
 import { PesapalProvider } from '../providers/pesapal.provider';
@@ -70,45 +71,22 @@ export class PaymentEngineService {
    */
   private formatPhoneNumber(phone: string | undefined): string | undefined {
     if (!phone) return undefined;
-    
-    // Remove all non-digit characters
+
     let cleaned = phone.replace(/\D/g, '');
-    
-    // If empty after cleaning
-    if (!cleaned) return undefined;
-    
-    // If it starts with 0, replace with 254
-    if (cleaned.startsWith('0')) {
-      cleaned = '254' + cleaned.substring(1);
-    }
-    
-    // If it doesn't start with 254, add it (for 9-digit numbers)
-    if (!cleaned.startsWith('254') && cleaned.length === 9) {
-      cleaned = '254' + cleaned;
-    }
-    
-    // If it doesn't start with 254 and is 10 digits (07XXXXXXXX), fix it
-    if (!cleaned.startsWith('254') && cleaned.length === 10 && cleaned.startsWith('0')) {
-      cleaned = '254' + cleaned.substring(1);
-    }
-    
-    // If it doesn't start with 254 and length is less than 12, try adding 254
-    if (!cleaned.startsWith('254') && cleaned.length < 12) {
-      cleaned = '254' + cleaned;
-    }
-    
-    // Ensure it's exactly 12 digits (Kenyan format)
-    if (cleaned.length > 12) {
-      cleaned = cleaned.substring(0, 12);
-    }
-    
-    // Validate it's a valid Kenyan phone number
-    if (cleaned.length === 12 && cleaned.startsWith('254')) {
-      return cleaned;
-    }
-    
-    logger.warn(`[PAYMENT ENGINE] Invalid phone number format: ${phone} -> ${cleaned}`);
-    return undefined; // Return undefined if invalid
+    if (cleaned.startsWith('0')) cleaned = `254${cleaned.substring(1)}`;
+    if (!cleaned.startsWith('254') && cleaned.length === 9) cleaned = `254${cleaned}`;
+
+    if (/^254\d{9}$/.test(cleaned)) return cleaned;
+
+    logger.warn('[PAYMENT ENGINE] Invalid phone number format');
+    return undefined;
+  }
+
+  private isValidPaymentAmount(amount: unknown): amount is number {
+    return typeof amount === 'number'
+      && Number.isFinite(amount)
+      && amount > 0
+      && Math.round(amount * 100) === amount * 100;
   }
 
   async initiatePayment(
@@ -133,18 +111,29 @@ export class PaymentEngineService {
         throw new Error('Unauthorized: Bill does not belong to this resident');
       }
 
-      if (bill.status === 'PAID') {
-        throw new Error('Bill is already paid');
+      if (!this.isValidPaymentAmount(amount)) {
+        throw new Error('Amount must be a finite positive number with no more than two decimal places');
       }
 
-      if (amount > bill.balance) {
-        throw new Error(`Amount exceeds outstanding balance of KES ${bill.balance}`);
+      if (!['UNPAID', 'PARTIAL', 'OVERDUE'].includes(bill.status)) {
+        throw new Error(`Bill is not payable in its current state: ${bill.status}`);
+      }
+
+      const pendingPayments = await prisma.payment.aggregate({
+        where: { billId, status: PaymentStatus.PENDING },
+        _sum: { amount: true },
+      });
+      const reservedAmount = pendingPayments._sum.amount || 0;
+      const availableBalance = Math.max(0, bill.balance - reservedAmount);
+
+      if (amount > availableBalance) {
+        throw new Error(`Amount exceeds available outstanding balance of KES ${availableBalance}`);
       }
 
       // Get phone number from request or resident
       let finalPhoneNumber = phoneNumber || bill.resident.phone;
 
-      // Format phone number
+      // Format and validate phone number
       const formattedPhone = this.formatPhoneNumber(finalPhoneNumber);
 
       // For Pesapal, if phone is invalid, don't pass it (phone is optional)
@@ -224,10 +213,20 @@ export class PaymentEngineService {
       }
 
       // Update payment with provider references
+      const merchantRequestId = result.providerData?.merchant_request_id || result.orderId;
+      const checkoutRequestId = result.providerData?.checkout_request_id;
+      if (provider === 'TUMA' && (!merchantRequestId || !checkoutRequestId)) {
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: PaymentStatus.FAILED, failureReason: 'TUMA response missing transaction identifiers' },
+        });
+        throw new Error('TUMA response missing merchant_request_id or checkout_request_id');
+      }
+
       const updateData: any = {
-        providerOrderId: result.orderId,
-        merchantRequestId: result.orderId,
-        providerReference: result.orderId,
+        providerOrderId: merchantRequestId,
+        merchantRequestId,
+        providerReference: checkoutRequestId || merchantRequestId,
         providerPayload: {
           success: result.success,
           orderId: result.orderId,
@@ -237,8 +236,8 @@ export class PaymentEngineService {
         },
       };
 
-      if (result.providerData?.checkout_request_id) {
-        updateData.checkoutRequestId = result.providerData.checkout_request_id;
+      if (checkoutRequestId) {
+        updateData.checkoutRequestId = checkoutRequestId;
       }
 
       await prisma.payment.update({
@@ -335,6 +334,34 @@ export class PaymentEngineService {
     }
   }
 
+  private canonicalize(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map((item) => this.canonicalize(item));
+    if (value && typeof value === 'object') {
+      return Object.keys(value as Record<string, unknown>)
+        .sort()
+        .reduce<Record<string, unknown>>((result, key) => {
+          result[key] = this.canonicalize((value as Record<string, unknown>)[key]);
+          return result;
+        }, {});
+    }
+    return value;
+  }
+
+  private callbackFingerprint(provider: PaymentProviderType, payload: Record<string, any>): string {
+    return createHash('sha256')
+      .update(JSON.stringify({ provider, payload: this.canonicalize(payload) }))
+      .digest('hex');
+  }
+
+  private safeCallbackHeaders(headers?: Record<string, any>): Record<string, string> {
+    const allowed = ['content-type', 'user-agent', 'x-request-id', 'x-correlation-id'];
+    return allowed.reduce<Record<string, string>>((result, key) => {
+      const value = headers?.[key];
+      if (typeof value === 'string' && value.length <= 256) result[key] = value;
+      return result;
+    }, {});
+  }
+
   async handleCallback(
     provider: PaymentProviderType,
     payload: Record<string, any>,
@@ -344,17 +371,27 @@ export class PaymentEngineService {
     let auditId: string | null = null;
 
     try {
-      const audit = await prisma.callbackAudit.create({
-        data: {
+      const fingerprint = this.callbackFingerprint(provider, payload);
+      const existingAudit = await prisma.callbackAudit.findUnique({ where: { callbackFingerprint: fingerprint } });
+      if (existingAudit?.processed) {
+        logger.info('[CALLBACK] Duplicate callback ignored', { auditId: existingAudit.id, fingerprint });
+        return { success: true, message: 'Callback already processed', paymentId: existingAudit.paymentId || undefined };
+      }
+
+      const audit = await prisma.callbackAudit.upsert({
+        where: { callbackFingerprint: fingerprint },
+        create: {
           provider,
           payload: payload as any,
-          headers: headers as any,
+          headers: this.safeCallbackHeaders(headers) as any,
+          callbackFingerprint: fingerprint,
           processed: false,
         },
+        update: {},
       });
       auditId = audit.id;
 
-      logger.info(`[CALLBACK] Received ${provider} callback`, { auditId });
+      logger.info(`[CALLBACK] Received ${provider} callback`, { auditId, fingerprint });
 
       const paymentProvider = this.getProvider(provider);
       if (!paymentProvider) {
@@ -433,156 +470,226 @@ export class PaymentEngineService {
   }
 
   private async handleTumaCallback(payload: Record<string, any>, auditId: string) {
-    const merchantRequestId = payload.merchant_request_id;
-    const checkoutRequestId = payload.checkout_request_id;
-    const resultCode = payload.result_code;
-    const mpesaReceiptNumber = payload.mpesa_receipt_number;
+    const provider = this.getProvider(PaymentProviderType.TUMA);
+    if (!provider) throw new Error('TUMA provider not configured');
 
-    logger.info(`[TUMA CALLBACK] Merchant: ${merchantRequestId}, Result: ${resultCode}`);
+    const verification = await provider.verifyCallback({ payload });
+    if (!verification.valid) {
+      await prisma.callbackAudit.update({
+        where: { id: auditId },
+        data: { processed: true, errorMessage: verification.message, processingResult: JSON.stringify({ accepted: false }) },
+      });
+      return { success: false, message: verification.message || 'Invalid TUMA callback' };
+    }
 
+    const normalized = verification.providerData as Record<string, any>;
+    const merchantRequestId = normalized.merchant_request_id as string;
+    const checkoutRequestId = normalized.checkout_request_id as string;
     const payment = await prisma.payment.findFirst({
-      where: {
-        OR: [
-          { providerOrderId: merchantRequestId },
-          { merchantRequestId: merchantRequestId },
-          { checkoutRequestId: checkoutRequestId },
-        ],
-      },
+      where: { provider: PaymentProviderType.TUMA, merchantRequestId, checkoutRequestId },
     });
 
     if (!payment) {
-      logger.warn(`[TUMA CALLBACK] Payment not found for MerchantRequestId: ${merchantRequestId}`);
-      return { success: false, message: 'Payment not found' };
+      await prisma.callbackAudit.update({
+        where: { id: auditId },
+        data: { processed: true, errorMessage: 'No payment matched both Tuma identifiers', processingResult: JSON.stringify({ accepted: false }) },
+      });
+      logger.warn('[TUMA CALLBACK] No payment matched both provider identifiers', { merchantRequestId, checkoutRequestId });
+      return { success: false, message: 'Payment not found or transaction identifiers do not match' };
+    }
+
+    const externalReference = normalized.external_reference;
+    if (externalReference && externalReference !== payment.id && externalReference !== payment.merchantReference) {
+      return this.recordTumaRejection(auditId, payment.id, 'External payment reference mismatch');
+    }
+
+    const callbackPhone = normalized.phone ? this.formatPhoneNumber(normalized.phone) : undefined;
+    if (callbackPhone && callbackPhone !== payment.phoneNumber) {
+      return this.recordTumaRejection(auditId, payment.id, 'Phone number mismatch');
     }
 
     if (payment.status === PaymentStatus.SUCCESSFUL) {
-      logger.info(`[TUMA CALLBACK] Payment already processed: ${payment.id}`);
-      return { success: true, message: 'Already processed', paymentId: payment.id };
+      await prisma.callbackAudit.update({
+        where: { id: auditId },
+        data: { processed: true, paymentId: payment.id, processingResult: JSON.stringify({ duplicate: true, status: PaymentStatus.SUCCESSFUL }) },
+      });
+      return { success: true, message: 'Already processed', paymentId: payment.id, status: PaymentStatus.SUCCESSFUL };
     }
 
-    const isSuccess = resultCode === 0;
-
-    if (isSuccess) {
-      await this.processSuccessfulPayment(payment.id, {
-        confirmation_code: mpesaReceiptNumber,
-        amount: payload.amount,
-        merchant_request_id: merchantRequestId,
-        checkout_request_id: checkoutRequestId,
-        result_desc: payload.result_desc,
-        timestamp: payload.timestamp,
-        ...payload,
+    if (payment.status !== PaymentStatus.PENDING) {
+      await prisma.callbackAudit.update({
+        where: { id: auditId },
+        data: { processed: true, paymentId: payment.id, processingResult: JSON.stringify({ ignored: true, status: payment.status }) },
       });
-
-      logger.info(`[TUMA CALLBACK] Payment ${payment.id} processed successfully.`);
-    } else {
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: PaymentStatus.FAILED,
-          providerStatus: 'FAILED',
-          providerMessage: payload.result_desc || 'Payment failed',
-          failureReason: payload.failure_reason || payload.result_desc,
-          providerPayload: payload as any,
-          verificationTimestamp: new Date(),
-          verifiedBy: 'TUMA_CALLBACK',
-        },
-      });
-
-      logger.warn(`[TUMA CALLBACK] Payment ${payment.id} failed.`);
+      return { success: false, message: `Payment is already terminal: ${payment.status}`, paymentId: payment.id, status: payment.status };
     }
+
+    if (verification.status === 'SUCCESSFUL') {
+      if (verification.amount === undefined || verification.amount !== payment.amount) {
+        return this.recordTumaMismatch(auditId, payment.id, payment.amount, verification.amount, normalized);
+      }
+
+      const settlement = await this.processSuccessfulPayment(payment.id, normalized);
+      if (!settlement.settled) {
+        await prisma.callbackAudit.update({
+          where: { id: auditId },
+          data: { processed: true, paymentId: payment.id, errorMessage: settlement.reason, processingResult: JSON.stringify({ success: false, reason: settlement.reason }) },
+        });
+        return { success: false, paymentId: payment.id, message: settlement.reason || 'Payment was not settled' };
+      }
+
+      await prisma.callbackAudit.update({
+        where: { id: auditId },
+        data: { processed: true, paymentId: payment.id, processingResult: JSON.stringify({ success: true, status: PaymentStatus.SUCCESSFUL }) },
+      });
+      return { success: true, paymentId: payment.id, status: PaymentStatus.SUCCESSFUL, receiptNumber: normalized.mpesa_receipt_number, message: normalized.result_desc || 'Payment successful' };
+    }
+
+    const failed = await prisma.payment.updateMany({
+      where: { id: payment.id, status: PaymentStatus.PENDING },
+      data: {
+        status: PaymentStatus.FAILED,
+        providerStatus: 'FAILED',
+        providerMessage: normalized.result_desc || 'Payment failed',
+        failureReason: normalized.failure_reason || normalized.result_desc || `Tuma result_code ${normalized.result_code}`,
+        providerPayload: normalized as any,
+        callbackPayload: payload as any,
+        verificationTimestamp: new Date(),
+        verifiedBy: 'TUMA_CALLBACK',
+      },
+    });
 
     await prisma.callbackAudit.update({
       where: { id: auditId },
-      data: {
-        processed: true,
-        paymentId: payment.id,
-        processingResult: JSON.stringify({
-          success: isSuccess,
-          status: isSuccess ? PaymentStatus.SUCCESSFUL : PaymentStatus.FAILED,
-          receiptNumber: mpesaReceiptNumber,
-        }),
-      },
+      data: { processed: true, paymentId: payment.id, processingResult: JSON.stringify({ success: false, status: PaymentStatus.FAILED, updated: failed.count === 1 }) },
     });
-
-    return {
-      success: isSuccess,
-      paymentId: payment.id,
-      status: isSuccess ? PaymentStatus.SUCCESSFUL : PaymentStatus.FAILED,
-      receiptNumber: mpesaReceiptNumber,
-      message: payload.result_desc || (isSuccess ? 'Payment successful' : 'Payment failed'),
-    };
+    return { success: false, paymentId: payment.id, status: PaymentStatus.FAILED, message: normalized.result_desc || 'Payment failed' };
   }
 
-  private async processSuccessfulPayment(paymentId: string, providerPayload: any) {
-    const payment = await prisma.payment.findUnique({
-      where: { id: paymentId },
-      include: { bill: { include: { resident: true } }, resident: true },
+  private async recordTumaRejection(auditId: string, paymentId: string, message: string) {
+    await prisma.callbackAudit.update({
+      where: { id: auditId },
+      data: { processed: true, paymentId, errorMessage: message, processingResult: JSON.stringify({ accepted: false }) },
     });
+    return { success: false, paymentId, message };
+  }
 
-    if (!payment || payment.status === PaymentStatus.SUCCESSFUL) return;
-
-    const confirmationCode = providerPayload.confirmation_code || 
-                           providerPayload.mpesa_receipt_number || 
-                           providerPayload.confirmationCode || 
-                           payment.confirmationCode;
-
-    const finalAmount = providerPayload.amount || payment.amount;
-
-    await prisma.payment.update({
-      where: { id: paymentId },
+  private async recordTumaMismatch(auditId: string, paymentId: string, expectedAmount: number, receivedAmount: number | undefined, normalized: Record<string, any>) {
+    await prisma.payment.updateMany({
+      where: { id: paymentId, status: PaymentStatus.PENDING },
       data: {
-        status: PaymentStatus.SUCCESSFUL,
-        providerStatus: providerPayload.payment_status_description || 'COMPLETED',
-        providerMessage: 'Payment successful',
-        providerTransactionId: confirmationCode || payment.providerTransactionId,
-        confirmationCode: confirmationCode,
-        receiptNumber: confirmationCode,
-        providerPayload: {
-          ...(payment.providerPayload as any || {}),
-          ...providerPayload,
-        } as any,
+        reconciliationStatus: 'MISMATCH',
+        providerStatus: 'AMOUNT_MISMATCH',
+        providerMessage: 'Tuma callback amount does not match initiated amount',
+        failureReason: `Expected KES ${expectedAmount}; received KES ${receivedAmount ?? 'missing'}`,
+        providerPayload: normalized as any,
+        callbackPayload: normalized as any,
         verificationTimestamp: new Date(),
-        verifiedBy: 'PROVIDER_API',
-        reconciliationStatus: 'PENDING',
+        verifiedBy: 'TUMA_CALLBACK',
       },
     });
+    await prisma.callbackAudit.update({
+      where: { id: auditId },
+      data: { processed: true, paymentId, errorMessage: 'Tuma callback amount mismatch', processingResult: JSON.stringify({ accepted: false, reconciliation: 'MISMATCH' }) },
+    });
+    return { success: false, paymentId, message: 'Payment amount mismatch; held for reconciliation' };
+  }
 
-    const updatedAmountPaid = payment.bill.amountPaid + finalAmount;
-    const newBalance = Math.max(0, payment.bill.totalAmount - updatedAmountPaid);
-    const newBillStatus = newBalance <= 0 ? BillStatus.PAID : BillStatus.PARTIAL;
+  private async processSuccessfulPayment(paymentId: string, providerPayload: any): Promise<{ settled: boolean; payment?: any; reason?: string }> {
+    const settlement = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM payments WHERE id = ${paymentId} FOR UPDATE`;
+      const payment = await tx.payment.findUnique({
+        where: { id: paymentId },
+        include: { bill: { include: { resident: true } }, resident: true },
+      });
 
-    await prisma.bill.update({
-      where: { id: payment.billId },
-      data: {
-        status: newBillStatus,
-        amountPaid: updatedAmountPaid,
-        balance: newBalance,
-        paidAt: newBillStatus === BillStatus.PAID ? new Date() : payment.bill.paidAt,
-        paymentProvider: payment.provider,
-        paymentMethod: payment.paymentMethod,
-        paymentId: payment.id,
-      },
+      if (!payment) return { settled: false, reason: 'Payment not found' };
+      if (payment.status === PaymentStatus.SUCCESSFUL) return { settled: false, reason: 'Already processed' };
+      if (payment.status !== PaymentStatus.PENDING) return { settled: false, reason: `Payment is already terminal: ${payment.status}` };
+
+      await tx.$queryRaw`SELECT id FROM bills WHERE id = ${payment.billId} FOR UPDATE`;
+      const bill = await tx.bill.findUnique({ where: { id: payment.billId } });
+      if (!bill) return { settled: false, reason: 'Bill not found' };
+      if (payment.amount > bill.balance) {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            reconciliationStatus: 'MISMATCH',
+            providerStatus: 'BALANCE_MISMATCH',
+            providerMessage: 'Payment exceeds the current bill balance',
+            failureReason: `Payment KES ${payment.amount} exceeds balance KES ${bill.balance}`,
+            providerPayload: providerPayload as any,
+            verificationTimestamp: new Date(),
+            verifiedBy: 'TUMA_CALLBACK',
+          },
+        });
+        return { settled: false, reason: 'Payment exceeds current bill balance' };
+      }
+
+      const confirmationCode = providerPayload.mpesa_receipt_number || providerPayload.confirmation_code || payment.confirmationCode;
+      const updatedAmountPaid = bill.amountPaid + payment.amount;
+      const newBalance = Math.max(0, bill.totalAmount - updatedAmountPaid);
+      const newBillStatus = newBalance <= 0 ? BillStatus.PAID : BillStatus.PARTIAL;
+
+      const updatedPayment = await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: PaymentStatus.SUCCESSFUL,
+          providerStatus: 'COMPLETED',
+          providerMessage: 'Payment successful',
+          providerTransactionId: confirmationCode || payment.providerTransactionId,
+          confirmationCode,
+          receiptNumber: confirmationCode,
+          providerPayload: { ...(payment.providerPayload as any || {}), ...providerPayload } as any,
+          callbackPayload: providerPayload as any,
+          verificationTimestamp: new Date(),
+          verifiedBy: 'TUMA_CALLBACK',
+          reconciliationStatus: 'PENDING',
+        },
+        include: { bill: { include: { resident: true } }, resident: true },
+      });
+
+      await tx.bill.update({
+        where: { id: payment.billId },
+        data: {
+          status: newBillStatus,
+          amountPaid: updatedAmountPaid,
+          balance: newBalance,
+          paidAt: newBillStatus === BillStatus.PAID ? new Date() : bill.paidAt,
+          paymentProvider: payment.provider,
+          paymentMethod: payment.paymentMethod,
+          paymentId: payment.id,
+        },
+      });
+
+      return { settled: true, payment: updatedPayment, amount: payment.amount, confirmationCode };
     });
 
-    logger.info(`[PAYMENT ENGINE] Bill ${payment.bill.billNumber} updated to ${newBillStatus}`);
+    if (!settlement.settled || !settlement.payment) return settlement;
+
+    logger.info('[PAYMENT ENGINE] Tuma payment and bill settlement committed', {
+      paymentId,
+      billId: settlement.payment.billId,
+    });
 
     try {
-      await receiptService.generateReceipt(payment.id);
+      await receiptService.generateReceipt(paymentId);
     } catch (error) {
-      logger.error('[PAYMENT ENGINE] Receipt generation failed:', error);
+      logger.error('[PAYMENT ENGINE] Receipt generation failed:', error instanceof Error ? error.message : 'Unknown error');
     }
 
     try {
       await notificationService.sendPaymentSuccessNotification(
-        payment.residentId,
-        finalAmount,
-        confirmationCode || 'N/A'
+        settlement.payment.residentId,
+        settlement.amount,
+        settlement.confirmationCode || 'N/A'
       );
     } catch (error) {
-      logger.error('[PAYMENT ENGINE] Notification failed:', error);
+      logger.error('[PAYMENT ENGINE] Notification failed:', error instanceof Error ? error.message : 'Unknown error');
     }
 
-    this.broadcastUpdates(payment.residentId, payment.billId, payment.id);
+    this.broadcastUpdates(settlement.payment.residentId, settlement.payment.billId, paymentId);
+    return settlement;
   }
 
   private broadcastUpdates(residentId: string, billId: string, paymentId: string) {
