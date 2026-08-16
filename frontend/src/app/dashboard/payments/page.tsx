@@ -100,6 +100,16 @@ export default function PaymentsPage() {
     },
   });
 
+  const { data: recentPaymentsData, isLoading: recentPaymentsLoading } = useQuery({
+    queryKey: ['my-payments', 'recent'],
+    queryFn: async () => {
+      const res = await api.get('/payments/my-payments?limit=5');
+      return res.data.data?.payments || [];
+    },
+  });
+
+  const recentPayments = recentPaymentsData || [];
+
   // Set bill from URL param only
   useEffect(() => {
     if (billIdParam && billsData) {
@@ -720,347 +730,102 @@ export default function PaymentsPage() {
     );
   }
 
-  return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '16px' }}>
-      {/* Header with History button restored */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-        <button 
-          onClick={() => router.back()} 
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', borderRadius: '8px', background: 'var(--bd)', color: 'var(--t1)', border: 'none', cursor: 'pointer' }}
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>Make Payment</h1>
-        
-        {/* RESTORED HISTORY BUTTON */}
-        <button
-          onClick={() => router.push('/dashboard/payments/history')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            marginLeft: 'auto',
-            background: 'none',
-            border: 'none',
-            color: 'var(--t2)',
-            fontSize: '13px',
-            fontWeight: 500,
-            cursor: 'pointer',
-            padding: '6px 12px',
-            borderRadius: '6px',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = 'var(--ac)';
-            e.currentTarget.style.background = 'rgba(0, 198, 167, 0.05)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'var(--t2)';
-            e.currentTarget.style.background = 'transparent';
-          }}
-        >
-          <History size={16} />
-          History
-        </button>
-      </div>
+  const formatMoney = (value: any) => `KES ${Number(value || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const statusMeta = (status: string) => {
+    if (status === 'SUCCESSFUL') return { label: 'Successful', color: '#34d399', background: 'rgba(16, 185, 129, 0.14)', icon: CheckCircle };
+    if (status === 'PENDING') return { label: 'Pending', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.14)', icon: Loader2 };
+    if (status === 'CANCELLED') return { label: 'Cancelled', color: '#a1a1aa', background: 'rgba(113, 113, 122, 0.18)', icon: AlertCircle };
+    return { label: 'Failed', color: '#f87171', background: 'rgba(239, 68, 68, 0.14)', icon: AlertCircle };
+  };
 
-      {/* Select Bill */}
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
-          Select Bill
-        </label>
-        {billsLoading ? (
-          <div style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c1)', color: 'var(--t2)' }}>
-            Loading bills...
-          </div>
-        ) : billsData && billsData.length > 0 ? (
-          <select 
-            value={selectedBillId}
-            onChange={(e) => setSelectedBillId(e.target.value)}
-            style={{ 
-              width: '100%', 
-              padding: '12px', 
-              borderRadius: '8px', 
-              border: '1px solid var(--bd)', 
-              background: 'var(--c1)', 
-              color: 'var(--t1)', 
-              fontSize: '14px',
-              outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            <option value="">Select a bill...</option>
-            {billsData.map((bill: any) => (
-              <option key={bill.id} value={bill.id}>
-                Bill #{bill.billNumber} - KES {(bill.balance || 0).toLocaleString()}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <div style={{ padding: '16px', borderRadius: '8px', border: '1px solid var(--bd)', background: 'var(--c1)', textAlign: 'center' }}>
-            <p style={{ color: 'var(--t2)', margin: '0 0 12px 0' }}>No unpaid bills found</p>
-            <button 
-              onClick={() => router.push('/dashboard/billing')}
-              style={{ padding: '8px 16px', borderRadius: '6px', background: 'var(--ac)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '13px' }}
-            >
-              View Billing
-            </button>
-          </div>
-        )}
+  if (isVerifying) {
+    return (
+      <div className="pg fu" style={{ maxWidth: '720px', margin: '0 auto' }}>
+        <div className="card" style={{ padding: '56px 24px', textAlign: 'center' }}>
+          <Loader2 size={34} style={{ color: 'var(--ac)', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+          <h2 style={{ fontSize: '20px', color: 'var(--t1)', fontWeight: 800 }}>Verifying your payment</h2>
+          <p style={{ color: 'var(--t2)', fontSize: '13px', marginTop: '7px' }}>Please wait while we confirm your transaction with the payment provider.</p>
+        </div>
       </div>
+    );
+  }
 
-      {/* Amount Input */}
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
-          Amount (KES) <span style={{ color: '#ef4444' }}>*</span>
-        </label>
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder={selectedBillId ? "Amount will auto-fill" : "Select a bill first"}
-          style={{
-            width: '100%',
-            padding: '12px',
-            borderRadius: '8px',
-            border: '1px solid var(--bd)',
-            background: 'var(--c1)',
-            color: 'var(--t1)',
-            fontSize: '14px',
-            outline: 'none',
-            fontFamily: 'inherit'
-          }}
-        />
-        {selectedBill && (
-          <p style={{ fontSize: '12px', color: 'var(--t3)', margin: '4px 0 0 0' }}>
-            Outstanding balance: KES {(selectedBill.balance || 0).toLocaleString()}
+  if (pendingPaymentId && statusData) {
+    const status = statusMeta(statusData.status);
+    const StatusIcon = status.icon;
+    return (
+      <div className="pg fu" style={{ maxWidth: '720px', margin: '0 auto' }}>
+        <div className="card" style={{ padding: '28px', textAlign: 'center', borderColor: `${status.color}55` }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '20px', background: status.background, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <StatusIcon size={30} style={{ color: status.color, animation: statusData.status === 'PENDING' ? 'spin 1s linear infinite' : undefined }} />
+          </div>
+          <p style={{ fontSize: '11px', color: status.color, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{status.label}</p>
+          <h1 style={{ fontSize: '26px', color: 'var(--t1)', fontWeight: 850, marginTop: '6px' }}>
+            {statusData.status === 'SUCCESSFUL' ? 'Payment successful' : statusData.status === 'PENDING' ? 'Payment processing' : statusData.status === 'CANCELLED' ? 'Payment cancelled' : 'Payment failed'}
+          </h1>
+          <p style={{ color: 'var(--t2)', fontSize: '13px', lineHeight: 1.6, maxWidth: '460px', margin: '8px auto 0' }}>
+            {statusData.status === 'PENDING' ? (paymentMethod === 'MPESA_STK_PUSH' ? 'We are waiting for confirmation from M-Pesa. Keep your phone nearby and complete the prompt.' : 'Your card payment is being processed securely by Pesapal.') : statusData.status === 'SUCCESSFUL' ? 'Your payment has been confirmed and applied to your account.' : statusData.failureReason || 'Your payment could not be completed. Please try again.'}
           </p>
-        )}
-      </div>
-
-      {/* Payment Methods */}
-      <div style={{ marginBottom: '16px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '10px' }}>
-          Payment Method
-        </label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {/* M-Pesa Card */}
-          <div
-            onClick={() => setPaymentMethod('MPESA_STK_PUSH')}
-            style={{
-              padding: '12px 14px',
-              borderRadius: '10px',
-              border: paymentMethod === 'MPESA_STK_PUSH' ? '2px solid var(--ac)' : '1px solid var(--bd)',
-              background: paymentMethod === 'MPESA_STK_PUSH' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              display: 'flex',
-              gap: '12px',
-              alignItems: 'center'
-            }}
-          >
-            <div style={{ 
-              width: '32px', 
-              height: '32px', 
-              borderRadius: '6px', 
-              background: paymentMethod === 'MPESA_STK_PUSH' ? 'var(--ac)' : 'var(--bd)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              <Smartphone size={16} color={paymentMethod === 'MPESA_STK_PUSH' ? 'white' : 'var(--t3)'} />
-            </div>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>M-Pesa</span>
-              <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--t3)', background: 'var(--bd)', padding: '2px 6px', borderRadius: '3px' }}>
-                Tuma
-              </span>
-              {paymentMethod === 'MPESA_STK_PUSH' && (
-                <ChevronRight size={14} style={{ color: 'var(--ac)', marginLeft: 'auto' }} />
-              )}
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px', textAlign: 'left', marginTop: '24px' }}>
+            <div style={{ padding: '13px', background: 'var(--c2)', borderRadius: '12px' }}><p style={{ fontSize: '10px', color: 'var(--t3)', textTransform: 'uppercase' }}>Amount</p><p style={{ fontSize: '18px', color: 'var(--t1)', fontWeight: 800, marginTop: '4px' }}>{formatMoney(statusData.amount || amount)}</p></div>
+            <div style={{ padding: '13px', background: 'var(--c2)', borderRadius: '12px' }}><p style={{ fontSize: '10px', color: 'var(--t3)', textTransform: 'uppercase' }}>Reference</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, wordBreak: 'break-word', marginTop: '6px' }}>{statusData.confirmationCode || statusData.paymentId || pendingPaymentId}</p></div>
           </div>
-
-          {/* Card Payment Card */}
-          <div
-            onClick={() => setPaymentMethod('CARD')}
-            style={{
-              padding: '12px 14px',
-              borderRadius: '10px',
-              border: paymentMethod === 'CARD' ? '2px solid var(--ac)' : '1px solid var(--bd)',
-              background: paymentMethod === 'CARD' ? 'rgba(0, 198, 167, 0.05)' : 'var(--c1)',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              display: 'flex',
-              gap: '12px',
-              alignItems: 'center'
-            }}
-          >
-            <div style={{ 
-              width: '32px', 
-              height: '32px', 
-              borderRadius: '6px', 
-              background: paymentMethod === 'CARD' ? 'var(--ac)' : 'var(--bd)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              <CreditCard size={16} color={paymentMethod === 'CARD' ? 'white' : 'var(--t3)'} />
-            </div>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>Card</span>
-              <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--t3)', background: 'var(--bd)', padding: '2px 6px', borderRadius: '3px' }}>
-                Pesapal
-              </span>
-              {paymentMethod === 'CARD' && (
-                <ChevronRight size={14} style={{ color: 'var(--ac)', marginLeft: 'auto' }} />
-              )}
-            </div>
-          </div>
+          {statusData.status === 'SUCCESSFUL' && <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}><button className="btn bg" style={{ flex: 1 }} onClick={() => router.push('/dashboard/payments/history')}><History size={15} /> Payment History</button><button className="btn bg" style={{ flex: 1 }} onClick={downloadPDF} disabled={isDownloading}>{isDownloading ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={15} />} {isDownloading ? 'Generating...' : 'Download receipt'}</button></div>}
+          {(statusData.status === 'FAILED' || statusData.status === 'CANCELLED') && <button className="btn bp" style={{ width: '100%', marginTop: '18px' }} onClick={() => { setPendingPaymentId(null); setAmount(selectedBill?.balance?.toString() || ''); }}><RefreshCw size={15} /> Try again</button>}
+          <button className="btn bg" style={{ width: '100%', marginTop: '10px' }} onClick={() => router.push('/dashboard/billing')}><ChevronLeft size={15} /> Back to bills</button>
         </div>
       </div>
+    );
+  }
 
-      {/* M-Pesa Section */}
-      {paymentMethod === 'MPESA_STK_PUSH' && (
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, color: 'var(--t1)', marginBottom: '8px' }}>
-            Phone Number <span style={{ color: '#ef4444' }}>*</span>
-          </label>
-          <div style={{ 
-            padding: '12px', 
-            borderRadius: '8px', 
-            border: phoneError ? '2px solid #ef4444' : '1px solid var(--bd)', 
-            background: 'var(--c1)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            {!showPhoneInput ? (
-              <>
-                <span style={{ fontSize: '14px', color: 'var(--t1)' }}>
-                  {phone || 'Not set'}
-                </span>
-                <button 
-                  onClick={() => setShowPhoneInput(true)}
-                  style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ac)', background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  Change
-                </button>
-              </>
-            ) : (
-              <>
-                <input 
-                  type="text"
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value);
-                    setPhoneError('');
-                  }}
-                  placeholder="e.g. 0712345678"
-                  autoFocus
-                  style={{ 
-                    flex: 1,
-                    padding: '4px 0', 
-                    border: 'none', 
-                    borderBottom: '2px solid var(--ac)', 
-                    background: 'transparent', 
-                    color: 'var(--t1)', 
-                    fontSize: '14px',
-                    outline: 'none',
-                    fontFamily: 'inherit'
-                  }}
-                />
-                <button 
-                  onClick={() => {
-                    setShowPhoneInput(false);
-                    setPhone(user?.phone || '');
-                    setPhoneError('');
-                  }}
-                  style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t3)', background: 'none', border: 'none', cursor: 'pointer', marginLeft: '12px' }}
-                >
-                  Use default
-                </button>
-              </>
-            )}
-          </div>
-          {phoneError && (
-            <p style={{ fontSize: '12px', color: '#ef4444', margin: '4px 0 0 0' }}>
-              {phoneError}
-            </p>
-          )}
+  return (
+    <div className="pg fu" style={{ maxWidth: '1080px', margin: '0 auto', paddingBottom: '32px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', marginBottom: '22px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          <button className="btn-icon bg" onClick={() => router.back()} aria-label="Go back"><ArrowLeft size={18} /></button>
+          <div><h1 className="pg-h">Payments</h1><p className="pg-sh">Manage your water bill payments securely and conveniently.</p></div>
         </div>
-      )}
+        <button className="btn bg" onClick={() => router.push('/dashboard/payments/history')}><History size={15} /> Payment History</button>
+      </div>
 
-      {/* Card Section */}
-      {paymentMethod === 'CARD' && (
-        <div style={{ 
-          marginBottom: '20px', 
-          padding: '12px 14px', 
-          borderRadius: '10px', 
-          background: 'rgba(0, 198, 167, 0.05)', 
-          border: '1px solid rgba(0, 198, 167, 0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
-          <Shield size={18} style={{ color: 'var(--ac)', flexShrink: 0 }} />
-          <div>
-            <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>
-              Secure Card Payment
-            </p>
-            <p style={{ fontSize: '12px', color: 'var(--t2)', margin: '2px 0 0 0' }}>
-              Visa • Mastercard • Secured by Pesapal
-            </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(280px, 0.65fr)', gap: '16px', alignItems: 'start' }}>
+        <div className="card" style={{ padding: '22px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '20px' }}>
+            <div><p style={{ fontSize: '11px', color: 'var(--ac)', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Make a payment</p><h2 style={{ fontSize: '22px', color: 'var(--t1)', fontWeight: 850, marginTop: '4px' }}>Settle your water bill</h2></div><div style={{ width: '42px', height: '42px', borderRadius: '13px', background: 'rgba(0, 198, 167, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Banknote size={21} style={{ color: 'var(--ac)' }} /></div>
           </div>
-        </div>
-      )}
 
-      {/* Payment Button */}
-      <button
-        onClick={() => {
-          if (!selectedBillId) {
-            toast({ type: 'error', title: 'Please select a bill', description: 'Choose a bill to pay from the dropdown above.' });
-            return;
-          }
-          if (!amount || parseFloat(amount) <= 0) {
-            toast({ type: 'error', title: 'Invalid amount', description: 'Please enter a valid amount to pay.' });
-            return;
-          }
-          if (paymentMethod === 'MPESA_STK_PUSH' && !validatePhone(phone)) {
-            setPhoneError('Please enter a valid Safaricom number (e.g., 0712345678)');
-            return;
-          }
-          initiatePaymentMutation.mutate();
-        }}
-        disabled={initiatePaymentMutation.isPending || !isFormValid}
-        style={{ 
-          width: '100%', 
-          padding: '14px', 
-          borderRadius: '10px', 
-          background: isFormValid ? 'var(--ac)' : 'var(--bd)', 
-          color: isFormValid ? 'white' : 'var(--t3)', 
-          border: 'none', 
-          fontSize: '15px', 
-          fontWeight: 700, 
-          cursor: isFormValid ? 'pointer' : 'not-allowed',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          transition: 'all 0.2s'
-        }}
-      >
-        {initiatePaymentMutation.isPending ? (
-          <>
-            <Loader2 size={18} className="animate-spin" />
-            {paymentMethod === 'CARD' ? 'Redirecting to Pesapal...' : 'Processing Payment...'}
-          </>
-        ) : (
-          paymentMethod === 'CARD' ? 'Pay with Card' : 'Pay with M-Pesa'
-        )}
-      </button>
+          <div style={{ padding: '16px', borderRadius: '14px', background: 'linear-gradient(135deg, rgba(0, 198, 167, 0.15), var(--c2))', border: '1px solid rgba(0, 198, 167, 0.22)', marginBottom: '20px' }}><p style={{ fontSize: '11px', color: 'var(--t2)', fontWeight: 700 }}>Outstanding balance</p><p style={{ fontSize: '30px', color: 'var(--t1)', fontWeight: 900, letterSpacing: '-0.04em', marginTop: '4px' }}>{selectedBill ? formatMoney(selectedBill.balance) : 'Select a bill'}</p></div>
+
+          <label style={{ display: 'block', fontSize: '12px', color: 'var(--t2)', fontWeight: 700, marginBottom: '7px' }}>Current bill</label>
+          {billsLoading ? <div style={{ height: '44px', borderRadius: '10px', background: 'var(--c2)' }} /> : billsData && billsData.length > 0 ? <select className="inp" value={selectedBillId} onChange={(event) => setSelectedBillId(event.target.value)}><option value="">Select a bill to pay</option>{billsData.map((bill: any) => <option key={bill.id} value={bill.id}>Bill #{bill.billNumber} · {formatMoney(bill.balance)}</option>)}</select> : <div style={{ padding: '14px', borderRadius: '10px', background: 'var(--c2)', color: 'var(--t2)', fontSize: '12px' }}>No unpaid bills found. <button className="btn bg" style={{ marginTop: '10px' }} onClick={() => router.push('/dashboard/billing')}>View billing</button></div>}
+
+          {selectedBill && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px', marginTop: '12px', padding: '13px', borderRadius: '11px', background: 'var(--c2)' }}>
+            <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Bill number</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{selectedBill.billNumber || '—'}</p></div>
+            <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Due date</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{selectedBill.dueDate ? new Date(selectedBill.dueDate).toLocaleDateString('en-KE') : '—'}</p></div>
+            <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Bill amount</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{formatMoney(selectedBill.amount)}</p></div>
+            <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Amount paid</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{formatMoney(selectedBill.amountPaid)}</p></div>
+          </div>}
+
+          <label style={{ display: 'block', fontSize: '12px', color: 'var(--t2)', fontWeight: 700, margin: '20px 0 7px' }}>Amount to pay</label>
+          <div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', color: 'var(--t3)', fontSize: '12px', fontWeight: 700 }}>KES</span><input className="inp" style={{ paddingLeft: '48px', fontSize: '18px', fontWeight: 800 }} type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" inputMode="decimal" /></div>
+          {selectedBill && <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', marginTop: '10px' }}><button type="button" className="btn bg" style={{ padding: '7px 10px', fontSize: '11px' }} onClick={() => setAmount(String(selectedBill.balance || 0))}>Pay full balance</button>{[500, 1000].filter((value) => value <= Number(selectedBill.balance || 0)).map((value) => <button key={value} type="button" className="btn bg" style={{ padding: '7px 10px', fontSize: '11px' }} onClick={() => setAmount(String(value))}>{formatMoney(value)}</button>)}</div>}
+
+          <label style={{ display: 'block', fontSize: '12px', color: 'var(--t2)', fontWeight: 700, margin: '20px 0 9px' }}>Payment method</label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '9px' }}>
+            {([['MPESA_STK_PUSH', 'M-Pesa', Smartphone, 'Tuma'], ['CARD', 'Card', CreditCard, 'Pesapal']] as const).map(([value, label, Icon, provider]) => <button key={value} type="button" onClick={() => setPaymentMethod(value)} style={{ textAlign: 'left', padding: '12px', borderRadius: '11px', border: paymentMethod === value ? '2px solid var(--ac)' : '1px solid var(--bd)', background: paymentMethod === value ? 'rgba(0, 198, 167, 0.08)' : 'var(--c2)', color: 'var(--t1)', cursor: 'pointer' }}><Icon size={17} style={{ color: paymentMethod === value ? 'var(--ac)' : 'var(--t2)' }} /><p style={{ fontSize: '12px', fontWeight: 800, marginTop: '8px' }}>{label}</p><p style={{ fontSize: '10px', color: 'var(--t3)', marginTop: '2px' }}>{provider}</p></button>)}
+          </div>
+
+          {paymentMethod === 'MPESA_STK_PUSH' && <div style={{ marginTop: '16px' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '7px' }}><label style={{ fontSize: '12px', color: 'var(--t2)', fontWeight: 700 }}>M-Pesa phone number</label><button type="button" onClick={() => setShowPhoneInput(true)} style={{ background: 'none', border: 0, color: 'var(--ac)', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>{showPhoneInput ? '' : 'Change'}</button></div>{showPhoneInput ? <input className="inp" value={phone} onChange={(event) => { setPhone(event.target.value); setPhoneError(''); }} placeholder="e.g. 0712345678" autoFocus /> : <div style={{ padding: '12px', borderRadius: '10px', background: 'var(--c2)', color: 'var(--t1)', fontSize: '13px' }}>{phone || 'No phone number set'}</div>}{phoneError && <p style={{ color: '#f87171', fontSize: '11px', marginTop: '5px' }}>{phoneError}</p>}</div>}
+          {paymentMethod === 'CARD' && <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '16px', padding: '12px', borderRadius: '10px', background: 'rgba(0, 198, 167, 0.06)' }}><Shield size={17} style={{ color: 'var(--ac)' }} /><div><p style={{ color: 'var(--t1)', fontSize: '12px', fontWeight: 800 }}>Secure card payment</p><p style={{ color: 'var(--t2)', fontSize: '11px', marginTop: '2px' }}>Processed through the existing Pesapal flow.</p></div></div>}
+
+          <button type="button" className="btn bp" style={{ width: '100%', minHeight: '48px', marginTop: '20px', fontSize: '14px' }} onClick={() => { if (!selectedBillId) { toast({ type: 'error', title: 'Please select a bill', description: 'Choose a bill to pay from the list.' }); return; } if (!amount || parseFloat(amount) <= 0) { toast({ type: 'error', title: 'Invalid amount', description: 'Please enter a valid amount to pay.' }); return; } if (paymentMethod === 'MPESA_STK_PUSH' && !validatePhone(phone)) { setPhoneError('Please enter a valid Safaricom number (e.g., 0712345678)'); return; } initiatePaymentMutation.mutate(); }} disabled={!!initiatePaymentMutation.isPending || !isFormValid}>{initiatePaymentMutation.isPending ? <><Loader2 size={17} style={{ animation: 'spin 1s linear infinite' }} /> {paymentMethod === 'CARD' ? 'Redirecting to Pesapal...' : 'Processing payment...'}</> : <><Lock size={16} /> {paymentMethod === 'CARD' ? 'Pay with card' : 'Pay with M-Pesa'}</>}</button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="card" style={{ padding: '20px' }}><div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}><FileText size={17} style={{ color: 'var(--ac)' }} /><h2 style={{ fontSize: '15px', color: 'var(--t1)', fontWeight: 800 }}>Recent payments</h2></div>{recentPaymentsLoading ? <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>{[1, 2, 3].map((item) => <div key={item} style={{ height: '54px', borderRadius: '9px', background: 'var(--c2)' }} />)}</div> : recentPayments.length === 0 ? <div style={{ padding: '16px 0', textAlign: 'center' }}><Receipt size={24} style={{ color: 'var(--t3)', margin: '0 auto 8px' }} /><p style={{ color: 'var(--t2)', fontSize: '12px' }}>No payment history yet.</p></div> : <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>{recentPayments.slice(0, 5).map((payment: any) => { const meta = statusMeta(payment.status); const Icon = meta.icon; return <div key={payment.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderRadius: '10px', background: 'var(--c2)' }}><div style={{ width: '30px', height: '30px', borderRadius: '9px', background: meta.background, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={15} style={{ color: meta.color }} /></div><div style={{ minWidth: 0, flex: 1 }}><p style={{ color: 'var(--t1)', fontSize: '12px', fontWeight: 800 }}>{formatMoney(payment.amount)}</p><p style={{ color: 'var(--t3)', fontSize: '10px', marginTop: '3px' }}>{payment.createdAt ? new Date(payment.createdAt).toLocaleDateString('en-KE') : '—'} · {payment.paymentMethod || payment.provider || 'Payment'}</p></div><span className="badge" style={{ color: meta.color, background: meta.background, fontSize: '9px' }}>{meta.label}</span></div>; })}</div>}<button className="btn bg" style={{ width: '100%', marginTop: '14px' }} onClick={() => router.push('/dashboard/payments/history')}>View payment history <ChevronRight size={15} /></button></div>
+          <div className="card" style={{ padding: '20px' }}><div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><Shield size={18} style={{ color: 'var(--ac)' }} /><div><p style={{ color: 'var(--t1)', fontSize: '13px', fontWeight: 800 }}>Secure M-Pesa payment</p><p style={{ color: 'var(--t2)', fontSize: '11px', lineHeight: 1.5, marginTop: '3px' }}>Your payment is processed securely through the existing Legacy Homes payment provider.</p></div></div></div>
+        </div>
+      </div>
     </div>
   );
-                        }
+}
