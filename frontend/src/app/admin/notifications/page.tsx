@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, getErrorMessage } from '@/lib/api';
 import { toast } from '@/components/ui/toaster';
@@ -52,6 +52,7 @@ const NOTIFICATION_TYPES = [
 
 export default function AdminNotificationsPage() {
   const queryClient = useQueryClient();
+  const broadcastKeyRef = useRef<string | null>(null);
 
   const [form, setForm] = useState({
     title: '',
@@ -75,16 +76,19 @@ export default function AdminNotificationsPage() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: async (payload: typeof form) => {
-      const res = await api.post('/notifications/send', payload);
+    mutationFn: async (payload: typeof form & { idempotencyKey: string }) => {
+      const res = await api.post('/notifications/send', payload, {
+        headers: { 'Idempotency-Key': payload.idempotencyKey },
+      });
       return res.data.data;
     },
 
     onSuccess: (data) => {
+      broadcastKeyRef.current = null;
       toast({
         type: 'success',
         title: 'Notification sent!',
-        description: `Sent to ${data.sent} residents.`,
+        description: `${data.delivered ?? 0} deliveries completed; ${data.failed ?? 0} failed.`,
       });
 
       setForm({
@@ -324,7 +328,11 @@ export default function AdminNotificationsPage() {
             </div>
 
             <button
-              onClick={() => sendMutation.mutate(form)}
+              onClick={() => {
+                const idempotencyKey = broadcastKeyRef.current ?? crypto.randomUUID();
+                broadcastKeyRef.current = idempotencyKey;
+                sendMutation.mutate({ ...form, idempotencyKey });
+              }}
               disabled={
                 sendMutation.isPending ||
                 !form.title ||

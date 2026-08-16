@@ -496,8 +496,9 @@ model Notification {
   channels    NotificationChannel[]
   targetAll   Boolean               @default(false)
   targetGroup String?
-  sentBy      String?
-  createdAt   DateTime              @default(now())
+  sentBy          String?
+  idempotencyKey  String?             @unique
+  createdAt       DateTime            @default(now())
 
   userNotifications UserNotification[]
 

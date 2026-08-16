@@ -93,6 +93,7 @@ export class NotificationService {
     targetAll?: boolean;
     targetGroup?: string;
     targetResidentIds?: string[];
+    idempotencyKey?: string;
   }) {
     let residentIds: string[] = [];
 
@@ -103,7 +104,8 @@ export class NotificationService {
       );
     }
 
-    const invalidChannels = data.channels.filter(
+    const channels = Array.from(new Set(data.channels));
+    const invalidChannels = channels.filter(
       (c) => !VALID_CHANNELS.includes(c)
     );
 
@@ -184,12 +186,29 @@ export class NotificationService {
       throw new AppError('No target residents found', 400);
     }
 
+    if (data.idempotencyKey) {
+      const existing = await prisma.notification.findUnique({
+        where: { idempotencyKey: data.idempotencyKey },
+        include: { _count: { select: { userNotifications: true } } },
+      });
+      if (existing) {
+        return {
+          notification: existing,
+          sent: residentIds.length,
+          delivered: existing._count.userNotifications,
+          failed: 0,
+          duplicate: true,
+        };
+      }
+    }
+
     const notification = await prisma.notification.create({
       data: {
         title: data.title,
         message: data.message,
         type: data.type as any,
-        channels: data.channels as any,
+        channels: channels as any,
+        idempotencyKey: data.idempotencyKey,
         sentBy: data.sentBy,
         targetAll: data.targetAll || false,
         targetGroup: data.targetGroup,
@@ -199,7 +218,7 @@ export class NotificationService {
     const userNotifications = [];
 
     for (const userId of residentIds) {
-      for (const channel of data.channels) {
+      for (const channel of channels) {
         userNotifications.push({
           notificationId: notification.id,
           userId,
@@ -227,30 +246,29 @@ export class NotificationService {
       },
     });
 
-    for (const resident of residents) {
-      for (const channel of data.channels) {
-        // According to requirements, do NOT send SMS for general notifications
-        // only for specific automated events (Bill, Payment, Reminder, Outage, Emergency)
-        if (channel === 'SMS') {
-          const allowedSmsTypes = ['BILLING_ALERT', 'PAYMENT_CONFIRMATION', 'BILLING_REMINDER', 'WATER_OUTAGE', 'EMERGENCY'];
-          if (!allowedSmsTypes.includes(data.type)) {
-             continue; 
-          }
-        }
+    let delivered = 0;
+    let failed = 0;
 
-        await this.deliverNotification(
+    for (const resident of residents) {
+      for (const channel of channels) {
+        const wasDelivered = await this.deliverNotification(
           notification.id,
           resident,
           channel,
           data.title,
           data.message
         );
+        if (wasDelivered) delivered += 1;
+        else failed += 1;
       }
     }
 
     return {
       notification,
       sent: residentIds.length,
+      delivered,
+      failed,
+      duplicate: false,
     };
   }
 
@@ -265,7 +283,7 @@ export class NotificationService {
     channel: string,
     title: string,
     message: string
-  ) {
+  ): Promise<boolean> {
     try {
       if (channel === 'IN_APP') {
         io.to(`user_${resident.id}`).emit('notification', {
@@ -343,6 +361,7 @@ export class NotificationService {
           throw error;
         }
       }
+      return true;
     } catch (error) {
       logger.error(
         `Failed to deliver ${channel} notification to ${resident.id}:`,
@@ -359,6 +378,7 @@ export class NotificationService {
           status: 'FAILED',
         },
       });
+      return false;
     }
   }
 

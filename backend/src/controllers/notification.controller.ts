@@ -10,6 +10,7 @@ export class NotificationController {
     try {
       const result = await notificationService.sendBroadcast({
         ...req.body,
+        idempotencyKey: req.header('Idempotency-Key') || req.body.idempotencyKey,
         sentBy: req.user!.userId,
       });
       res.status(201).json({ success: true, data: result });
