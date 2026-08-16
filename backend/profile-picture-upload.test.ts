@@ -36,6 +36,16 @@ test('profile-picture upload requires authentication and a file', () => {
   assert.match(controller, /req\.user!\.userId/);
 });
 
+test('Cloudinary credentials are environment-based and normalized before signing', () => {
+  assert.match(cloudinary, /process\.env\.CLOUDINARY_CLOUD_NAME\?\.trim\(\)/);
+  assert.match(cloudinary, /process\.env\.CLOUDINARY_API_KEY\?\.trim\(\)/);
+  assert.match(cloudinary, /process\.env\.CLOUDINARY_API_SECRET\?\.trim\(\)/);
+  assert.match(cloudinary, /cloud_name:\s*cloudName/);
+  assert.match(cloudinary, /api_key:\s*apiKey/);
+  assert.match(cloudinary, /api_secret:\s*apiSecret/);
+  assert.doesNotMatch(cloudinary, /npg_|sk_live|api_secret:\s*['"]/i);
+});
+
 test('storage-provider failures are surfaced as controlled 503 errors', () => {
   assert.match(cloudinary, /statusCode = 503/);
   assert.match(service, /Profile picture upload is temporarily unavailable/);

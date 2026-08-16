@@ -2,17 +2,25 @@ import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { logger } from './logger';
 
 // Validate configuration at boot — fail fast & loud rather than silently
-const REQUIRED_ENV = ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET'] as const;
-const MISSING_ENV = REQUIRED_ENV.filter((k) => !process.env[k]);
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+const REQUIRED_ENV = {
+  CLOUDINARY_CLOUD_NAME: cloudName,
+  CLOUDINARY_API_KEY: apiKey,
+  CLOUDINARY_API_SECRET: apiSecret,
+} as const;
+const MISSING_ENV = (Object.keys(REQUIRED_ENV) as Array<keyof typeof REQUIRED_ENV>)
+  .filter((key) => !REQUIRED_ENV[key]);
 
 if (MISSING_ENV.length) {
   logger.error(`[CLOUDINARY] Missing required env vars: ${MISSING_ENV.join(', ')} — uploads will fail.`);
 }
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: cloudName,
+  api_key: apiKey,
+  api_secret: apiSecret,
   secure: true,
 });
 
