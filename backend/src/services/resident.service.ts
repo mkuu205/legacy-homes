@@ -177,11 +177,16 @@ export class ResidentService {
         select: { id: true, profilePicture: true },
       });
     } catch (error: any) {
-      logger.error('[RESIDENT_SERVICE] Failed to update profile picture', { error, userId });
+      logger.error('[RESIDENT_SERVICE] Failed to update profile picture', {
+        error: error instanceof Error ? error.message : error,
+        userId,
+      });
       if (error.statusCode === 503) {
         throw new AppError('Profile picture upload is temporarily unavailable (Cloudinary not configured)', 503);
       }
-      throw error;
+      // Do not expose raw provider errors as an unhelpful HTTP 500. The upload
+      // is an external dependency and can be retried safely by the client.
+      throw new AppError('Profile picture upload is temporarily unavailable. Please try again.', 503);
     }
   }
 
