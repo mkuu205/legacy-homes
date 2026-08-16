@@ -156,6 +156,7 @@ app.use(cors({
     'X-Requested-With',
     'x-session-id',
     'X-Session-Id',
+    'Idempotency-Key',
   ],
   exposedHeaders: [
     'Content-Length',
