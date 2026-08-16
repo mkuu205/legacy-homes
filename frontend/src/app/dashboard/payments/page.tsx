@@ -15,7 +15,6 @@ import {
   ArrowLeft,
   RefreshCw,
   Lock,
-  ChevronRight,
   Shield,
   History,
   Receipt,
@@ -99,16 +98,6 @@ export default function PaymentsPage() {
       return res.data.data?.bills || [];
     },
   });
-
-  const { data: recentPaymentsData, isLoading: recentPaymentsLoading } = useQuery({
-    queryKey: ['my-payments', 'recent'],
-    queryFn: async () => {
-      const res = await api.get('/payments/my-payments?limit=5');
-      return res.data.data?.payments || [];
-    },
-  });
-
-  const recentPayments = recentPaymentsData || [];
 
   // Set bill from URL param only
   useEffect(() => {
@@ -788,7 +777,7 @@ export default function PaymentsPage() {
         <button className="btn bg" onClick={() => router.push('/dashboard/payments/history')}><History size={15} /> Payment History</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(280px, 0.65fr)', gap: '16px', alignItems: 'start' }}>
+      <div className="payments-layout" style={{ display: 'grid', gap: '16px', alignItems: 'start' }}>
         <div className="card" style={{ padding: '22px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '20px' }}>
             <div><p style={{ fontSize: '11px', color: 'var(--ac)', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Make a payment</p><h2 style={{ fontSize: '22px', color: 'var(--t1)', fontWeight: 850, marginTop: '4px' }}>Settle your water bill</h2></div><div style={{ width: '42px', height: '42px', borderRadius: '13px', background: 'rgba(0, 198, 167, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Banknote size={21} style={{ color: 'var(--ac)' }} /></div>
@@ -799,7 +788,7 @@ export default function PaymentsPage() {
           <label style={{ display: 'block', fontSize: '12px', color: 'var(--t2)', fontWeight: 700, marginBottom: '7px' }}>Current bill</label>
           {billsLoading ? <div style={{ height: '44px', borderRadius: '10px', background: 'var(--c2)' }} /> : billsData && billsData.length > 0 ? <select className="inp" value={selectedBillId} onChange={(event) => setSelectedBillId(event.target.value)}><option value="">Select a bill to pay</option>{billsData.map((bill: any) => <option key={bill.id} value={bill.id}>Bill #{bill.billNumber} · {formatMoney(bill.balance)}</option>)}</select> : <div style={{ padding: '14px', borderRadius: '10px', background: 'var(--c2)', color: 'var(--t2)', fontSize: '12px' }}>No unpaid bills found. <button className="btn bg" style={{ marginTop: '10px' }} onClick={() => router.push('/dashboard/billing')}>View billing</button></div>}
 
-          {selectedBill && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px', marginTop: '12px', padding: '13px', borderRadius: '11px', background: 'var(--c2)' }}>
+          {selectedBill && <div className="payment-details-grid" style={{ display: 'grid', gap: '10px', marginTop: '12px', padding: '13px', borderRadius: '11px', background: 'var(--c2)' }}>
             <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Bill number</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{selectedBill.billNumber || '—'}</p></div>
             <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Due date</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{selectedBill.dueDate ? new Date(selectedBill.dueDate).toLocaleDateString('en-KE') : '—'}</p></div>
             <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Bill amount</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{formatMoney(selectedBill.amount)}</p></div>
@@ -811,7 +800,7 @@ export default function PaymentsPage() {
           {selectedBill && <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', marginTop: '10px' }}><button type="button" className="btn bg" style={{ padding: '7px 10px', fontSize: '11px' }} onClick={() => setAmount(String(selectedBill.balance || 0))}>Pay full balance</button>{[500, 1000].filter((value) => value <= Number(selectedBill.balance || 0)).map((value) => <button key={value} type="button" className="btn bg" style={{ padding: '7px 10px', fontSize: '11px' }} onClick={() => setAmount(String(value))}>{formatMoney(value)}</button>)}</div>}
 
           <label style={{ display: 'block', fontSize: '12px', color: 'var(--t2)', fontWeight: 700, margin: '20px 0 9px' }}>Payment method</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '9px' }}>
+          <div className="payment-method-grid" style={{ display: 'grid', gap: '9px' }}>
             {([['MPESA_STK_PUSH', 'M-Pesa', Smartphone, 'Tuma'], ['CARD', 'Card', CreditCard, 'Pesapal']] as const).map(([value, label, Icon, provider]) => <button key={value} type="button" onClick={() => setPaymentMethod(value)} style={{ textAlign: 'left', padding: '12px', borderRadius: '11px', border: paymentMethod === value ? '2px solid var(--ac)' : '1px solid var(--bd)', background: paymentMethod === value ? 'rgba(0, 198, 167, 0.08)' : 'var(--c2)', color: 'var(--t1)', cursor: 'pointer' }}><Icon size={17} style={{ color: paymentMethod === value ? 'var(--ac)' : 'var(--t2)' }} /><p style={{ fontSize: '12px', fontWeight: 800, marginTop: '8px' }}>{label}</p><p style={{ fontSize: '10px', color: 'var(--t3)', marginTop: '2px' }}>{provider}</p></button>)}
           </div>
 
@@ -822,10 +811,29 @@ export default function PaymentsPage() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div className="card" style={{ padding: '20px' }}><div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}><FileText size={17} style={{ color: 'var(--ac)' }} /><h2 style={{ fontSize: '15px', color: 'var(--t1)', fontWeight: 800 }}>Recent payments</h2></div>{recentPaymentsLoading ? <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>{[1, 2, 3].map((item) => <div key={item} style={{ height: '54px', borderRadius: '9px', background: 'var(--c2)' }} />)}</div> : recentPayments.length === 0 ? <div style={{ padding: '16px 0', textAlign: 'center' }}><Receipt size={24} style={{ color: 'var(--t3)', margin: '0 auto 8px' }} /><p style={{ color: 'var(--t2)', fontSize: '12px' }}>No payment history yet.</p></div> : <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>{recentPayments.slice(0, 5).map((payment: any) => { const meta = statusMeta(payment.status); const Icon = meta.icon; return <div key={payment.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', borderRadius: '10px', background: 'var(--c2)' }}><div style={{ width: '30px', height: '30px', borderRadius: '9px', background: meta.background, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={15} style={{ color: meta.color }} /></div><div style={{ minWidth: 0, flex: 1 }}><p style={{ color: 'var(--t1)', fontSize: '12px', fontWeight: 800 }}>{formatMoney(payment.amount)}</p><p style={{ color: 'var(--t3)', fontSize: '10px', marginTop: '3px' }}>{payment.createdAt ? new Date(payment.createdAt).toLocaleDateString('en-KE') : '—'} · {payment.paymentMethod || payment.provider || 'Payment'}</p></div><span className="badge" style={{ color: meta.color, background: meta.background, fontSize: '9px' }}>{meta.label}</span></div>; })}</div>}<button className="btn bg" style={{ width: '100%', marginTop: '14px' }} onClick={() => router.push('/dashboard/payments/history')}>View payment history <ChevronRight size={15} /></button></div>
           <div className="card" style={{ padding: '20px' }}><div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><Shield size={18} style={{ color: 'var(--ac)' }} /><div><p style={{ color: 'var(--t1)', fontSize: '13px', fontWeight: 800 }}>Secure M-Pesa payment</p><p style={{ color: 'var(--t2)', fontSize: '11px', lineHeight: 1.5, marginTop: '3px' }}>Your payment is processed securely through the existing Legacy Homes payment provider.</p></div></div></div>
         </div>
       </div>
+      <style jsx>{`
+        .payments-layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .payment-details-grid,
+        .payment-method-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        @media (min-width: 560px) {
+          .payment-details-grid,
+          .payment-method-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @media (min-width: 900px) {
+          .payments-layout {
+            grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+          }
+        }
+      `}</style>
     </div>
   );
 }
