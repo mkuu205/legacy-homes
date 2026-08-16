@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authController } from '../controllers/auth.controller';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
 import rateLimit from 'express-rate-limit';
 
 const router: import("express").Router = Router();
@@ -29,6 +29,7 @@ router.post('/register', authLimiter, authController.register.bind(authControlle
 router.post('/verify-otp', authLimiter, authController.verifyOTP.bind(authController));
 router.post('/resend-otp', otpLimiter, authController.resendOTP.bind(authController));
 router.post('/login', authLimiter, authController.login.bind(authController));
+router.post('/2fa/verify-login', authLimiter, authController.verifyTwoFactorLogin.bind(authController));
 
 // Outage notification (Public)
 import { outageController } from '../controllers/outage.controller';
@@ -46,6 +47,11 @@ router.post('/reset-password', authLimiter, authController.resetPassword.bind(au
 
 // Profile - NO RATE LIMIT (handled by authentication)
 router.get('/me', authenticate, authController.getMe.bind(authController));
+const adminRoles = ['SUPER_ADMIN', 'BILLING_OFFICER', 'SUPPORT_AGENT', 'NOTIFICATION_MANAGER', 'READ_ONLY_MANAGER'];
+router.get('/2fa/status', authenticate, authorize(...adminRoles), authController.twoFactorStatus.bind(authController));
+router.post('/2fa/setup', authenticate, authorize(...adminRoles), authController.setupTwoFactor.bind(authController));
+router.post('/2fa/confirm', authenticate, authorize(...adminRoles), authController.confirmTwoFactor.bind(authController));
+router.post('/2fa/disable', authenticate, authorize(...adminRoles), authController.disableTwoFactor.bind(authController));
 router.delete('/delete-account', authenticate, authController.deleteAccount.bind(authController));
 
 export default router;

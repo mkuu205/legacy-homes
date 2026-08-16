@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -22,10 +23,11 @@ type FormData = z.infer<typeof schema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setAuth } = useAuthStore();
+  const { setAuth, setPendingTwoFactor, pendingTwoFactor, clearPendingTwoFactor } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   
   // Maintenance mode state
   const backendStatus = useSystemStatusStore((state) => state.status);
@@ -120,7 +122,12 @@ export default function LoginPage() {
     setErrorMsg('');
     try {
       const res = await api.post('/auth/login', data);
-      const { user, tokens } = res.data.data;
+      const result = res.data.data;
+      if (result.twoFactorRequired) {
+        setPendingTwoFactor({ challengeToken: result.challengeToken, user: result.user });
+        return;
+      }
+      const { user, tokens } = result;
       setAuth(user, tokens.accessToken, tokens.refreshToken);
       toast({ type: 'success', title: 'Welcome back!', description: `Hello, ${user.fullName}` });
 
@@ -155,6 +162,25 @@ export default function LoginPage() {
       const errorText = getErrorMessage(error);
       setErrorMsg(errorText);
       toast({ type: 'error', title: 'Login failed', description: errorText });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTwoFactorSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await api.post('/auth/2fa/verify-login', { challengeToken: pendingTwoFactor?.challengeToken, code: twoFactorCode });
+      const { user, tokens } = res.data.data;
+      setAuth(user, tokens.accessToken, tokens.refreshToken);
+      toast({ type: 'success', title: 'Welcome back!', description: `Hello, ${user.fullName}` });
+      router.push('/admin');
+    } catch (error) {
+      const errorText = getErrorMessage(error);
+      setErrorMsg(errorText);
+      toast({ type: 'error', title: 'Verification failed', description: errorText });
     } finally {
       setIsLoading(false);
     }
@@ -307,6 +333,23 @@ export default function LoginPage() {
           <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--t3)', lineHeight: '1.5' }}>
             If the problem persists, please contact our support team or check back in a few moments.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (pendingTwoFactor) {
+    return (
+      <div className="auth-wrap">
+        <div className="auth-card">
+          <div className="auth-logo"><div className="auth-logo-ico">LH</div><div><div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)' }}>Legacy Homes</div><div style={{ fontSize: '11px', color: 'var(--t2)' }}>Administrator verification</div></div></div>
+          <div style={{ marginBottom: '26px' }}><h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--t1)', marginBottom: '6px' }}>Verify your sign-in</h1><p style={{ fontSize: '13px', color: 'var(--t2)' }}>Enter the six-digit code from your authenticator app, or use one unused recovery code.</p></div>
+          <form onSubmit={handleTwoFactorSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="fg"><label className="lbl">Authenticator or recovery code</label><input className="inp" value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value)} inputMode="numeric" autoComplete="one-time-code" autoFocus placeholder="000000" required /></div>
+            {errorMsg && <p style={{ fontSize: '12px', color: '#f87171' }}>{errorMsg}</p>}
+            <button className="btn bp" type="submit" disabled={isLoading}>{isLoading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : 'Verify and continue'}</button>
+            <button className="btn bg" type="button" onClick={() => { clearPendingTwoFactor(); setTwoFactorCode(''); setErrorMsg(''); }}>Back to sign in</button>
+          </form>
         </div>
       </div>
     );

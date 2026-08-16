@@ -91,6 +91,19 @@ export class AuthController {
         ? await prisma.house.findUnique({ where: { id: result.user.houseId } })
         : null;
       
+      if (result.twoFactorRequired) {
+        res.json({
+          success: true,
+          message: 'Two-factor authentication required',
+          data: {
+            twoFactorRequired: true,
+            challengeToken: result.challengeToken,
+            user: { id: result.user.id, fullName: result.user.fullName, email: result.user.email, role: result.user.role },
+          },
+        });
+        return;
+      }
+
       res.json({
         success: true,
         message: 'Login successful',
@@ -115,6 +128,43 @@ export class AuthController {
     } catch (error) {
       next(error);
     }
+  }
+
+  async verifyTwoFactorLogin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { challengeToken, code } = req.body;
+      const result = await authService.completeTwoFactorLogin(String(challengeToken || ''), String(code || ''));
+      setRefreshCookie(res, result.tokens.refreshToken);
+      res.json({
+        success: true,
+        message: 'Login successful',
+        data: { user: { id: result.user.id, fullName: result.user.fullName, email: result.user.email, role: result.user.role }, tokens: { accessToken: result.tokens.accessToken } },
+      });
+    } catch (error) { next(error); }
+  }
+
+  async twoFactorStatus(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      res.json({ success: true, data: await authService.getTwoFactorStatus(req.user!.userId) });
+    } catch (error) { next(error); }
+  }
+
+  async setupTwoFactor(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      res.json({ success: true, data: await authService.setupTwoFactor(req.user!.userId) });
+    } catch (error) { next(error); }
+  }
+
+  async confirmTwoFactor(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      res.json({ success: true, data: await authService.confirmTwoFactor(req.user!.userId, String(req.body.code || '')) });
+    } catch (error) { next(error); }
+  }
+
+  async disableTwoFactor(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      res.json({ success: true, data: await authService.disableTwoFactor(req.user!.userId, String(req.body.code || '')) });
+    } catch (error) { next(error); }
   }
 
   async refreshToken(req: Request, res: Response, next: NextFunction) {

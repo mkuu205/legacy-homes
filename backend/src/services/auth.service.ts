@@ -10,6 +10,16 @@ import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import crypto from 'crypto';
 import { isSessionInactive, SESSION_EXPIRED_MESSAGE } from '../utils/session-policy';
+import {
+  consumeRecoveryCode,
+  createTotpQrCode,
+  decryptTotpSecret,
+  encryptTotpSecret,
+  generateRecoveryCodes,
+  generateTotpSecret,
+  hashRecoveryCode,
+  verifyTotp,
+} from '../utils/totp';
 
 export class AuthService {
   async register(data: {
@@ -219,12 +229,116 @@ export class AuthService {
       throw new AppError('Your account is inactive. Please contact support.', 403);
     }
 
+    const twoFactor = user.role !== 'RESIDENT'
+      ? await prisma.adminTwoFactor.findUnique({ where: { userId: user.id } })
+      : null;
+
+    if (user.role !== 'RESIDENT' && twoFactor?.enabled) {
+      const challengeToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(challengeToken).digest('hex');
+      await prisma.twoFactorChallenge.deleteMany({ where: { userId: user.id } });
+      await prisma.twoFactorChallenge.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        },
+      });
+      return {
+        twoFactorRequired: true as const,
+        challengeToken,
+        user,
+      };
+    }
+
     const tokens = await this.generateTokens(user);
 
     return {
+      twoFactorRequired: false as const,
       user,
       tokens,
     };
+  }
+
+  async completeTwoFactorLogin(challengeToken: string, code: string) {
+    const tokenHash = crypto.createHash('sha256').update(challengeToken).digest('hex');
+    const challenge = await prisma.twoFactorChallenge.findUnique({
+      where: { tokenHash },
+      include: { user: { include: { twoFactor: true } } },
+    });
+    if (!challenge || challenge.consumedAt || challenge.expiresAt <= new Date() || challenge.attempts >= 5) {
+      throw new AppError('Invalid or expired two-factor challenge', 401);
+    }
+    const user = challenge.user;
+    if (user.role === 'RESIDENT' || user.accountStatus !== 'ACTIVE' || !user.twoFactor?.enabled) {
+      throw new AppError('Two-factor authentication is not available for this account', 401);
+    }
+
+    const secret = decryptTotpSecret(user.twoFactor.secretCiphertext);
+    const totpValid = verifyTotp(secret, code);
+    let remainingRecoveryHashes = Array.isArray(user.twoFactor.recoveryCodeHashes)
+      ? user.twoFactor.recoveryCodeHashes.filter((value): value is string => typeof value === 'string')
+      : [];
+    const recoveryRemaining = totpValid ? remainingRecoveryHashes : consumeRecoveryCode(remainingRecoveryHashes, code);
+    if (!totpValid && !recoveryRemaining) {
+      await prisma.twoFactorChallenge.update({ where: { id: challenge.id }, data: { attempts: { increment: 1 } } });
+      throw new AppError('Invalid two-factor code', 401);
+    }
+    if (!totpValid) remainingRecoveryHashes = recoveryRemaining as string[];
+
+    await prisma.$transaction([
+      prisma.twoFactorChallenge.update({ where: { id: challenge.id }, data: { consumedAt: new Date() } }),
+      ...(totpValid ? [] : [prisma.adminTwoFactor.update({ where: { userId: user.id }, data: { recoveryCodeHashes: remainingRecoveryHashes } })]),
+    ]);
+    return { user, tokens: await this.generateTokens(user) };
+  }
+
+  async getTwoFactorStatus(userId: string) {
+    const user = await this.requireAdmin(userId);
+    const record = await prisma.adminTwoFactor.findUnique({ where: { userId: user.id } });
+    const hashes = Array.isArray(record?.recoveryCodeHashes) ? record.recoveryCodeHashes : [];
+    return { enabled: record?.enabled === true, recoveryCodesRemaining: hashes.length };
+  }
+
+  async setupTwoFactor(userId: string) {
+    const user = await this.requireAdmin(userId);
+    const existing = await prisma.adminTwoFactor.findUnique({ where: { userId: user.id } });
+    if (existing?.enabled) throw new AppError('Two-factor authentication is already enabled', 409);
+    const secret = generateTotpSecret();
+    const recoveryCodes = generateRecoveryCodes();
+    await prisma.adminTwoFactor.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, secretCiphertext: encryptTotpSecret(secret), recoveryCodeHashes: recoveryCodes.map(hashRecoveryCode), enabled: false },
+      update: { secretCiphertext: encryptTotpSecret(secret), recoveryCodeHashes: recoveryCodes.map(hashRecoveryCode), enabled: false, verifiedAt: null },
+    });
+    return { secret, recoveryCodes, qrCodeDataUrl: await createTotpQrCode(secret, user.email) };
+  }
+
+  async confirmTwoFactor(userId: string, code: string) {
+    const user = await this.requireAdmin(userId);
+    const record = await prisma.adminTwoFactor.findUnique({ where: { userId: user.id } });
+    if (!record) throw new AppError('Start two-factor setup first', 400);
+    if (record.enabled) return { enabled: true };
+    if (!verifyTotp(decryptTotpSecret(record.secretCiphertext), code)) throw new AppError('Invalid authenticator code', 400);
+    await prisma.adminTwoFactor.update({ where: { userId: user.id }, data: { enabled: true, verifiedAt: new Date() } });
+    return { enabled: true };
+  }
+
+  async disableTwoFactor(userId: string, code: string) {
+    const user = await this.requireAdmin(userId);
+    const record = await prisma.adminTwoFactor.findUnique({ where: { userId: user.id } });
+    if (!record?.enabled) return { enabled: false };
+    const validTotp = verifyTotp(decryptTotpSecret(record.secretCiphertext), code);
+    const remaining = validTotp ? record.recoveryCodeHashes : consumeRecoveryCode(Array.isArray(record.recoveryCodeHashes) ? record.recoveryCodeHashes.filter((value): value is string => typeof value === 'string') : [], code);
+    if (!validTotp && !remaining) throw new AppError('Invalid two-factor code', 400);
+    await prisma.adminTwoFactor.delete({ where: { userId: user.id } });
+    return { enabled: false };
+  }
+
+  private async requireAdmin(userId: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.role === 'RESIDENT' || user.accountStatus !== 'ACTIVE') throw new AppError('Administrator access required', 403);
+    return user;
   }
 
   async refreshTokens(refreshToken: string) {

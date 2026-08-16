@@ -7,7 +7,7 @@ export interface User {
   id: string;
   fullName: string;
   email: string;
-  role: 'SUPER_ADMIN' | 'RESIDENT';
+  role: 'SUPER_ADMIN' | 'BILLING_OFFICER' | 'SUPPORT_AGENT' | 'NOTIFICATION_MANAGER' | 'READ_ONLY_MANAGER' | 'RESIDENT';
   houseNumber?: string;
   accountNumber?: string;
   profilePicture?: string;
@@ -21,6 +21,7 @@ export type SessionState = 'AUTHENTICATED' | 'DISCONNECTED' | 'EXPIRED' | 'UNAUT
 
 interface AuthState {
   user: User | null;
+  pendingTwoFactor: { challengeToken: string; user: Pick<User, 'id' | 'fullName' | 'email' | 'role'> } | null;
   isAuthenticated: boolean;
   sessionState: SessionState;
   hydrated: boolean;
@@ -30,6 +31,8 @@ interface AuthState {
     accessToken: string,
     refreshToken: string
   ) => void;
+  setPendingTwoFactor: (challenge: NonNullable<AuthState['pendingTwoFactor']>) => void;
+  clearPendingTwoFactor: () => void;
 
   updateUser: (user: Partial<User>) => void;
 
@@ -43,6 +46,7 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
+      pendingTwoFactor: null,
       isAuthenticated: false,
       sessionState: 'UNAUTHENTICATED',
       hydrated: false,
@@ -55,10 +59,15 @@ export const useAuthStore = create<AuthState>()(
 
         set({
           user,
+          pendingTwoFactor: null,
           isAuthenticated: true,
           sessionState: 'AUTHENTICATED',
         });
       },
+
+      setPendingTwoFactor: (pendingTwoFactor) => set({ pendingTwoFactor }),
+
+      clearPendingTwoFactor: () => set({ pendingTwoFactor: null }),
 
       updateUser: (updatedUser) =>
         set((state) => ({
@@ -80,6 +89,7 @@ export const useAuthStore = create<AuthState>()(
 
         set({
           user: null,
+          pendingTwoFactor: null,
           isAuthenticated: false,
           sessionState: expired ? 'EXPIRED' : 'UNAUTHENTICATED',
         });
@@ -95,6 +105,7 @@ export const useAuthStore = create<AuthState>()(
 
         set({
           user: null,
+          pendingTwoFactor: null,
           isAuthenticated: false,
           sessionState: 'UNAUTHENTICATED',
         });

@@ -189,6 +189,8 @@ model User {
   assignedTickets   Ticket[]           @relation("AssignedTickets")
   paymentMethods    PaymentMethod[]
   deviceTokens      DeviceToken[]
+  twoFactor          AdminTwoFactor?
+  twoFactorChallenges TwoFactorChallenge[]
 
   @@map("users")
 }
@@ -227,6 +229,36 @@ model RefreshToken {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
+}
+
+model AdminTwoFactor {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  secretCiphertext      String
+  recoveryCodeHashes    Json
+  enabled               Boolean  @default(false)
+  verifiedAt            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admin_two_factor")
+}
+
+model TwoFactorChallenge {
+  id          String    @id @default(uuid())
+  userId      String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  attempts    Int       @default(0)
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("two_factor_challenges")
 }
 
 // ─────────────────────────────────────────────
