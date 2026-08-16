@@ -791,7 +791,7 @@ export default function PaymentsPage() {
           {selectedBill && <div className="payment-details-grid" style={{ display: 'grid', gap: '10px', marginTop: '12px', padding: '13px', borderRadius: '11px', background: 'var(--c2)' }}>
             <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Bill number</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{selectedBill.billNumber || '—'}</p></div>
             <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Due date</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{selectedBill.dueDate ? new Date(selectedBill.dueDate).toLocaleDateString('en-KE') : '—'}</p></div>
-            <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Bill amount</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{formatMoney(selectedBill.amount)}</p></div>
+            <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Bill amount</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{formatMoney(selectedBill.totalAmount)}</p></div>
             <div><p style={{ fontSize: '10px', color: 'var(--t3)' }}>Amount paid</p><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700, marginTop: '3px' }}>{formatMoney(selectedBill.amountPaid)}</p></div>
           </div>}
 

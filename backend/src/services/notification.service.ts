@@ -560,34 +560,6 @@ export class NotificationService {
       }
     }
 
-    // Send Email
-    try {
-      await sendEmail({
-        to: resident.email,
-        subject: 'Your Water Bill - Legacy Homes',
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
-            <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:24px;border-radius:12px 12px 0 0;text-align:center;">
-              <h2 style="color:#fff;margin:0;font-size:24px;font-weight:bold;">Legacy Homes</h2>
-              <p style="color:#e0e7ff;margin:8px 0 0 0;font-size:12px;">Water Billing System</p>
-            </div>
-            <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
-              <h3 style="color:#1e293b;">Your Water Bill is Ready</h3>
-              <p style="color:#64748b;line-height:1.6;">Dear ${resident.fullName},</p>
-              <p style="color:#64748b;line-height:1.6;">Your water bill for this month has been generated and is ready for payment.</p>
-              <div style="background:#f1f5f9;padding:16px;border-radius:8px;margin:16px 0;">
-                <p style="margin:0;color:#1e293b;"><strong>Bill Number:</strong> ${billNumber}</p>
-                <p style="margin:8px 0 0 0;color:#1e293b;"><strong>Amount Due:</strong> KES ${totalAmount.toFixed(2)}</p>
-              </div>
-              <p style="color:#64748b;line-height:1.6;">Please log in to your account to view the full bill details and make payment.</p>
-              <p style="color:#94a3b8;font-size:12px;margin-top:24px;">Legacy Homes Water Billing System</p>
-            </div>
-          </div>
-        `,
-      });
-    } catch (error) {
-      logger.error('Failed to send bill notification email:', error);
-    }
   }
 
   async sendPaymentSuccessNotification(
