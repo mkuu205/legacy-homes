@@ -102,8 +102,28 @@ export default function PaymentsHistoryPage() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['my-payments'],
     queryFn: async () => {
-      const res = await api.get('/payments/my-payments');
-      return res.data.data || { payments: [], pagination: { total: 0 } };
+      const allPayments: PaymentRecord[] = [];
+      let page = 1;
+      let pages = 1;
+      const limit = 100;
+
+      do {
+        const res = await api.get(`/payments/my-payments?page=${page}&limit=${limit}`);
+        const result = res.data.data || { payments: [], pagination: { total: 0, pages: 1 } };
+        allPayments.push(...(result.payments || []));
+        pages = Number(result.pagination?.pages || 1);
+        page += 1;
+      } while (page <= pages);
+
+      return {
+        payments: allPayments,
+        pagination: {
+          ...(allPayments.length ? { total: allPayments.length } : { total: 0 }),
+          pages: 1,
+          page: 1,
+          limit: allPayments.length,
+        },
+      };
     },
   });
 
