@@ -9,6 +9,7 @@ import { sendOTPEmail, sendPasswordResetEmail } from '../utils/email';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import crypto from 'crypto';
+import { isSessionInactive, SESSION_EXPIRED_MESSAGE } from '../utils/session-policy';
 
 export class AuthService {
   async register(data: {
@@ -244,6 +245,14 @@ export class AuthService {
       throw new AppError('Invalid or expired refresh token', 401);
     }
 
+    if (isSessionInactive(storedToken.lastActivityAt, storedToken.createdAt)) {
+      await prisma.refreshToken.update({
+        where: { id: storedToken.id },
+        data: { revoked: true },
+      });
+      throw new AppError(SESSION_EXPIRED_MESSAGE, 401);
+    }
+
     const user = await prisma.user.findUnique({
       where: {
         id: storedToken.userId,
@@ -416,14 +425,6 @@ export class AuthService {
     email: string;
     role: string;
   }) {
-    const payload = {
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    };
-
-    const accessToken = generateAccessToken(payload);
-
     const refreshToken = crypto.randomBytes(64).toString('hex');
 
     const tokenHash = crypto
@@ -434,13 +435,21 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    await prisma.refreshToken.create({
+    const storedToken = await prisma.refreshToken.create({
       data: {
         userId: user.id,
         tokenHash,
         expiresAt,
+        lastActivityAt: new Date(),
         revoked: false,
       },
+    });
+
+    const accessToken = generateAccessToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      sessionId: storedToken.id,
     });
 
     return {

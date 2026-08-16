@@ -37,6 +37,16 @@ export default function LoginPage() {
     resolver: zodResolver(schema),
   });
 
+  useEffect(() => {
+    const expiryReason = sessionStorage.getItem('sessionExpiryReason');
+    if (expiryReason === 'inactivity') {
+      sessionStorage.removeItem('sessionExpiryReason');
+      const message = 'Your session has expired due to inactivity. Please log in again.';
+      setErrorMsg(message);
+      toast({ type: 'info', title: 'Session expired', description: message });
+    }
+  }, []);
+
   // Monitor backend status and update maintenance mode
   useEffect(() => {
     // Define all states that should show the maintenance screen

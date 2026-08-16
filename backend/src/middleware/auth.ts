@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, JWTPayload } from '../utils/jwt';
 import { AppError } from './errorHandler';
 import prisma from '../config/prisma';
+import { isSessionInactive, SESSION_EXPIRED_MESSAGE } from '../utils/session-policy';
 
 export type AuthRequest = Request & {
   user?: JWTPayload;
@@ -30,6 +31,42 @@ export const authMiddleware = async (
 
     if (!user || user.accountStatus !== 'ACTIVE') {
       throw new AppError('Account is inactive or has been deleted', 401);
+    }
+
+    if (payload.sessionId) {
+      const session = await prisma.refreshToken.findUnique({
+        where: { id: payload.sessionId },
+        select: {
+          id: true,
+          userId: true,
+          revoked: true,
+          expiresAt: true,
+          createdAt: true,
+          lastActivityAt: true,
+        },
+      });
+
+      if (
+        !session ||
+        session.userId !== user.id ||
+        session.revoked ||
+        new Date() > session.expiresAt
+      ) {
+        throw new AppError('Invalid or expired session', 401);
+      }
+
+      if (isSessionInactive(session.lastActivityAt, session.createdAt)) {
+        await prisma.refreshToken.update({
+          where: { id: session.id },
+          data: { revoked: true },
+        });
+        throw new AppError(SESSION_EXPIRED_MESSAGE, 401);
+      }
+
+      await prisma.refreshToken.update({
+        where: { id: session.id },
+        data: { lastActivityAt: new Date() },
+      });
     }
 
     req.user = {

@@ -390,6 +390,10 @@ api.interceptors.response.use(
             localStorage.removeItem('refreshToken');
 
             const { useAuthStore } = await import('@/store/auth.store');
+            const refreshMessage = (refreshError as AxiosError<{ message?: string }>).response?.data?.message;
+            if (refreshMessage === 'Your session has expired due to inactivity. Please log in again.') {
+              sessionStorage.setItem('sessionExpiryReason', 'inactivity');
+            }
             useAuthStore.getState().logout(true);
 
             backendEvents.emit('session-expired');
