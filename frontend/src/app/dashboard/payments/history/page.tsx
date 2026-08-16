@@ -255,45 +255,29 @@ export default function PaymentsHistoryPage() {
             </button>
           </div>
         ) : (
-          <>
-            <div className="hidden md:block" style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr style={{ borderBottom: '1px solid var(--bd)' }}>
-                  {['Payment', 'Amount', 'Status', 'Date', 'Reference', ''].map((heading) => <th key={heading} style={{ padding: '14px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--t3)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{heading}</th>)}
-                </tr></thead>
-                <tbody>
-                  {filteredPayments.map((payment) => {
-                    const status = getStatusDetails(payment.status);
-                    const StatusIcon = status.icon;
-                    const expanded = expandedPaymentId === payment.id;
-                    return <tr key={payment.id} style={{ borderBottom: '1px solid var(--bd)' }}>
-                      <td style={{ padding: '15px 16px' }}><div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'var(--c2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CreditCard size={16} style={{ color: 'var(--ac)' }} /></div><div><p style={{ fontSize: '12px', color: 'var(--t1)', fontWeight: 700 }}>{payment.paymentId || payment.id}</p><p style={{ fontSize: '10px', color: 'var(--t3)', marginTop: '3px' }}>{payment.bill?.billNumber ? `Bill ${payment.bill.billNumber}` : 'Legacy Homes payment'}</p></div></div></td>
-                      <td style={{ padding: '15px 16px', fontSize: '13px', color: 'var(--t1)', fontWeight: 800 }}>{formatAmount(payment.amount)}</td>
-                      <td style={{ padding: '15px 16px' }}><span className="badge" style={{ color: status.color, background: status.background }}><StatusIcon size={13} /> {status.label}</span></td>
-                      <td style={{ padding: '15px 16px', fontSize: '11px', color: 'var(--t2)', whiteSpace: 'nowrap' }}>{formatDate(payment.createdAt)}</td>
-                      <td style={{ padding: '15px 16px', fontSize: '11px', color: 'var(--t2)', fontFamily: 'monospace', maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getReference(payment)}</td>
-                      <td style={{ padding: '15px 16px', textAlign: 'right' }}><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}><button className="btn-icon bg" onClick={() => setExpandedPaymentId(expanded ? null : payment.id)} aria-label="View payment details">{expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</button><button className="btn-icon bg" onClick={() => router.push(`/dashboard/payments?paymentId=${payment.id}`)} aria-label="View receipt"><ReceiptText size={15} /></button><button className="btn-icon be" disabled={deletePaymentMutation.isPending} onClick={() => { if (confirm('Are you sure you want to delete this payment record?')) deletePaymentMutation.mutate(payment.id); }} aria-label="Delete payment"><Trash2 size={15} /></button></div></td>
-                      {expanded && <td colSpan={6} style={{ padding: '0 16px 16px' }}><PaymentDetails payment={payment} /></td>}
-                    </tr>;
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px' }}>
-              {filteredPayments.map((payment) => {
-                const status = getStatusDetails(payment.status);
-                const StatusIcon = status.icon;
-                const expanded = expandedPaymentId === payment.id;
-                return <div key={payment.id} style={{ border: '1px solid var(--bd)', borderRadius: '12px', padding: '14px', background: 'var(--c2)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}><div><p style={{ fontSize: '13px', color: 'var(--t1)', fontWeight: 800 }}>{formatAmount(payment.amount)}</p><p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '4px' }}>{formatDate(payment.createdAt)}</p></div><span className="badge" style={{ color: status.color, background: status.background }}><StatusIcon size={13} /> {status.label}</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--bd)' }}><div><p style={{ fontSize: '10px', color: 'var(--t3)', textTransform: 'uppercase' }}>Reference</p><p style={{ fontSize: '11px', color: 'var(--t1)', fontFamily: 'monospace', marginTop: '3px', wordBreak: 'break-all' }}>{getReference(payment)}</p></div><button className="btn-icon bg" onClick={() => setExpandedPaymentId(expanded ? null : payment.id)} aria-label="View payment details">{expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</button></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px' }}>
+            {filteredPayments.map((payment) => {
+              const status = getStatusDetails(payment.status);
+              const StatusIcon = status.icon;
+              const expanded = expandedPaymentId === payment.id;
+              return (
+                <div key={payment.id} style={{ border: '1px solid var(--bd)', borderRadius: '12px', padding: '14px', background: 'var(--c2)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'var(--c1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CreditCard size={16} style={{ color: 'var(--ac)' }} /></div>
+                      <div style={{ minWidth: 0 }}><p style={{ fontSize: '13px', color: 'var(--t1)', fontWeight: 800 }}>{formatAmount(payment.amount)}</p><p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '4px' }}>{payment.paymentId || payment.id} · {formatDate(payment.createdAt)}</p></div>
+                    </div>
+                    <span className="badge" style={{ color: status.color, background: status.background }}><StatusIcon size={13} /> {status.label}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--bd)' }}>
+                    <div style={{ minWidth: 0 }}><p style={{ fontSize: '10px', color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reference</p><p style={{ fontSize: '11px', color: 'var(--t1)', fontFamily: 'monospace', marginTop: '3px', wordBreak: 'break-all' }}>{getReference(payment)}</p></div>
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}><button className="btn-icon bg" onClick={() => setExpandedPaymentId(expanded ? null : payment.id)} aria-label="View payment details">{expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</button><button className="btn-icon bg" onClick={() => router.push(`/dashboard/payments?paymentId=${payment.id}`)} aria-label="View receipt"><ReceiptText size={15} /></button><button className="btn-icon be" disabled={deletePaymentMutation.isPending} onClick={() => { if (confirm('Are you sure you want to delete this payment record?')) deletePaymentMutation.mutate(payment.id); }} aria-label="Delete payment"><Trash2 size={15} /></button></div>
+                  </div>
                   {expanded && <div style={{ marginTop: '12px' }}><PaymentDetails payment={payment} /></div>}
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}><button className="btn bg" style={{ flex: 1 }} onClick={() => router.push(`/dashboard/payments?paymentId=${payment.id}`)}><ReceiptText size={14} /> Receipt</button><button className="btn be" onClick={() => { if (confirm('Are you sure you want to delete this payment record?')) deletePaymentMutation.mutate(payment.id); }} aria-label="Delete payment"><Trash2 size={14} /></button></div>
-                </div>;
-              })}
-            </div>
-          </>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
