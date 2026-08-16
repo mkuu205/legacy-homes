@@ -229,9 +229,17 @@ export class AuthService {
       throw new AppError('Your account is inactive. Please contact support.', 403);
     }
 
-    const twoFactor = user.role !== 'RESIDENT'
-      ? await prisma.adminTwoFactor.findUnique({ where: { userId: user.id } })
-      : null;
+    let twoFactor = null;
+    if (user.role !== 'RESIDENT') {
+      try {
+        twoFactor = await prisma.adminTwoFactor.findUnique({ where: { userId: user.id } });
+      } catch (error: any) {
+        // Keep password login backward-compatible during rollout if the additive
+        // 2FA migration has not yet been deployed. Do not hide other DB errors.
+        if (error?.code !== 'P2021' && error?.code !== 'P2022') throw error;
+        logger.error('[AUTH] 2FA tables are unavailable; treating admin 2FA as not configured', { code: error.code });
+      }
+    }
 
     if (user.role !== 'RESIDENT' && twoFactor?.enabled) {
       const challengeToken = crypto.randomBytes(32).toString('hex');

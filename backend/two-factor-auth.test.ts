@@ -52,7 +52,7 @@ test('schema and migration are additive and use encrypted-secret/hash fields', (
   assert.match(schema, /model AdminTwoFactor/);
   assert.match(schema, /model TwoFactorChallenge/);
   assert.match(schema, /secretCiphertext/);
-  assert.match(schema, /recoveryCodeHashes Json/);
+  assert.match(schema, /recoveryCodeHashes\s+Json/);
   assert.match(migration, /CREATE TABLE "admin_two_factor"/);
   assert.match(migration, /CREATE TABLE "two_factor_challenges"/);
   assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DROP COLUMN/);
