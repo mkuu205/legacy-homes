@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/prisma';
 import firebaseService from './firebase.service';
 import winston from 'winston';
 
-const prisma = new PrismaClient();
 
 class PushNotificationService {
   private async getResidentTokens(residentId: string): Promise<string[]> {

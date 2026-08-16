@@ -1,8 +1,8 @@
-import { PrismaClient, Bill, BillStatus } from "@prisma/client";
+import { Bill, BillStatus } from "@prisma/client";
+import prisma from "../config/prisma";
 import { logger } from "../utils/logger";
 
 import { toMoneyNumber, calculateBalance } from '../utils/money';
-const prisma = new PrismaClient();
 
 export class EnhancedBillingService {
   // Lock a bill to prevent modifications

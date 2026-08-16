@@ -1,7 +1,7 @@
-import { PrismaClient, House, RegistrationStatus, HouseStatus } from "@prisma/client";
+import { House, RegistrationStatus, HouseStatus } from "@prisma/client";
+import prisma from "../config/prisma";
 import logger from "../utils/logger";
 
-const prisma = new PrismaClient();
 
 export class HouseService {
   // Create a new house

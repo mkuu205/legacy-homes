@@ -1,8 +1,8 @@
-import { PrismaClient, Payment, PaymentReconciliationStatus } from "@prisma/client";
+import { Payment, PaymentReconciliationStatus } from "@prisma/client";
+import prisma from "../config/prisma";
 import { logger } from "../utils/logger";
 
 import { toMoneyNumber, calculateBalance } from '../utils/money';
-const prisma = new PrismaClient();
 
 export class PaymentReconciliationService {
   // Reconcile a payment

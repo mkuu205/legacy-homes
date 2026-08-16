@@ -1,7 +1,7 @@
-import { PrismaClient, AuditLog } from "@prisma/client";
+import { AuditLog } from "@prisma/client";
+import prisma from "../config/prisma";
 import { logger } from "../utils/logger";
 
-const prisma = new PrismaClient();
 
 export class AuditService {
   // Log an action
