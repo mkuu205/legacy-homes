@@ -27,12 +27,13 @@ export default function AdminSettingsPage() {
     billingCycleDay: 1,
   });
 
-  const { data: twoFactorData, isLoading: twoFactorLoading } = useQuery({
+  const { data: twoFactorData, isLoading: twoFactorLoading, error: twoFactorError } = useQuery({
     queryKey: ['admin-two-factor-status'],
     queryFn: async () => (await api.get('/auth/2fa/status')).data.data,
   });
   const [setupData, setSetupData] = useState<any>(null);
   const [verificationCode, setVerificationCode] = useState('');
+  const [manageTwoFactor, setManageTwoFactor] = useState(false);
   const setupTwoFactorMutation = useMutation({
     mutationFn: async () => (await api.post('/auth/2fa/setup')).data.data,
     onSuccess: (data) => { setSetupData(data); toast({ type: 'success', title: 'Setup ready', description: 'Scan the QR code, then confirm with your authenticator code.' }); },
@@ -257,20 +258,49 @@ export default function AdminSettingsPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ padding: '12px', borderRadius: '9px', border: '1px solid var(--bd)', background: 'var(--c2)' }}>
-              <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--t1)' }}>Authenticator app protection</p>
-              <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '4px' }}>
-                {twoFactorLoading ? 'Checking status…' : twoFactorData?.enabled ? `Enabled. ${twoFactorData.recoveryCodesRemaining} recovery codes remain.` : 'Not enabled. Enable TOTP before relying on administrator access.'}
-              </p>
-              {!twoFactorData?.enabled && !setupData && <button className="btn bp" style={{ marginTop: '12px' }} onClick={() => setupTwoFactorMutation.mutate()} disabled={setupTwoFactorMutation.isPending}>{setupTwoFactorMutation.isPending ? <Loader2 size={14} /> : 'Begin setup'}</button>}
+              <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--t1)' }}>Two-Factor Authentication</p>
+              {twoFactorLoading ? (
+                <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '4px' }}>Checking your 2FA status…</p>
+              ) : twoFactorError ? (
+                <p style={{ fontSize: '11px', color: 'var(--danger, #ef4444)', marginTop: '4px' }}>{getErrorMessage(twoFactorError)}</p>
+              ) : twoFactorData?.enabled ? (
+                <>
+                  <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ok)', marginTop: '4px' }}>Enabled</p>
+                  <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '4px' }}>
+                    Your account is protected with two-factor authentication.
+                  </p>
+                  <button className="btn bg" style={{ marginTop: '12px' }} onClick={() => setManageTwoFactor(value => !value)}>
+                    {manageTwoFactor ? 'Close 2FA management' : 'Manage 2FA'}
+                  </button>
+                  {manageTwoFactor && <div style={{ marginTop: '12px' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--t2)' }}>
+                      {twoFactorData.recoveryCodesRemaining} recovery codes remain. Enter your current authenticator code or a recovery code to disable 2FA.
+                    </p>
+                    <input className="inp" style={{ marginTop: '10px' }} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} placeholder="Authenticator or recovery code" inputMode="numeric" />
+                    <button className="btn bg" style={{ marginTop: '10px' }} onClick={() => disableTwoFactorMutation.mutate()} disabled={disableTwoFactorMutation.isPending || !verificationCode}>
+                      {disableTwoFactorMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : 'Disable 2FA'}
+                    </button>
+                  </div>}
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '4px' }}>Add an extra layer of security to your account.</p>
+                  {!setupData && <button className="btn bp" style={{ marginTop: '12px' }} onClick={() => setupTwoFactorMutation.mutate()} disabled={setupTwoFactorMutation.isPending}>
+                    {setupTwoFactorMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : 'Enable 2FA'}
+                  </button>}
+                </>
+              )}
               {setupData && <div style={{ marginTop: '14px' }}>
-                <img src={setupData.qrCodeDataUrl} alt="TOTP setup QR code" style={{ width: '180px', height: '180px', background: 'white', padding: '8px', borderRadius: '8px' }} />
-                <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '8px' }}>If scanning is unavailable, enter this secret manually: <strong>{setupData.secret}</strong></p>
+                <p style={{ fontSize: '11px', color: 'var(--t2)', marginBottom: '8px' }}>Scan this QR code with your authenticator app.</p>
+                <img src={setupData.qrCodeDataUrl} alt="Two-factor authentication setup QR code" style={{ width: '180px', height: '180px', background: 'white', padding: '8px', borderRadius: '8px' }} />
+                <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '8px' }}>Manual setup key: <strong>{setupData.secret}</strong></p>
                 <p style={{ fontSize: '11px', color: '#fbbf24', marginTop: '8px' }}>Save these recovery codes now. They are shown only during setup.</p>
-                <code style={{ display: 'block', marginTop: '6px', fontSize: '11px', lineHeight: 1.7 }}>{setupData.recoveryCodes.join(' · ')}</code>
+                <code style={{ display: 'block', marginTop: '6px', fontSize: '11px', lineHeight: 1.7, wordBreak: 'break-word' }}>{setupData.recoveryCodes.join(' · ')}</code>
                 <input className="inp" style={{ marginTop: '12px' }} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} placeholder="Enter authenticator code" inputMode="numeric" />
-                <button className="btn bp" style={{ marginTop: '10px' }} onClick={() => confirmTwoFactorMutation.mutate()} disabled={confirmTwoFactorMutation.isPending || !verificationCode}>Confirm and enable</button>
+                <button className="btn bp" style={{ marginTop: '10px' }} onClick={() => confirmTwoFactorMutation.mutate()} disabled={confirmTwoFactorMutation.isPending || !verificationCode}>
+                  {confirmTwoFactorMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : 'Confirm and enable'}
+                </button>
               </div>}
-              {twoFactorData?.enabled && <div style={{ marginTop: '12px' }}><input className="inp" value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} placeholder="Current authenticator or recovery code" /><button className="btn bg" style={{ marginTop: '10px' }} onClick={() => disableTwoFactorMutation.mutate()} disabled={disableTwoFactorMutation.isPending || !verificationCode}>Disable 2FA</button></div>}
             </div>
 
             <div
