@@ -1,62 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, Globe, Shield, Smartphone, Loader2 } from 'lucide-react';
-import { api, getErrorMessage } from '@/lib/api';
-import { toast } from '@/components/ui/toaster';
+import { Bell, Globe, Shield, Smartphone } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 
 export default function ResidentSettingsPage() {
   const { user } = useAuthStore();
-  const queryClient = useQueryClient();
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [inAppNotifications, setInAppNotifications] = useState(true);
   const [billReminders, setBillReminders] = useState(true);
   const [paymentAlerts, setPaymentAlerts] = useState(true);
   const [maintenanceAlerts, setMaintenanceAlerts] = useState(true);
-  const [setupData, setSetupData] = useState<any>(null);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [manageTwoFactor, setManageTwoFactor] = useState(false);
-  const canManageTwoFactor = Boolean(user && user.role !== 'RESIDENT');
-
-  const { data: twoFactorData, isLoading: twoFactorLoading, error: twoFactorError } = useQuery({
-    queryKey: ['dashboard-two-factor-status', user?.id],
-    queryFn: async () => (await api.get('/auth/2fa/status')).data.data,
-    enabled: canManageTwoFactor,
-  });
-
-  const setupTwoFactorMutation = useMutation({
-    mutationFn: async () => (await api.post('/auth/2fa/setup')).data.data,
-    onSuccess: (data) => {
-      setSetupData(data);
-      toast({ type: 'success', title: 'Setup ready', description: 'Scan the QR code, then confirm with your authenticator code.' });
-    },
-    onError: (error) => toast({ type: 'error', title: '2FA setup failed', description: getErrorMessage(error) }),
-  });
-
-  const confirmTwoFactorMutation = useMutation({
-    mutationFn: async () => (await api.post('/auth/2fa/confirm', { code: verificationCode })).data.data,
-    onSuccess: () => {
-      setSetupData(null);
-      setVerificationCode('');
-      queryClient.invalidateQueries({ queryKey: ['dashboard-two-factor-status', user?.id] });
-      toast({ type: 'success', title: '2FA enabled', description: 'Your account is now protected with two-factor authentication.' });
-    },
-    onError: (error) => toast({ type: 'error', title: 'Invalid verification code', description: getErrorMessage(error) }),
-  });
-
-  const disableTwoFactorMutation = useMutation({
-    mutationFn: async () => (await api.post('/auth/2fa/disable', { code: verificationCode })).data.data,
-    onSuccess: () => {
-      setVerificationCode('');
-      setManageTwoFactor(false);
-      queryClient.invalidateQueries({ queryKey: ['dashboard-two-factor-status', user?.id] });
-      toast({ type: 'success', title: '2FA disabled' });
-    },
-    onError: (error) => toast({ type: 'error', title: 'Unable to disable 2FA', description: getErrorMessage(error) }),
-  });
+  const isResident = user?.role === 'RESIDENT';
 
   const Toggle = ({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) => (
     <button
@@ -221,56 +177,12 @@ export default function ResidentSettingsPage() {
           </a>
           . You can change your password or delete your account there.
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'var(--c3)', border: '1px solid var(--bd)' }}>
-            <p style={{ fontSize: '13px', color: 'var(--t1)', fontWeight: 600 }}>Two-Factor Authentication</p>
-            {!canManageTwoFactor ? (
-              <p style={{ fontSize: '12px', color: 'var(--t2)', marginTop: '4px' }}>Two-factor authentication is managed for administrator accounts.</p>
-            ) : twoFactorLoading ? (
-              <p style={{ fontSize: '12px', color: 'var(--t2)', marginTop: '4px' }}>Checking your 2FA status…</p>
-            ) : twoFactorError ? (
-              <p style={{ fontSize: '12px', color: 'var(--danger, #ef4444)', marginTop: '4px' }}>{getErrorMessage(twoFactorError)}</p>
-            ) : twoFactorData?.enabled ? (
-              <>
-                <p style={{ fontSize: '12px', color: 'var(--ok)', fontWeight: 700, marginTop: '4px' }}>Enabled</p>
-                <p style={{ fontSize: '12px', color: 'var(--t2)', marginTop: '4px' }}>Your account is protected with two-factor authentication.</p>
-                <button type="button" className="btn bg" style={{ marginTop: '10px' }} onClick={() => setManageTwoFactor(value => !value)}>
-                  {manageTwoFactor ? 'Close 2FA management' : 'Manage 2FA'}
-                </button>
-                {manageTwoFactor && <div style={{ marginTop: '10px' }}>
-                  <p style={{ fontSize: '11px', color: 'var(--t2)' }}>{twoFactorData.recoveryCodesRemaining} recovery codes remain. Enter an authenticator or recovery code to disable 2FA.</p>
-                  <input className="inp" style={{ marginTop: '8px' }} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} placeholder="Authenticator or recovery code" inputMode="numeric" />
-                  <button type="button" className="btn bg" style={{ marginTop: '8px' }} onClick={() => disableTwoFactorMutation.mutate()} disabled={disableTwoFactorMutation.isPending || !verificationCode}>
-                    {disableTwoFactorMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : 'Disable 2FA'}
-                  </button>
-                </div>}
-              </>
-            ) : (
-              <>
-                <p style={{ fontSize: '12px', color: 'var(--t2)', marginTop: '4px' }}>Add an extra layer of security to your account.</p>
-                {!setupData && <button type="button" className="btn bp" style={{ marginTop: '10px' }} onClick={() => setupTwoFactorMutation.mutate()} disabled={setupTwoFactorMutation.isPending}>
-                  {setupTwoFactorMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : 'Enable 2FA'}
-                </button>}
-              </>
-            )}
-            {setupData && canManageTwoFactor && <div style={{ marginTop: '12px' }}>
-              <p style={{ fontSize: '11px', color: 'var(--t2)', marginBottom: '8px' }}>Scan the QR code with your authenticator app.</p>
-              <img src={setupData.qrCodeDataUrl} alt="Two-factor authentication setup QR code" style={{ width: '180px', height: '180px', background: 'white', padding: '8px', borderRadius: '8px' }} />
-              <p style={{ fontSize: '11px', color: 'var(--t2)', marginTop: '8px' }}>Manual setup key: <strong>{setupData.secret}</strong></p>
-              <p style={{ fontSize: '11px', color: '#fbbf24', marginTop: '8px' }}>Save these recovery codes now. They are shown only during setup.</p>
-              <code style={{ display: 'block', marginTop: '6px', fontSize: '11px', lineHeight: 1.7, wordBreak: 'break-word' }}>{setupData.recoveryCodes.join(' · ')}</code>
-              <input className="inp" style={{ marginTop: '10px' }} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} placeholder="Enter authenticator code" inputMode="numeric" />
-              <button type="button" className="btn bp" style={{ marginTop: '8px' }} onClick={() => confirmTwoFactorMutation.mutate()} disabled={confirmTwoFactorMutation.isPending || !verificationCode}>
-                {confirmTwoFactorMutation.isPending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : 'Confirm and enable'}
-              </button>
-            </div>}
-          </div>
-
+        {isResident && <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', background: 'var(--c3)', border: '1px solid var(--bd)' }}>
             <p style={{ fontSize: '13px', color: 'var(--t1)', fontWeight: 500 }}>Active Sessions</p>
             <span style={{ fontSize: '11px', color: 'var(--t3)', fontWeight: 600 }}>Managed automatically</span>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
