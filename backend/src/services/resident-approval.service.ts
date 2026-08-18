@@ -24,32 +24,19 @@ export class ResidentApprovalService {
           accountStatus: true,
           houseId: true,
           createdAt: true,
+          assignedHouse: {
+            select: { id: true, houseNumber: true, occupancyStatus: true },
+          },
         },
         skip,
         take,
         orderBy: { createdAt: 'asc' },
       });
 
-      // Fetch house info for each application
-      const applicationsWithHouse = await Promise.all(
-        applications.map(async (app) => {
-          const house = app.houseId
-            ? await prisma.house.findUnique({ where: { id: app.houseId } })
-            : null;
-          return {
-            ...app,
-            assignedHouse: house
-              ? {
-                  id: house.id,
-                  houseNumber: house.houseNumber,
-                  occupancyStatus: house.occupancyStatus,
-                }
-              : null,
-          };
-        })
-      );
-
-      return applicationsWithHouse;
+      return applications.map((app) => ({
+        ...app,
+        assignedHouse: app.assignedHouse,
+      }));
     } catch (error) {
       logger.error(`Error fetching pending applications: ${error}`);
       throw error;
@@ -73,26 +60,17 @@ export class ResidentApprovalService {
           accountStatus: true,
           houseId: true,
           createdAt: true,
+          assignedHouse: true,
         },
         skip,
         take,
         orderBy: { createdAt: 'desc' },
       });
 
-      // Fetch house info for each resident
-      const residentsWithHouse = await Promise.all(
-        residents.map(async (resident) => {
-          const house = resident.houseId
-            ? await prisma.house.findUnique({ where: { id: resident.houseId } })
-            : null;
-          return {
-            ...resident,
-            assignedHouse: house,
-          };
-        })
-      );
-
-      return residentsWithHouse;
+      return residents.map((resident) => ({
+        ...resident,
+        assignedHouse: resident.assignedHouse,
+      }));
     } catch (error) {
       logger.error(`Error fetching approved residents: ${error}`);
       throw error;

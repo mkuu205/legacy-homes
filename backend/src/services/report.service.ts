@@ -19,35 +19,17 @@ export class ReportService {
         residentId: true,
         meterId: true,
         houseId: true,
+        resident: { select: { fullName: true, accountNumber: true } },
+        meter: { select: { meterNumber: true } },
+        house: { select: { houseNumber: true } },
       },
       orderBy: { billingMonth: 'desc' },
     });
 
-    // Fetch resident and meter info for each bill
-    const billsWithDetails = await Promise.all(
-      bills.map(async (bill) => {
-        const [resident, meter, house] = await Promise.all([
-          prisma.user.findUnique({
-            where: { id: bill.residentId },
-            select: { fullName: true, accountNumber: true },
-          }),
-          prisma.meter.findUnique({
-            where: { id: bill.meterId },
-            select: { meterNumber: true },
-          }),
-          prisma.house.findUnique({
-            where: { id: bill.houseId },
-            select: { houseNumber: true },
-          }),
-        ]);
-        return {
-          ...bill,
-          resident,
-          meter,
-          houseNumber: house?.houseNumber,
-        };
-      })
-    );
+    const billsWithDetails = bills.map((bill) => ({
+      ...bill,
+      houseNumber: bill.house?.houseNumber,
+    }));
 
     const summary = {
       total: bills.length,
@@ -78,26 +60,23 @@ export class ReportService {
         status: true,
         residentId: true,
         createdAt: true,
+        resident: {
+          select: {
+            fullName: true,
+            assignedHouse: { select: { houseNumber: true } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Fetch resident info for each payment
-    const paymentsWithResident = await Promise.all(
-      payments.map(async (p) => {
-        const resident = await prisma.user.findUnique({
-          where: { id: p.residentId },
-          select: { fullName: true, houseId: true },
-        });
-        const house = resident?.houseId
-          ? await prisma.house.findUnique({ where: { id: resident.houseId } })
-          : null;
-        return {
-          ...p,
-          resident: { fullName: resident?.fullName, houseNumber: house?.houseNumber },
-        };
-      })
-    );
+    const paymentsWithResident = payments.map((payment) => ({
+      ...payment,
+      resident: {
+        fullName: payment.resident?.fullName,
+        houseNumber: payment.resident?.assignedHouse?.houseNumber,
+      },
+    }));
 
     // Group by month
     const byMonth: Record<string, number> = {};
@@ -127,35 +106,19 @@ export class ReportService {
         residentId: true,
         meterId: true,
         houseId: true,
+        resident: {
+          select: { fullName: true, email: true, phone: true, accountNumber: true },
+        },
+        meter: { select: { meterNumber: true } },
+        house: { select: { houseNumber: true } },
       },
       orderBy: { dueDate: 'asc' },
     });
 
-    // Fetch resident and meter info
-    const billsWithDetails = await Promise.all(
-      overdueBills.map(async (bill) => {
-        const [resident, meter, house] = await Promise.all([
-          prisma.user.findUnique({
-            where: { id: bill.residentId },
-            select: { fullName: true, email: true, phone: true, accountNumber: true },
-          }),
-          prisma.meter.findUnique({
-            where: { id: bill.meterId },
-            select: { meterNumber: true },
-          }),
-          prisma.house.findUnique({
-            where: { id: bill.houseId },
-            select: { houseNumber: true },
-          }),
-        ]);
-        return {
-          ...bill,
-          resident,
-          meter,
-          houseNumber: house?.houseNumber,
-        };
-      })
-    );
+    const billsWithDetails = overdueBills.map((bill) => ({
+      ...bill,
+      houseNumber: bill.house?.houseNumber,
+    }));
 
     const totalOutstanding = overdueBills.reduce((s, b) => s + toMoneyNumber(b.balance), 0);
     return { bills: billsWithDetails, total: overdueBills.length, totalOutstanding };
@@ -173,34 +136,27 @@ export class ReportService {
         billingMonth: true,
         unitsConsumed: true,
         createdAt: true,
+        meter: {
+          select: {
+            meterNumber: true,
+            house: {
+              select: {
+                houseNumber: true,
+                resident: { select: { fullName: true, accountNumber: true } },
+              },
+            },
+          },
+        },
       },
       orderBy: { unitsConsumed: 'desc' },
     });
 
-    // Fetch meter and resident info for each reading
-    const readingsWithDetails = await Promise.all(
-      readings.map(async (reading) => {
-        const meter = await prisma.meter.findUnique({
-          where: { id: reading.meterId },
-          select: { meterNumber: true, houseId: true },
-        });
-        const house = meter?.houseId
-          ? await prisma.house.findUnique({ where: { id: meter.houseId } })
-          : null;
-        const resident = house?.id
-          ? await prisma.user.findUnique({
-              where: { houseId: house.id },
-              select: { fullName: true, accountNumber: true },
-            })
-          : null;
-        return {
-          ...reading,
-          meter: { meterNumber: meter?.meterNumber },
-          resident,
-          houseNumber: house?.houseNumber,
-        };
-      })
-    );
+    const readingsWithDetails = readings.map((reading) => ({
+      ...reading,
+      meter: { meterNumber: reading.meter?.meterNumber },
+      resident: reading.meter?.house?.resident,
+      houseNumber: reading.meter?.house?.houseNumber,
+    }));
 
     const totalUnits = readings.reduce((s, r) => s + r.unitsConsumed, 0);
     const avgUnits = readings.length > 0 ? totalUnits / readings.length : 0;
@@ -248,18 +204,32 @@ export class ReportService {
       prisma.meter.count({ where: { status: 'ACTIVE' } }),
     ]);
 
-    // Monthly revenue trend (last 6 months)
+    // Monthly revenue trend (last 6 months). One bounded read replaces the
+    // previous six sequential aggregates; grouping remains in application
+    // memory so the response shape and timezone semantics stay unchanged.
+    const trendWindows = Array.from({ length: 6 }, (_, index) => {
+      const offset = 5 - index;
+      const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 0);
+      return { createdAt: { gte: start, lte: end } };
+    });
+    const trendPayments = await prisma.payment.findMany({
+      where: { status: 'SUCCESSFUL', OR: trendWindows },
+      select: { amount: true, createdAt: true },
+    });
+    const revenueByMonth = new Map<string, number>();
+    trendPayments.forEach((payment) => {
+      const key = `${payment.createdAt.getFullYear()}-${payment.createdAt.getMonth()}`;
+      revenueByMonth.set(key, (revenueByMonth.get(key) || 0) + toMoneyNumber(payment.amount));
+    });
+
     const revenueTrend = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
-      const rev = await prisma.payment.aggregate({
-        where: { status: 'SUCCESSFUL', createdAt: { gte: d, lte: end } },
-        _sum: { amount: true },
-      });
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
       revenueTrend.push({
         month: d.toLocaleDateString('en-KE', { month: 'short', year: 'numeric' }),
-        revenue: toMoneyNumber(rev._sum.amount),
+        revenue: revenueByMonth.get(key) || 0,
       });
     }
 

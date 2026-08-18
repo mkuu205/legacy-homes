@@ -178,9 +178,39 @@ app.use(morgan('combined', {
 }));
 
 // ============================================
-// HEALTH HANDLER
+// HEALTH HANDLERS
 // ============================================
-const healthHandler = async (_req: express.Request, res: express.Response) => {
+const setHealthHeaders = (res: express.Response) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+    'Surrogate-Control': 'no-store',
+  });
+};
+
+const livenessHandler = (_req: express.Request, res: express.Response) => {
+  const memoryUsage = process.memoryUsage();
+  setHealthHeaders(res);
+  res.status(200).json({
+    success: true,
+    ready: true,
+    status: 'ONLINE',
+    process: 'ONLINE',
+    service: 'Legacy Homes API',
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || '1.0.0',
+    memory: {
+      rss: Math.round(memoryUsage.rss / 1024 / 1024),
+      heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+    },
+  });
+};
+
+const readinessHandler = async (_req: express.Request, res: express.Response) => {
   const memoryUsage = process.memoryUsage();
   let database: 'ONLINE' | 'OFFLINE' = 'OFFLINE';
   try {
@@ -191,13 +221,7 @@ const healthHandler = async (_req: express.Request, res: express.Response) => {
   }
   const ready = database === 'ONLINE';
 
-  res.set({
-    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-    Pragma: 'no-cache',
-    Expires: '0',
-    'Surrogate-Control': 'no-store',
-  });
-
+  setHealthHeaders(res);
   res.status(ready ? 200 : 503).json({
     success: true,
     ready,
@@ -217,11 +241,14 @@ const healthHandler = async (_req: express.Request, res: express.Response) => {
   });
 };
 
-// ============================================
-// HEALTH ENDPOINTS
-// ============================================
-app.get('/api/health', healthHandler);
-app.get('/health', healthHandler);
+// Legacy health paths are lightweight liveness checks. Use /health/ready for
+// deployment/database readiness checks that intentionally execute SELECT 1.
+app.get('/api/health', livenessHandler);
+app.get('/health', livenessHandler);
+app.get('/api/health/live', livenessHandler);
+app.get('/health/live', livenessHandler);
+app.get('/api/health/ready', readinessHandler);
+app.get('/health/ready', readinessHandler);
 
 // ============================================
 // RATE LIMITING

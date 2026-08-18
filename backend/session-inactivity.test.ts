@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { isSessionInactive, SESSION_EXPIRED_MESSAGE } from './src/utils/session-policy';
+import {
+  getSessionActivityUpdateIntervalMs,
+  isSessionInactive,
+  SESSION_EXPIRED_MESSAGE,
+} from './src/utils/session-policy';
 
 const read = (relative: string) =>
   fs.readFileSync(path.resolve(__dirname, relative), 'utf8');
@@ -39,7 +43,11 @@ test('backend binds access tokens to refresh sessions and revokes inactive sessi
   assert.match(authService, /sessionId: storedToken\.id/);
   assert.match(authService, /data: \{ revoked: true \}/);
   assert.match(middleware, /payload\.sessionId/);
-  assert.match(middleware, /lastActivityAt: new Date\(\)/);
+  assert.match(middleware, /refreshToken\.updateMany/);
+  assert.match(middleware, /lastActivityAt: null/);
+  assert.match(middleware, /lastActivityAt: \{ lt: activityCutoff \}/);
+  assert.match(middleware, /shouldRefreshActivity/);
+  assert.match(middleware, /if \(shouldRefreshActivity\)/);
   assert.match(middleware, /SESSION_EXPIRED_MESSAGE/);
 });
 
@@ -48,6 +56,18 @@ test('frontend preserves the inactivity reason and displays the backend message'
   const login = read('../frontend/src/app/login/page.tsx');
   assert.match(api, /sessionExpiryReason/);
   assert.match(login, /Your session has expired due to inactivity\. Please log in again\./);
+});
+
+test('activity writes use a bounded configurable interval', () => {
+  const previous = process.env.AUTH_ACTIVITY_UPDATE_INTERVAL_MINUTES;
+  delete process.env.AUTH_ACTIVITY_UPDATE_INTERVAL_MINUTES;
+  assert.equal(getSessionActivityUpdateIntervalMs(), 5 * 60 * 1000);
+
+  process.env.AUTH_ACTIVITY_UPDATE_INTERVAL_MINUTES = '15';
+  assert.equal(getSessionActivityUpdateIntervalMs(), 15 * 60 * 1000);
+
+  if (previous === undefined) delete process.env.AUTH_ACTIVITY_UPDATE_INTERVAL_MINUTES;
+  else process.env.AUTH_ACTIVITY_UPDATE_INTERVAL_MINUTES = previous;
 });
 
 test('expiry message is explicit and stable', () => {

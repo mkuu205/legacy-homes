@@ -15,10 +15,16 @@ export function HealthCheckProvider({ children }: { children: ReactNode }) {
 
   // Get current interval from store - always reads latest values
   const getInterval = useCallback(() => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      return 120000;
+    }
+
     const currentStatus = useSystemStatusStore.getState().status;
     const currentOutage = useSystemStatusStore.getState().outageDuration;
     
-    if (currentStatus === 'ONLINE') return 30000;
+    // Liveness is lightweight, but avoid turning every visible tab into a
+    // high-frequency monitor while the backend is healthy.
+    if (currentStatus === 'ONLINE') return 60000;
     
     const minutesOffline = currentOutage / 60000;
     if (minutesOffline < 5) return 30000;
@@ -38,6 +44,13 @@ export function HealthCheckProvider({ children }: { children: ReactNode }) {
 
     const delay = getInterval();
     timeoutRef.current = setTimeout(async () => {
+      // Do not probe while the tab is hidden. The next visible event will
+      // perform an immediate check and resume the normal schedule.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        if (isMountedRef.current) scheduleNext();
+        return;
+      }
+
       // Don't run if unmounted or already checking
       if (!isMountedRef.current || isCheckingRef.current) {
         // If already checking, try again later
@@ -66,7 +79,8 @@ export function HealthCheckProvider({ children }: { children: ReactNode }) {
   // Perform an immediate check without interfering with the scheduling loop
   const checkImmediately = useCallback(async () => {
     // Guard against duplicate immediate checks and prevent overlapping requests
-    if (!isMountedRef.current || isCheckingRef.current) {
+    if (!isMountedRef.current || isCheckingRef.current ||
+        (typeof document !== 'undefined' && document.visibilityState === 'hidden')) {
       return;
     }
 
@@ -113,8 +127,10 @@ export function HealthCheckProvider({ children }: { children: ReactNode }) {
     isMountedRef.current = true;
     previousStatusRef.current = status;
     
-    // Perform immediate health check on mount to detect current status
-    checkImmediately();
+    // Perform an immediate health check only when the tab is visible.
+    if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+      checkImmediately();
+    }
 
     // Handle visibility change
     const handleVisibilityChange = () => {

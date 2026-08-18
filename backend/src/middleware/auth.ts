@@ -2,7 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken, JWTPayload } from '../utils/jwt';
 import { AppError } from './errorHandler';
 import prisma from '../config/prisma';
-import { isSessionInactive, SESSION_EXPIRED_MESSAGE } from '../utils/session-policy';
+import {
+  getSessionActivityUpdateIntervalMs,
+  isSessionInactive,
+  SESSION_EXPIRED_MESSAGE,
+} from '../utils/session-policy';
 
 export type AuthRequest = Request & {
   user?: JWTPayload;
@@ -46,16 +50,17 @@ export const authMiddleware = async (
         },
       });
 
+      const now = new Date();
       if (
         !session ||
         session.userId !== user.id ||
         session.revoked ||
-        new Date() > session.expiresAt
+        now > session.expiresAt
       ) {
         throw new AppError('Invalid or expired session', 401);
       }
 
-      if (isSessionInactive(session.lastActivityAt, session.createdAt)) {
+      if (isSessionInactive(session.lastActivityAt, session.createdAt, now)) {
         await prisma.refreshToken.update({
           where: { id: session.id },
           data: { revoked: true },
@@ -63,10 +68,24 @@ export const authMiddleware = async (
         throw new AppError(SESSION_EXPIRED_MESSAGE, 401);
       }
 
-      await prisma.refreshToken.update({
-        where: { id: session.id },
-        data: { lastActivityAt: new Date() },
-      });
+      const activityCutoff = new Date(now.getTime() - getSessionActivityUpdateIntervalMs());
+      const shouldRefreshActivity =
+        !session.lastActivityAt || session.lastActivityAt < activityCutoff;
+
+      if (shouldRefreshActivity) {
+        await prisma.refreshToken.updateMany({
+          where: {
+            id: session.id,
+            revoked: false,
+            expiresAt: { gt: now },
+            OR: [
+              { lastActivityAt: null },
+              { lastActivityAt: { lt: activityCutoff } },
+            ],
+          },
+          data: { lastActivityAt: now },
+        });
+      }
     }
 
     req.user = {

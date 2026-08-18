@@ -42,25 +42,16 @@ export class SearchService {
           registrationStatus: true,
           accountStatus: true,
           houseId: true,
+          assignedHouse: true,
         },
         skip,
         take,
       });
 
-      // Fetch house info for each resident
-      const residentsWithHouse = await Promise.all(
-        residents.map(async (resident) => {
-          const house = resident.houseId
-            ? await prisma.house.findUnique({ where: { id: resident.houseId } })
-            : null;
-          return {
-            ...resident,
-            assignedHouse: house,
-          };
-        })
-      );
-
-      return residentsWithHouse;
+      return residents.map((resident) => ({
+        ...resident,
+        assignedHouse: resident.assignedHouse,
+      }));
     } catch (error) {
       logger.error(`Error searching residents: ${error}`);
       throw error;
@@ -87,34 +78,15 @@ export class SearchService {
           residentId: true,
           houseId: true,
           createdAt: true,
+          resident: { select: { id: true, fullName: true, email: true } },
+          house: { select: { id: true, houseNumber: true } },
         },
         skip,
         take,
         orderBy: { createdAt: 'desc' },
       });
 
-      // Fetch resident and house info
-      const billsWithDetails = await Promise.all(
-        bills.map(async (bill) => {
-          const [resident, house] = await Promise.all([
-            prisma.user.findUnique({
-              where: { id: bill.residentId },
-              select: { id: true, fullName: true, email: true },
-            }),
-            prisma.house.findUnique({
-              where: { id: bill.houseId },
-              select: { id: true, houseNumber: true },
-            }),
-          ]);
-          return {
-            ...bill,
-            resident,
-            house,
-          };
-        })
-      );
-
-      return billsWithDetails;
+      return bills;
     } catch (error) {
       logger.error(`Error searching bills: ${error}`);
       throw error;
@@ -140,27 +112,14 @@ export class SearchService {
           status: true,
           residentId: true,
           createdAt: true,
+          resident: { select: { id: true, fullName: true, email: true } },
         },
         skip,
         take,
         orderBy: { createdAt: 'desc' },
       });
 
-      // Fetch resident info
-      const ticketsWithResident = await Promise.all(
-        tickets.map(async (ticket) => {
-          const resident = await prisma.user.findUnique({
-            where: { id: ticket.residentId },
-            select: { id: true, fullName: true, email: true },
-          });
-          return {
-            ...ticket,
-            resident,
-          };
-        })
-      );
-
-      return ticketsWithResident;
+      return tickets;
     } catch (error) {
       logger.error(`Error searching tickets: ${error}`);
       throw error;
@@ -185,27 +144,14 @@ export class SearchService {
           status: true,
           houseId: true,
           createdAt: true,
+          house: { select: { id: true, houseNumber: true } },
         },
         skip,
         take,
         orderBy: { createdAt: 'desc' },
       });
 
-      // Fetch house info
-      const metersWithHouse = await Promise.all(
-        meters.map(async (meter) => {
-          const house = await prisma.house.findUnique({
-            where: { id: meter.houseId },
-            select: { id: true, houseNumber: true },
-          });
-          return {
-            ...meter,
-            house,
-          };
-        })
-      );
-
-      return metersWithHouse;
+      return meters;
     } catch (error) {
       logger.error(`Error searching meters: ${error}`);
       throw error;
@@ -255,27 +201,15 @@ export class SearchService {
               residentId: true,
               houseId: true,
               createdAt: true,
+              resident: { select: { id: true, fullName: true, email: true } },
+              house: { select: { id: true, houseNumber: true } },
             },
             skip,
             take,
             orderBy: { createdAt: 'desc' },
           });
 
-          return await Promise.all(
-            bills.map(async (bill) => {
-              const [resident, house] = await Promise.all([
-                prisma.user.findUnique({
-                  where: { id: bill.residentId },
-                  select: { id: true, fullName: true, email: true },
-                }),
-                prisma.house.findUnique({
-                  where: { id: bill.houseId },
-                  select: { id: true, houseNumber: true },
-                }),
-              ]);
-              return { ...bill, resident, house };
-            })
-          );
+          return bills;
 
         case 'tickets':
           const ticketWhere: any = {};
@@ -301,21 +235,14 @@ export class SearchService {
               status: true,
               residentId: true,
               createdAt: true,
+              resident: { select: { id: true, fullName: true, email: true } },
             },
             skip,
             take,
             orderBy: { createdAt: 'desc' },
           });
 
-          return await Promise.all(
-            tickets.map(async (ticket) => {
-              const resident = await prisma.user.findUnique({
-                where: { id: ticket.residentId },
-                select: { id: true, fullName: true, email: true },
-              });
-              return { ...ticket, resident };
-            })
-          );
+          return tickets;
 
         case 'meters':
           const meterWhere: any = {};
@@ -336,21 +263,14 @@ export class SearchService {
               status: true,
               houseId: true,
               createdAt: true,
+              house: { select: { id: true, houseNumber: true } },
             },
             skip,
             take,
             orderBy: { createdAt: 'desc' },
           });
 
-          return await Promise.all(
-            meters.map(async (meter) => {
-              const house = await prisma.house.findUnique({
-                where: { id: meter.houseId },
-                select: { id: true, houseNumber: true },
-              });
-              return { ...meter, house };
-            })
-          );
+          return meters;
 
         default:
           return [];

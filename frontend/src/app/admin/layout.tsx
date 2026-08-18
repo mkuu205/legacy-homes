@@ -62,35 +62,32 @@ export default function AdminLayout({
   }, []);
 
   useEffect(() => {
-    // 1. If not hydrated or not authenticated, do not start polling
     if (!hydrated || !isAuthenticated) return;
 
-    // 2. Fetch immediately on mount/auth
     fetchUnreadCount();
 
-    // 3. Start polling interval
-    const interval = setInterval(async () => {
-      try {
-        // Double check auth state before each poll
-        const token = sessionStorage.getItem('accessToken');
-        if (!token) {
-           clearInterval(interval);
-           return;
-        }
-
-        const res = await api.get('/notifications/all?limit=1');
-        setUnreadCount(res.data.data?.unreadCount || 0);
-      } catch (error: any) {
-        // 4. Stop polling on 401 (Unauthorized) or 403 (Forbidden)
-        if (error.response?.status === 401 || error.response?.status === 403) {
-          console.warn('Stopping notification polling due to auth failure');
-          clearInterval(interval);
-        }
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible' && sessionStorage.getItem('accessToken')) {
+        fetchUnreadCount();
       }
-    }, 30000);
+    };
+    const handleNotificationChange = () => fetchUnreadCount();
+    const fallbackInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && sessionStorage.getItem('accessToken')) {
+        fetchUnreadCount();
+      }
+    }, 300000);
 
-    // 5. Clear interval on unmount
-    return () => clearInterval(interval);
+    window.addEventListener('focus', refreshIfVisible);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    window.addEventListener('legacyhomes:notifications-changed', handleNotificationChange);
+
+    return () => {
+      window.clearInterval(fallbackInterval);
+      window.removeEventListener('focus', refreshIfVisible);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+      window.removeEventListener('legacyhomes:notifications-changed', handleNotificationChange);
+    };
   }, [hydrated, isAuthenticated, fetchUnreadCount]);
 
   useEffect(() => {

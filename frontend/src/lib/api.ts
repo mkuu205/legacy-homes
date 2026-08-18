@@ -379,7 +379,7 @@ api.interceptors.response.use(
 
         // Check if backend is reachable by making a health check
         try {
-          await healthApi.get('/health', { timeout: 3000 });
+          await healthApi.get('/health/live', { timeout: 3000 });
           // Backend is reachable - genuine 401
           if (isGenuine401(refreshError as AxiosError)) {
             console.warn('Genuine 401 - logging out');
@@ -534,7 +534,7 @@ export const checkBackendHealth = async (): Promise<HealthResponse> => {
       throw new Error('Network offline');
     }
 
-    const response = await healthApi.get<HealthResponse>('/health');
+    const response = await healthApi.get<HealthResponse>('/health/live');
     const data = response.data;
     const latency = Date.now() - startTime;
     

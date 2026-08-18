@@ -40,26 +40,17 @@ export class ResidentService {
           nationalId: true,
           emailVerified: true,
           createdAt: true,
+          assignedHouse: { select: { houseNumber: true } },
         },
       }),
       prisma.user.count({ where }),
     ]);
 
-    // Fetch house info for residents to return houseNumber
-    const residentsWithHouseNumber = await Promise.all(
-      residents.map(async (resident) => {
-        const house = resident.houseId
-          ? await prisma.house.findUnique({ where: { id: resident.houseId } })
-          : null;
-        return {
-          ...resident,
-          houseNumber: house?.houseNumber,
-        };
-      })
-    );
-
     return {
-      residents: residentsWithHouseNumber,
+      residents: residents.map((resident) => ({
+        ...resident,
+        houseNumber: resident.assignedHouse?.houseNumber,
+      })),
       pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
     };
   }
@@ -274,6 +265,7 @@ export class ResidentService {
           houseId: true,
           accountNumber: true,
           profilePicture: true,
+          assignedHouse: { select: { id: true, houseNumber: true } },
         },
       }),
       prisma.bill.findFirst({
@@ -296,10 +288,7 @@ export class ResidentService {
 
     if (!user) throw new AppError('User not found', 404);
 
-    // Fetch house info
-    const house = user.houseId
-      ? await prisma.house.findUnique({ where: { id: user.houseId } })
-      : null;
+    const house = user.assignedHouse;
 
     const consumptionHistory = await prisma.meterReading.findMany({
       where: { meter: { houseId: house?.id } },

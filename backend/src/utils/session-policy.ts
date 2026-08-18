@@ -4,6 +4,12 @@ export const getSessionInactivityWindowMs = (): number => {
   return hours * 60 * 60 * 1000;
 };
 
+export const getSessionActivityUpdateIntervalMs = (): number => {
+  const configuredMinutes = Number(process.env.AUTH_ACTIVITY_UPDATE_INTERVAL_MINUTES || 5);
+  const minutes = Number.isFinite(configuredMinutes) && configuredMinutes > 0 ? configuredMinutes : 5;
+  return minutes * 60 * 1000;
+};
+
 export const isSessionInactive = (
   lastActivityAt: Date | null,
   createdAt: Date,

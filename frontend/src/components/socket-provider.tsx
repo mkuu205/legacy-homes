@@ -68,6 +68,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       });
 
+      const notifyNotificationChange = () => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('legacyhomes:notifications-changed'));
+        }
+      };
+
       socket.on('notification_created', (data: any) => {
         toast({
           type: 'info',
@@ -77,6 +83,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ['unread-notifications-count'] });
         queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
         queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+        notifyNotificationChange();
       });
 
       socket.on('dashboard_updated', () => {
@@ -88,6 +95,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         // The socket event is only a refetch trigger. The authenticated API remains the source of truth.
         queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
         queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+        notifyNotificationChange();
       });
 
       // Listen for explicit reconnect triggers from connection-recovery-provider
