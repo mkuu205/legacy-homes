@@ -9,6 +9,7 @@ import { SystemStartupProvider } from '@/components/providers/system-startup-pro
 import { HealthCheckProvider } from '@/components/providers/health-check-provider';
 import { ConnectionRecoveryProvider } from '@/components/providers/connection-recovery-provider';
 import { MaintenanceProvider } from '@/components/providers/maintenance-provider';
+import { PWARegistration } from '@/components/pwa-registration';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -25,7 +26,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
+          <QueryClientProvider client={queryClient}>
+        <PWARegistration />
+
       <BackendStatusProvider>
         <SystemStartupProvider>
           <HealthCheckProvider>

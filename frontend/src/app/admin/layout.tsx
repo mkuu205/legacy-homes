@@ -20,7 +20,8 @@ import {
   Menu,
   X,
   Shield,
-  Activity
+  Activity,
+  Smartphone
 } from 'lucide-react';
 
 const navItems = [
@@ -34,6 +35,7 @@ const navItems = [
   { href: '/admin/reports', icon: BarChart3, label: 'Reports' },
   { href: '/admin/settings', icon: Settings, label: 'Settings' },
   { href: '/admin/system-check', icon: Activity, label: 'System Check' },
+  { href: '/admin/app-releases', icon: Smartphone, label: 'App Releases' },
 ];
 
 export default function AdminLayout({

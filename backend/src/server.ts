@@ -24,6 +24,7 @@ import supportRoutes from './routes/support.routes';
 import notificationRoutes from './routes/notification.routes';
 import reportRoutes from './routes/report.routes';
 import adminRoutes from './routes/admin.routes';
+import appReleaseRoutes from './routes/app-release.routes';
 import aiRoutes from './routes/ai.routes';
 
 dotenv.config();
@@ -310,6 +311,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/app-releases', appReleaseRoutes);
 app.use('/api/ai', aiRoutes);
 
 // ============================================

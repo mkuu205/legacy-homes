@@ -17,7 +17,8 @@ import {
   Menu,
   X,
   ChevronRight,
-  Settings
+  Settings,
+  Smartphone
 } from 'lucide-react';
 
 const navItems = [
@@ -28,6 +29,7 @@ const navItems = [
   { href: '/dashboard/support', icon: MessageSquare, label: 'Support' },
   { href: '/dashboard/profile', icon: User, label: 'Profile' },
   { href: '/dashboard/settings', icon: Settings, label: 'Settings' },
+  { href: '/dashboard/app-downloads', icon: Smartphone, label: 'App Downloads' },
 ];
 
 export default function DashboardLayout({

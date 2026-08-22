@@ -74,6 +74,39 @@ export const uploadBufferToCloudinary = (
 };
 
 /** Legacy path-based upload, kept for any callers that still pass a file path. */
+export const uploadRawBufferToCloudinary = (
+  buffer: Buffer,
+  folder: string,
+  publicId: string,
+): Promise<CloudinaryUploadResult> => {
+  if (MISSING_ENV.length) {
+    const error = new Error(`Cloudinary not configured: missing ${MISSING_ENV.join(', ')}`);
+    (error as any).statusCode = 503;
+    return Promise.reject(error);
+  }
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: `legacy-homes/${folder}`,
+        public_id: publicId,
+        resource_type: 'raw',
+        overwrite: false,
+        invalidate: true,
+      },
+      (error, result?: UploadApiResponse) => {
+        if (error || !result) return reject(error || new Error('Cloudinary returned no result'));
+        resolve({
+          url: result.secure_url,
+          publicId: result.public_id,
+          bytes: result.bytes,
+          format: result.format,
+        });
+      },
+    );
+    stream.end(buffer);
+  });
+};
+
 export const uploadToCloudinary = async (filePath: string, folder = 'legacy-homes'): Promise<string> => {
   if (MISSING_ENV.length) {
     throw new Error(`Cloudinary not configured: missing ${MISSING_ENV.join(', ')}`);

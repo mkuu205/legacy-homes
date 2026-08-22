@@ -189,6 +189,7 @@ model User {
   assignedTickets   Ticket[]           @relation("AssignedTickets")
   paymentMethods    PaymentMethod[]
   deviceTokens      DeviceToken[]
+  appReleases       AppRelease[]
   twoFactor          AdminTwoFactor?
   twoFactorChallenges TwoFactorChallenge[]
 
@@ -553,6 +554,31 @@ model SystemSetting {
   updatedAt DateTime @updatedAt
 
   @@map("system_settings")
+}
+
+model AppRelease {
+  id              String   @id @default(uuid())
+  platform        String   @default("ANDROID")
+  versionName     String
+  versionCode     Int
+  releaseNotes    String?
+  downloadUrl     String
+  fileName        String
+  fileSizeBytes   Int
+  checksumSha256  String
+  status          String   @default("DRAFT")
+  maintenanceMode Boolean  @default(false)
+  maintenanceNote String?
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  publishedById   String?
+
+  publishedBy     User?    @relation(fields: [publishedById], references: [id], onDelete: SetNull)
+
+  @@index([platform, status, versionCode])
+  @@index([maintenanceMode, status])
+  @@map("app_releases")
 }
 
 model CallbackAudit {
