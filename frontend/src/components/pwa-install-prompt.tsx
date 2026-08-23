@@ -5,6 +5,7 @@ import { Download, X } from 'lucide-react';
 import { usePWA } from '@/hooks/usePWA';
 
 type NavigatorWithStandalone = Navigator & { standalone?: boolean };
+const AUTO_DISMISS_MS = 10000;
 
 function isStandaloneMode() {
   const navigatorWithStandalone = navigator as NavigatorWithStandalone;
@@ -27,13 +28,20 @@ export function PWAInstallPrompt() {
   useEffect(() => {
     if (!isMobileDevice() || isStandaloneMode()) return;
 
-    const dismissed = window.localStorage.getItem('legacy-homes-pwa-install-dismissed') === 'true';
+    const dismissed = window.sessionStorage.getItem('legacy-homes-pwa-install-dismissed') === 'true';
     if (dismissed) return;
 
     setIosDevice(isIOSDevice());
-    const timer = window.setTimeout(() => setVisible(true), 900);
-    return () => window.clearTimeout(timer);
+    const showTimer = window.setTimeout(() => setVisible(true), 900);
+    return () => window.clearTimeout(showTimer);
   }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+
+    const autoDismissTimer = window.setTimeout(() => setVisible(false), AUTO_DISMISS_MS);
+    return () => window.clearTimeout(autoDismissTimer);
+  }, [visible]);
 
   useEffect(() => {
     const handleInstalled = () => setVisible(false);
@@ -44,7 +52,7 @@ export function PWAInstallPrompt() {
   if (!visible) return null;
 
   const dismiss = () => {
-    window.localStorage.setItem('legacy-homes-pwa-install-dismissed', 'true');
+    window.sessionStorage.setItem('legacy-homes-pwa-install-dismissed', 'true');
     setVisible(false);
   };
 
@@ -57,12 +65,12 @@ export function PWAInstallPrompt() {
   return (
     <aside
       role="dialog"
-      aria-label="Install Legacy Homes"
+      aria-label="Install the Legacy Homes app"
       style={{
         position: 'fixed',
-        left: 14,
-        right: 14,
-        bottom: 14,
+        top: 12,
+        left: 12,
+        right: 12,
         zIndex: 80,
         padding: 16,
         borderRadius: 18,
@@ -86,12 +94,12 @@ export function PWAInstallPrompt() {
         </div>
         <div>
           <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: 1.4, textTransform: 'uppercase', color: '#7dd3fc' }}>Legacy Homes</p>
-          <h2 style={{ margin: '3px 0 5px', fontSize: 18, lineHeight: 1.2 }}>Install the website on your phone</h2>
+          <h2 style={{ margin: '3px 0 5px', fontSize: 18, lineHeight: 1.2 }}>Install the Legacy Homes app</h2>
           <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: 'rgba(255,255,255,.76)' }}>
             {isInstallable
               ? 'Get faster access to bills, payments, and notifications from your home screen.'
               : iosDevice
-                ? 'Tap Share, then “Add to Home Screen” to install Legacy Homes.'
+                ? 'Tap Share, then “Add to Home Screen” to install the Legacy Homes app.'
                 : 'Use your browser menu and choose “Install app” or “Add to Home screen.”'}
           </p>
         </div>
@@ -99,7 +107,7 @@ export function PWAInstallPrompt() {
       <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
         {isInstallable && (
           <button type="button" onClick={() => void handleInstall()} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-            <Download size={15} /> Install PWA
+            <Download size={15} /> Install app
           </button>
         )}
         <button type="button" onClick={dismiss} style={{ flex: isInstallable ? 0 : 1, border: '1px solid rgba(255,255,255,.28)', borderRadius: 9, padding: '9px 14px', background: 'transparent', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>
