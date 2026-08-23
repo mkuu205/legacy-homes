@@ -10,6 +10,7 @@ import { HealthCheckProvider } from '@/components/providers/health-check-provide
 import { ConnectionRecoveryProvider } from '@/components/providers/connection-recovery-provider';
 import { MaintenanceProvider } from '@/components/providers/maintenance-provider';
 import { PWARegistration } from '@/components/pwa-registration';
+import { PWAInstallPrompt } from '@/components/pwa-install-prompt';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -28,6 +29,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
           <QueryClientProvider client={queryClient}>
         <PWARegistration />
+        <PWAInstallPrompt />
 
       <BackendStatusProvider>
         <SystemStartupProvider>
