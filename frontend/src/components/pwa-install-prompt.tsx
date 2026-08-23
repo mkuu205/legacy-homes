@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { usePWA } from '@/hooks/usePWA';
+import { useAuthStore } from '@/store/auth.store';
 
 type NavigatorWithStandalone = Navigator & { standalone?: boolean };
 const AUTO_DISMISS_MS = 10000;
@@ -22,11 +23,15 @@ function isIOSDevice() {
 
 export function PWAInstallPrompt() {
   const { isInstallable, installApp } = usePWA();
+  const { isAuthenticated, hydrated } = useAuthStore();
   const [visible, setVisible] = useState(false);
   const [iosDevice, setIosDevice] = useState(false);
 
   useEffect(() => {
-    if (!isMobileDevice() || isStandaloneMode()) return;
+    if (!hydrated || !isAuthenticated || !isMobileDevice() || isStandaloneMode()) {
+      setVisible(false);
+      return;
+    }
 
     const dismissed = window.sessionStorage.getItem('legacy-homes-pwa-install-dismissed') === 'true';
     if (dismissed) return;
@@ -34,7 +39,7 @@ export function PWAInstallPrompt() {
     setIosDevice(isIOSDevice());
     const showTimer = window.setTimeout(() => setVisible(true), 900);
     return () => window.clearTimeout(showTimer);
-  }, []);
+  }, [hydrated, isAuthenticated]);
 
   useEffect(() => {
     if (!visible) return;
@@ -49,7 +54,7 @@ export function PWAInstallPrompt() {
     return () => window.removeEventListener('appinstalled', handleInstalled);
   }, []);
 
-  if (!visible) return null;
+  if (!hydrated || !isAuthenticated || !visible) return null;
 
   const dismiss = () => {
     window.sessionStorage.setItem('legacy-homes-pwa-install-dismissed', 'true');
