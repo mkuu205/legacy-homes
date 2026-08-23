@@ -143,7 +143,7 @@ export default function DashboardLayout({
           <div className="sb-logo">
             <div className="sb-logo-icon">
               <img
-                src="https://i.ibb.co/5hvy5zXd/Chat-GPT-Image-Jun-23-2026-01-17-11-AM.png"
+                src="/brand/legacy-homes-logo.png"
                 alt="Legacy Homes Logo"
                 style={{
                   width: '100%',

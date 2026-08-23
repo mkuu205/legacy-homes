@@ -39,7 +39,7 @@ export default function ForgotPasswordPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '32px' }}>
           <div style={{ width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gl)', border: '1px solid rgba(0, 198, 167, 0.25)' }}>
             <img
-              src="https://i.ibb.co/5hvy5zXd/Chat-GPT-Image-Jun-23-2026-01-17-11-AM.png"
+              src="/brand/legacy-homes-logo.png"
               alt="Legacy Homes Logo"
               style={{
                 width: '100%',

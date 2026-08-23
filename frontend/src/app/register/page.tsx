@@ -177,7 +177,7 @@ export default function RegisterPage() {
           <div className="auth-logo">
             <div className="auth-logo-ico">
               <img
-                src="https://i.ibb.co/5hvy5zXd/Chat-GPT-Image-Jun-23-2026-01-17-11-AM.png"
+                src="/brand/legacy-homes-logo.png"
                 alt="Legacy Homes Logo"
                 style={{
                   width: '100%',
@@ -326,7 +326,7 @@ export default function RegisterPage() {
         <div className="auth-logo">
           <div className="auth-logo-ico">
             <img
-              src="https://i.ibb.co/5hvy5zXd/Chat-GPT-Image-Jun-23-2026-01-17-11-AM.png"
+              src="/brand/legacy-homes-logo.png"
               alt="Legacy Homes Logo"
               style={{
                 width: '100%',
