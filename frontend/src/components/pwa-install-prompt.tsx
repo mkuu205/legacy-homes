@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { usePWA } from '@/hooks/usePWA';
 import { useAuthStore } from '@/store/auth.store';
 
 type NavigatorWithStandalone = Navigator & { standalone?: boolean };
 const AUTO_DISMISS_MS = 10000;
+const EXIT_ANIMATION_MS = 260;
 
 function isStandaloneMode() {
   const navigatorWithStandalone = navigator as NavigatorWithStandalone;
@@ -25,11 +26,24 @@ export function PWAInstallPrompt() {
   const { isInstallable, installApp } = usePWA();
   const { isAuthenticated, hydrated } = useAuthStore();
   const [visible, setVisible] = useState(false);
+  const [isEntering, setIsEntering] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
   const [iosDevice, setIosDevice] = useState(false);
+
+  const hidePrompt = useCallback(() => {
+    setIsExiting(true);
+    window.setTimeout(() => {
+      setVisible(false);
+      setIsEntering(false);
+      setIsExiting(false);
+    }, EXIT_ANIMATION_MS);
+  }, []);
 
   useEffect(() => {
     if (!hydrated || !isAuthenticated || !isMobileDevice() || isStandaloneMode()) {
       setVisible(false);
+      setIsEntering(false);
+      setIsExiting(false);
       return;
     }
 
@@ -37,34 +51,39 @@ export function PWAInstallPrompt() {
     if (dismissed) return;
 
     setIosDevice(isIOSDevice());
-    const showTimer = window.setTimeout(() => setVisible(true), 900);
+    const showTimer = window.setTimeout(() => {
+      setIsExiting(false);
+      setIsEntering(true);
+      setVisible(true);
+      window.requestAnimationFrame(() => setIsEntering(false));
+    }, 900);
     return () => window.clearTimeout(showTimer);
   }, [hydrated, isAuthenticated]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || isExiting) return;
 
-    const autoDismissTimer = window.setTimeout(() => setVisible(false), AUTO_DISMISS_MS);
+    const autoDismissTimer = window.setTimeout(hidePrompt, AUTO_DISMISS_MS);
     return () => window.clearTimeout(autoDismissTimer);
-  }, [visible]);
+  }, [hidePrompt, isExiting, visible]);
 
   useEffect(() => {
-    const handleInstalled = () => setVisible(false);
+    const handleInstalled = () => hidePrompt();
     window.addEventListener('appinstalled', handleInstalled);
     return () => window.removeEventListener('appinstalled', handleInstalled);
-  }, []);
+  }, [hidePrompt]);
 
   if (!hydrated || !isAuthenticated || !visible) return null;
 
   const dismiss = () => {
     window.sessionStorage.setItem('legacy-homes-pwa-install-dismissed', 'true');
-    setVisible(false);
+    hidePrompt();
   };
 
   const handleInstall = async () => {
     if (!isInstallable) return;
     await installApp();
-    setVisible(false);
+    hidePrompt();
   };
 
   return (
@@ -83,6 +102,10 @@ export function PWAInstallPrompt() {
         background: 'linear-gradient(135deg, #071a45 0%, #0b2a63 100%)',
         boxShadow: '0 18px 45px rgba(3,15,45,.28)',
         color: '#fff',
+        opacity: isExiting || isEntering ? 0 : 1,
+        transform: isExiting || isEntering ? 'translateY(-18px)' : 'translateY(0)',
+        transition: `transform ${EXIT_ANIMATION_MS}ms ease, opacity ${EXIT_ANIMATION_MS}ms ease`,
+        willChange: 'transform, opacity',
       }}
     >
       <button
