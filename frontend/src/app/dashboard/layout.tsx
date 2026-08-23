@@ -29,7 +29,7 @@ const navItems = [
   { href: '/dashboard/support', icon: MessageSquare, label: 'Support' },
   { href: '/dashboard/profile', icon: User, label: 'Profile' },
   { href: '/dashboard/settings', icon: Settings, label: 'Settings' },
-  { href: '/dashboard/app-downloads', icon: Smartphone, label: 'App Downloads' },
+  { href: '/dashboard/app-downloads', icon: Smartphone, label: 'Download / Install PWA' },
 ];
 
 export default function DashboardLayout({
