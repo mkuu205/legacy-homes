@@ -66,7 +66,7 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Legacy Homes',
     body: 'You have a new notification',
-    icon: '/icon-192.png',
+    icon: '/brand/legacy-homes-logo.png',
     badge: '/icon-96.png',
   };
 

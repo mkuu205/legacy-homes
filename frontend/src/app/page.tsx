@@ -4,7 +4,9 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, Variants } from 'framer-motion';
+import { usePWA } from '@/hooks/usePWA';
 import {
   Droplets, Shield, CreditCard, BarChart3,
   Bell, Headphones, ArrowRight, CheckCircle, Zap,
@@ -13,6 +15,7 @@ import {
 export default function HomePage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
+  const { isInstallable, installApp } = usePWA();
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -248,6 +251,20 @@ export default function HomePage() {
         .lh-feature-card h3 { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 8px; letter-spacing: -.3px; }
         .lh-feature-card p { font-size: 14px; color: rgba(255,255,255,.45); line-height: 1.65; font-weight: 300; }
 
+        /* INSTALL */
+        .lh-install-section { padding: 32px 40px 80px; }
+        .lh-install-card {
+          max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: 1.2fr .8fr;
+          gap: 32px; align-items: center; padding: 32px; border-radius: 24px;
+          background: linear-gradient(135deg, rgba(14,165,233,.12), rgba(212,168,75,.08));
+          border: 1px solid rgba(56,189,248,.2);
+        }
+        .lh-install-copy h2 { font-family: 'Syne', sans-serif; font-size: clamp(26px,3.5vw,40px); font-weight: 800; letter-spacing: -1.2px; color: #fff; margin: 8px 0 12px; }
+        .lh-install-copy p { max-width: 620px; color: rgba(255,255,255,.55); line-height: 1.7; font-weight: 300; margin: 0; }
+        .lh-install-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+        .lh-install-note { width: 100%; text-align: right; color: rgba(255,255,255,.36); font-size: 12px; line-height: 1.5; }
+        @media(max-width:700px){ .lh-install-section { padding: 16px 20px 64px; } .lh-install-card { grid-template-columns: 1fr; padding: 24px; } .lh-install-actions { justify-content: flex-start; } .lh-install-note { text-align: left; } }
+
         /* BILLING */
         .lh-billing { padding: 80px 40px; }
         .lh-billing-inner { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
@@ -359,8 +376,8 @@ export default function HomePage() {
           transition={{ duration: 0.6, ease: "easeOut" }}
         >
           <Link href="/" className="lh-logo">
-            <div className="lh-logo-icon">
-              <Droplets className="w-4 h-4 text-white" />
+            <div className="lh-logo-icon" style={{ overflow: 'hidden', background: '#071a3a' }}>
+              <Image src="/brand/legacy-homes-logo.png" alt="" width={36} height={36} priority style={{ objectFit: 'cover' }} />
             </div>
             <span className="lh-logo-text">Legacy Homes</span>
           </Link>
@@ -574,6 +591,33 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* ── INSTALL PWA ── */}
+        <section className="lh-install-section" aria-labelledby="install-pwa-title">
+          <motion.div
+            className="lh-install-card"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.3 }}
+            transition={{ duration: 0.6 }}
+          >
+            <div className="lh-install-copy">
+              <p className="lh-eyebrow">Take Legacy Homes with you</p>
+              <h2 id="install-pwa-title">Install the Legacy Homes PWA.</h2>
+              <p>Get a faster, app-like way to check bills, make payments, and stay connected. It works from your browser and can be added to your home screen without an app store.</p>
+            </div>
+            <div className="lh-install-actions">
+              {isInstallable ? (
+                <button type="button" className="lh-btn-xl solid" onClick={() => void installApp()}>
+                  Install PWA <ArrowRight className="w-5 h-5" />
+                </button>
+              ) : (
+                <Link href="/login" className="lh-btn-xl solid">Open Legacy Homes <ArrowRight className="w-5 h-5" /></Link>
+              )}
+              <p className="lh-install-note">On Android Chrome, use the install button or browser menu. On iPhone, tap Share, then “Add to Home Screen.”</p>
+            </div>
+          </motion.div>
+        </section>
+
         {/* ── BILLING ── */}
         <section className="lh-billing">
           <div className="lh-billing-inner">
@@ -644,8 +688,8 @@ export default function HomePage() {
           <div className="lh-footer-inner">
             <div className="lh-footer-top">
               <Link href="/" className="lh-logo">
-                <div className="lh-logo-icon" style={{ width: 28, height: 28, borderRadius: 8 }}>
-                  <Droplets className="w-3.5 h-3.5 text-white" />
+                <div className="lh-logo-icon" style={{ width: 28, height: 28, borderRadius: 8, overflow: 'hidden', background: '#071a3a' }}>
+                  <Image src="/brand/legacy-homes-logo.png" alt="" width={28} height={28} style={{ objectFit: 'cover' }} />
                 </div>
                 <span className="lh-logo-text" style={{ fontSize: 15 }}>Legacy Homes</span>
               </Link>

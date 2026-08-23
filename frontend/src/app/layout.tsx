@@ -3,7 +3,7 @@ import './globals.css';
 import { Providers } from '@/components/providers';
 
 export const viewport: Viewport = {
-  themeColor: '#2563eb',
+  themeColor: '#071a3a',
 };
 
 export const metadata: Metadata = {
@@ -20,9 +20,9 @@ export const metadata: Metadata = {
     description: 'Modern estate water billing and resident self-service platform',
     images: [
       {
-        url: 'https://i.ibb.co/5hvy5zXd/Chat-GPT-Image-Jun-23-2026-01-17-11-AM.png',
-        width: 1200,
-        height: 630,
+        url: '/brand/legacy-homes-logo.png',
+        width: 1024,
+        height: 1024,
       },
     ],
   },
@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#2563eb" />
+        <meta name="theme-color" content="#071a3a" />
         <link rel="icon" href="/icon-192.png" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
