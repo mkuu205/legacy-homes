@@ -1,11 +1,12 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
-import { useSystemStatusStore } from '@/store/system-status.store';
+import { useSystemStatusStore } from '@/stores/system-status.store';
 
 // --------------------------------------------------
 // API Configuration
 // --------------------------------------------------
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '');
+const API_URL = configuredApiUrl?.endsWith('/api') ? configuredApiUrl : configuredApiUrl ? `${configuredApiUrl}/api` : undefined;
 
 if (!API_URL) {
   throw new Error(
@@ -492,7 +493,8 @@ export const processOutageSubscriptionQueue = async (): Promise<void> => {
   
   console.log(`Processing ${queue.length} queued outage subscriptions...`);
   
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://legacy-homes.onrender.com/api';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  if (!API_URL) return;
   
   for (const item of queue) {
     try {

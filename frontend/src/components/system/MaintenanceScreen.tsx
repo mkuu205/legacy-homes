@@ -38,7 +38,11 @@ export function MaintenanceScreen() {
       // Note: We use the actual backend URL because during an outage, the Next.js API route 
       // might also be affected or we want to bypass it for direct reliability if possible.
       // However, per requirements, we'll try the standard API path first.
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://legacy-homes.onrender.com/api';
+      const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '');
+      const API_URL = configuredApiUrl?.endsWith('/api') ? configuredApiUrl : configuredApiUrl ? `${configuredApiUrl}/api` : undefined;
+      if (!API_URL) {
+        throw new Error('NEXT_PUBLIC_API_URL is not configured');
+      }
       
       const res = await fetch(`${API_URL}/auth/notify-outage`, {
         method: 'POST',
