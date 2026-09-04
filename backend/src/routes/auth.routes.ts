@@ -31,10 +31,9 @@ router.post('/resend-otp', otpLimiter, authController.resendOTP.bind(authControl
 router.post('/login', authLimiter, authController.login.bind(authController));
 router.post('/2fa/verify-login', authLimiter, authController.verifyTwoFactorLogin.bind(authController));
 
-// Outage notification (Public)
+// Independent outage monitor synchronization. The monitor calls this only while the API is healthy.
 import { outageController } from '../controllers/outage.controller';
-router.post('/notify-outage', outageController.subscribe.bind(outageController));
-router.post('/outage-recovered', outageController.recover.bind(outageController));
+router.get('/internal/outage-recipients', outageController.syncRecipients.bind(outageController));
 
 // Token refresh - NO RATE LIMIT
 router.post('/refresh-token', refreshLimiter, authController.refreshToken.bind(authController));

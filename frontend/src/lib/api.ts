@@ -262,7 +262,6 @@ api.interceptors.response.use(
       updateStoreStatus('ONLINE');
       backendEvents.emit('backend-online');
       replayQueuedRequests().catch(console.error);
-      processOutageSubscriptionQueue().catch(console.error);
     }
     return response;
   },
@@ -480,41 +479,6 @@ export const replayQueuedRequests = async (): Promise<void> => {
 export const clearPendingRequests = (): void => {
   pendingRequests = [];
   isReplaying = false;
-};
-
-/**
- * Process any outage subscriptions that were queued while the backend was offline
- */
-export const processOutageSubscriptionQueue = async (): Promise<void> => {
-  if (typeof window === 'undefined') return;
-  
-  const queue = JSON.parse(localStorage.getItem('outage_subscription_queue') || '[]');
-  if (queue.length === 0) return;
-  
-  console.log(`Processing ${queue.length} queued outage subscriptions...`);
-  
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
-  if (!API_URL) return;
-  
-  for (const item of queue) {
-    try {
-      const res = await fetch(`${API_URL}/auth/notify-outage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: item.email }),
-      });
-      
-      if (res.ok) {
-        console.log(`Successfully synced queued subscription for ${item.email}`);
-        // Remove from queue
-        const currentQueue = JSON.parse(localStorage.getItem('outage_subscription_queue') || '[]');
-        const updatedQueue = currentQueue.filter((q: any) => q.email !== item.email);
-        localStorage.setItem('outage_subscription_queue', JSON.stringify(updatedQueue));
-      }
-    } catch (error) {
-      console.error(`Failed to sync queued subscription for ${item.email}:`, error);
-    }
-  }
 };
 
 export const getErrorMessage = (error: any): string => {

@@ -1,37 +1,38 @@
-# Legacy Homes outage monitor
+# Legacy Homes independent outage monitor
 
-This monitor is intentionally independent of the Railway backend. Run it on a separate always-on worker with persistent storage so it can detect a Railway outage even when the website API is unavailable. It polls the production health endpoint, persists incident state, and sends one outage email and one recovery email per incident.
+This worker must run outside Railway on an always-on host with persistent storage. It checks the production health endpoint, synchronizes the authoritative eligible-recipient snapshot while the API is healthy, and then continues outage and recovery delivery from the last protected snapshot if Railway becomes unreachable.
 
-## Configuration
+## Required environment
 
-```text
-HEALTH_URL=https://api.legacyhomes.co.ke/api/health/live
-POLL_INTERVAL_MS=30000
-REQUEST_TIMEOUT_MS=10000
-STATE_FILE=/var/lib/legacy-homes/outage-monitor-state.json
-RECIPIENTS_FILE=/etc/legacy-homes/outage-recipients.json
-RESEND_API_KEY=<secret>
-OUTAGE_EMAIL_FROM=Legacy Homes <alerts@your-domain.example>
-OUTAGE_EMAIL_REPLY_TO=<optional reply address>
-SERVICE_NAME=Legacy Homes
-WEB_URL=https://legacyhomes.co.ke
-```
+| Variable | Purpose |
+|---|---|
+| `HEALTH_URL` | Production liveness URL, normally `https://api.legacyhomes.co.ke/api/health/live` |
+| `RECIPIENT_SYNC_URL` | Protected snapshot URL, normally `https://api.legacyhomes.co.ke/api/auth/internal/outage-recipients` |
+| `OUTAGE_MONITOR_SECRET` | Shared secret used in `x-outage-monitor-secret`; must match the backend and never be committed |
+| `RESEND_API_KEY` | Email provider credential |
+| `OUTAGE_EMAIL_FROM` | Verified sender address |
+| `OUTAGE_EMAIL_REPLY_TO` | Optional reply-to address |
+| `STATE_FILE` | Persistent JSON state path; do not place it on ephemeral storage |
+| `RECIPIENTS_FILE` | Persistent user-recipient snapshot path |
+| `ADMIN_RECIPIENTS_FILE` | Persistent administrator-recipient snapshot path |
+| `FAILURE_THRESHOLD` | Consecutive failed health checks required to open an incident; default `2` |
+| `RECOVERY_THRESHOLD` | Consecutive healthy checks required to declare recovery; default `2` |
+| `RETRY_BASE_MS` / `RETRY_MAX_MS` | Exponential delivery retry bounds |
 
-`RECIPIENTS_FILE` must contain a JSON array of registered notification recipients. Keep it outside Git and update it through a secure user-management process. Do not put email addresses, API keys, database credentials, or other secrets in the repository.
+The backend snapshot includes only users with `ACTIVE` account status, `APPROVED` registration status, verified valid email addresses, and administrators identified by their administrator roles. Snapshots are written with a temporary file and atomic rename. A failed sync never replaces the last good snapshot.
 
-The monitor uses provider idempotency keys derived from the incident ID and recipient address. It persists state atomically, retries failed deliveries on the next poll, batches deliveries with bounded concurrency, and does not send duplicate outage or recovery messages for the same incident.
+## Incident guarantees
+
+The monitor opens one incident only after the failure threshold is reached. Each incident has a durable per-recipient delivery ledger for user outage, administrator outage, user recovery, and administrator recovery messages. Resend idempotency keys are deterministic per incident, delivery group, and recipient. Failed deliveries retry with persisted exponential backoff, while successful deliveries are never sent again. Recovery requires the healthy threshold and uses the same ledger.
+
+Administrators receive a separate technical alert path in addition to the user-facing notification path. The monitor does not call the removed public outage-subscription or recovery endpoints.
 
 ## Run
 
-```sh
-pnpm install --frozen-lockfile
+```bash
+npm install
+node incident-simulation.mjs
 node outage-monitor.mjs
 ```
 
-Run it under a supervisor such as systemd, Docker, or an independent managed worker. The monitor must not run on the same Railway service as the API, because that would remove its ability to detect a complete Railway outage.
-
-## Required production setup
-
-Set the website build variable `NEXT_PUBLIC_API_URL` to `https://api.legacyhomes.co.ke` (the client normalizes the `/api` suffix). Configure the same production API URL in every browser-facing request path. The legacy Render URL is not a valid fallback and is intentionally not used.
-
-Configure the monitor’s email provider credentials and recipient file in the independent worker environment. Verify that the worker has persistent write access to `STATE_FILE`, outbound HTTPS access to the health endpoint and email provider, and a process supervisor restart policy.
+The worker is not a Railway process. Deploy it as a separate persistent service, cron-backed worker, or always-on VM process with restricted file permissions and secret storage. Never commit the state files, recipient snapshots, or credentials.

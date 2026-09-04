@@ -69,24 +69,33 @@ test('frontend FCM uses a production service worker without Admin credentials', 
   assert.doesNotMatch(worker, /FIREBASE_ADMIN|private_key|client_email/);
 });
 
-test('recovery callback is secret-protected and monitor state is external to the backend', () => {
+test('recipient synchronization is secret-protected and independent monitor state is external to the backend', () => {
   const controller = read('src/controllers/outage.controller.ts');
   const routes = read('src/routes/auth.routes.ts');
   const monitor = read('../monitoring/outage-monitor.mjs');
   const outage = read('src/services/outage.service.ts');
   assert.match(controller, /OUTAGE_MONITOR_SECRET/);
   assert.match(controller, /timingSafeEqual/);
-  assert.match(routes, /outage-recovered/);
+  assert.match(routes, /internal\/outage-recipients/);
+  assert.doesNotMatch(routes, new RegExp(`notify${'-'}outage|outage${'-'}recovered`));
   assert.match(monitor, /STATE_FILE/);
-  assert.match(monitor, /healthUrl/);
+  assert.match(monitor, /RECIPIENT_SYNC_URL/);
   assert.match(monitor, /x-outage-monitor-secret/);
-  assert.match(outage, /async notifySubscribers/);
+  assert.match(monitor, /saveJsonAtomic/);
+  assert.match(outage, /accountStatus:\s*'ACTIVE'/);
+  assert.match(outage, /registrationStatus:\s*'APPROVED'/);
+  assert.match(outage, /emailVerified:\s*true/);
 });
 
-test('recovery notifications are one-shot per persisted subscription', () => {
-  const outage = read('src/services/outage.service.ts');
-  assert.match(outage, /isActive:\s*true/);
-  assert.match(outage, /isNotified:\s*false/);
-  assert.match(outage, /isNotified:\s*true/);
-  assert.match(outage, /isActive:\s*false/);
+test('incident delivery has thresholds, durable per-recipient state, provider idempotency, and separate admin alerts', () => {
+  const monitor = read('../monitoring/outage-monitor.mjs');
+  assert.match(monitor, /FAILURE_THRESHOLD/);
+  assert.match(monitor, /RECOVERY_THRESHOLD/);
+  assert.match(monitor, /deliveries:\s*\{ outage:/);
+  assert.match(monitor, /idempotency-key/);
+  assert.match(monitor, /adminOutage/);
+  assert.match(monitor, /RETRY_BASE_MS/);
+  assert.match(monitor, /nextAttemptAt/);
+  assert.match(monitor, /consecutiveFailures/);
+  assert.match(monitor, /consecutiveHealthy/);
 });
