@@ -2,6 +2,7 @@ import prisma from '../config/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { sendBillNotificationEmail } from '../utils/email';
 import { notificationService } from './notification.service';
+import { broadcastBillGenerated } from './socket-broadcaster';
 import logger from '../utils/logger';
 import PDFDocument from 'pdfkit';
 import axios from 'axios';
@@ -35,24 +36,6 @@ export class BillingService {
       billingPeriodEnd?: string;   // ISO date string override
     }
   ) {
-    // Duplicate prevention: check if bills already exist for this month
-    const whereClause: any = { billingMonth };
-    if (options?.residentId) {
-      whereClause.residentId = options.residentId;
-    }
-
-    const existingCount = await prisma.bill.count({ where: whereClause });
-    if (existingCount > 0 && !force) {
-      const targetMsg = options?.residentId ? `for resident ${options.residentId}` : '';
-      throw new AppError(`DUPLICATE:Bills for ${billingMonth} ${targetMsg} already exist (${existingCount} bills). Use force=true to regenerate.`, 409);
-    }
-
-    // Never delete or overwrite financial history during regeneration. Existing bills
-    // must be corrected through an explicit, auditable correction workflow.
-    if (existingCount > 0 && force) {
-      throw new AppError(`CORRECTION_REQUIRED:Bills for ${billingMonth} already exist. Financial history cannot be deleted or regenerated in place.`, 409);
-    }
-
     const readingsWhere: any = { billingMonth, billId: null };
     if (options?.residentId) {
       // If residentId is provided, we need to filter readings by meter belonging to that resident's house
@@ -77,11 +60,14 @@ export class BillingService {
       },
     });
 
+    logger.info(`Bill generation started for ${billingMonth}: ${readings.length} eligible readings`);
+
     if (readings.length === 0) {
-      throw new AppError(`No unprocessed readings found for ${billingMonth}`, 400);
+      return { generated: 0, bills: [], skipped: [], skippedCount: 0 };
     }
 
     const bills = [];
+    const skipped: Array<{ readingId: string; meterId: string; reason: string }> = [];
 
     // Resolve due date: use provided value or default to 30 days from now
     const dueDate = options?.dueDate ? new Date(options.dueDate) : (() => {
@@ -107,7 +93,10 @@ export class BillingService {
         select: { houseId: true },
       });
 
-      if (!meter) continue;
+      if (!meter) {
+        skipped.push({ readingId: reading.id, meterId: reading.meterId, reason: 'Meter could not be resolved' });
+        continue;
+      }
 
       const house = await prisma.house.findUnique({
         where: { id: meter.houseId },
@@ -122,36 +111,57 @@ export class BillingService {
         },
       });
 
-      if (!house || !house.resident) continue;
+      if (!house) {
+        skipped.push({ readingId: reading.id, meterId: reading.meterId, reason: 'House could not be resolved' });
+        continue;
+      }
+      if (!house.resident) {
+        skipped.push({ readingId: reading.id, meterId: reading.meterId, reason: 'House has no resident' });
+        continue;
+      }
 
       // Ignore request and database overrides: the tariff is fixed at KES 250/unit.
       const UNIT_RATE = await getUnitRate();
       const totalAmount = reading.unitsConsumed * UNIT_RATE;
       const billNumber = generateBillNumber();
 
-      const bill = await prisma.bill.create({
-        data: {
-          billNumber,
-          resident: { connect: { id: house.resident.id } },
-          meter: { connect: { id: reading.meterId } },
-          house: { connect: { id: meter.houseId } },
-          reading: { connect: { id: reading.id } },
-          billingMonth,
-          billingPeriodStart: periodStart,
-          billingPeriodEnd: periodEnd,
-          previousReading: reading.previousReading,
-          currentReading: reading.currentReading,
-          unitsConsumed: reading.unitsConsumed,
-          unitRate: UNIT_RATE,
-          totalAmount,
-          amountPaid: 0,
-          balance: totalAmount,
-          dueDate,
-          status: 'UNPAID',
-        },
-      });
+      let bill;
+      try {
+        // readingId is unique in the schema. The nested relation and transaction
+        // make bill creation plus reading association atomic and race-safe.
+        bill = await prisma.$transaction(async (tx) => tx.bill.create({
+          data: {
+            billNumber,
+            resident: { connect: { id: house.resident!.id } },
+            meter: { connect: { id: reading.meterId } },
+            house: { connect: { id: meter.houseId } },
+            reading: { connect: { id: reading.id } },
+            billingMonth,
+            billingPeriodStart: periodStart,
+            billingPeriodEnd: periodEnd,
+            previousReading: reading.previousReading,
+            currentReading: reading.currentReading,
+            unitsConsumed: reading.unitsConsumed,
+            unitRate: UNIT_RATE,
+            totalAmount,
+            amountPaid: 0,
+            balance: totalAmount,
+            dueDate,
+            status: 'UNPAID',
+          },
+        }));
+      } catch (error: any) {
+        if (error?.code === 'P2002') {
+          skipped.push({ readingId: reading.id, meterId: reading.meterId, reason: 'Reading already has a bill' });
+          continue;
+        }
+        logger.error(`Failed to create bill for reading ${reading.id}:`, error);
+        skipped.push({ readingId: reading.id, meterId: reading.meterId, reason: 'Bill creation failed' });
+        continue;
+      }
 
       bills.push(bill);
+      broadcastBillGenerated(house.resident.id, { billId: bill.id, billNumber: bill.billNumber });
 
       try {
         await Promise.all([
@@ -174,9 +184,13 @@ export class BillingService {
       }
     }
 
+    logger.info(`Bill generation completed for ${billingMonth}: generated=${bills.length}, skipped=${skipped.length}`);
+    if (skipped.length > 0) logger.warn(`Skipped readings for ${billingMonth}: ${JSON.stringify(skipped)}`);
     return {
       generated: bills.length,
       bills,
+      skipped,
+      skippedCount: skipped.length,
     };
   }
 

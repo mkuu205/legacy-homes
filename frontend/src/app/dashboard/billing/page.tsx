@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/toaster';
 import Link from 'next/link';
-import { FileText, Download, ArrowRight, CheckCircle, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { FileText, Download, ArrowRight, CheckCircle, Clock, AlertCircle, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const statusConfig: Record<string, { color: string; bg: string; icon: React.ReactNode; label: string }> = {
   PAID: { color: '#34d399', bg: 'rgba(16, 185, 129, 0.14)', icon: <CheckCircle size={16} />, label: 'Paid' },
@@ -17,6 +17,7 @@ const statusConfig: Record<string, { color: string; bg: string; icon: React.Reac
 export default function BillingPage() {
   const [downloadingBillId, setDownloadingBillId] = useState<string | null>(null);
   const [downloadingReceiptBillId, setDownloadingReceiptBillId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const handleDownloadInvoice = async (billId: string) => {
     setDownloadingBillId(billId);
@@ -69,11 +70,14 @@ export default function BillingPage() {
   };
 
   const { data, isLoading } = useQuery({
-    queryKey: ['my-bills'],
+    queryKey: ['my-bills', page],
     queryFn: async () => {
-      const res = await api.get('/billing/my-bills');
+      const res = await api.get(`/billing/my-bills?page=${page}&limit=12`);
       return res.data.data;
     },
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
   if (isLoading) {
@@ -87,7 +91,7 @@ export default function BillingPage() {
     );
   }
 
-  const { bills } = data || { bills: [] };
+  const { bills, pagination } = data || { bills: [], pagination: { page: 1, pages: 1, total: 0 } };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} className="fu">
@@ -216,6 +220,17 @@ export default function BillingPage() {
               </div>
             );
           })}
+        </div>
+      )}
+      {pagination.pages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '4px' }}>
+          <button className="btn bg btn-sm" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>
+            <ChevronLeft size={14} /> Previous
+          </button>
+          <span style={{ fontSize: '12px', color: 'var(--t2)' }}>Page {pagination.page} of {pagination.pages} ({pagination.total} bills)</span>
+          <button className="btn bg btn-sm" onClick={() => setPage((current) => Math.min(pagination.pages, current + 1))} disabled={page >= pagination.pages}>
+            Next <ChevronRight size={14} />
+          </button>
         </div>
       )}
     </div>

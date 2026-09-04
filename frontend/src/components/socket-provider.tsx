@@ -68,6 +68,14 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       });
 
+      const handleBillGenerated = () => {
+        queryClient.invalidateQueries({ queryKey: ['my-bills'] });
+        queryClient.invalidateQueries({ queryKey: ['unpaid-bills'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+        queryClient.invalidateQueries({ queryKey: ['resident-dashboard'] });
+      };
+      socket.on('bill_generated', handleBillGenerated);
+
       const notifyNotificationChange = () => {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('legacyhomes:notifications-changed'));
@@ -116,6 +124,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         socket.off('reconnect_failed');
         socket.off('payment_completed');
         socket.off('bill_updated');
+        socket.off('bill_generated', handleBillGenerated);
         socket.off('notification_created');
         socket.off('dashboard_updated');
         socket.off('unread_count_update');

@@ -97,18 +97,32 @@ export default function PaymentsPage() {
       const res = await api.get('/billing/my-bills?status=UNPAID,PARTIAL,OVERDUE');
       return res.data.data?.bills || [];
     },
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: requestedBill, isLoading: requestedBillLoading } = useQuery({
+    queryKey: ['bill', billIdParam],
+    queryFn: async () => {
+      const res = await api.get(`/billing/${billIdParam}`);
+      return res.data.data;
+    },
+    enabled: !!billIdParam,
+    staleTime: 0,
+    retry: false,
   });
 
   // Set bill from URL param only
   useEffect(() => {
-    if (billIdParam && billsData) {
-      const bill = billsData.find((b: any) => b.id === billIdParam);
+    if (billIdParam && (billsData || requestedBill)) {
+      const bill = billsData?.find((b: any) => b.id === billIdParam) || requestedBill;
       if (bill) {
         setSelectedBillId(bill.id);
         setAmount(bill.balance?.toString() || '');
       }
     }
-  }, [billIdParam, billsData]);
+  }, [billIdParam, billsData, requestedBill]);
 
   // Auto-set amount when bill is selected by user
   useEffect(() => {
@@ -120,7 +134,7 @@ export default function PaymentsPage() {
     } else {
       setAmount('');
     }
-  }, [selectedBillId, billsData]);
+  }, [selectedBillId, billsData, requestedBill]);
 
   // Fetch payment status
   const { data: statusData } = useQuery({
@@ -216,8 +230,9 @@ export default function PaymentsPage() {
     },
   });
 
-  const selectedBill = billsData?.find((b: any) => b.id === selectedBillId);
-  const isFormValid = selectedBillId && amount && parseFloat(amount) > 0 && 
+  const selectedBill = billsData?.find((b: any) => b.id === selectedBillId) ||
+    (requestedBill?.id === selectedBillId ? requestedBill : undefined);
+  const isFormValid = !!selectedBill && selectedBillId && amount && parseFloat(amount) > 0 &&
     (paymentMethod === 'CARD' || (paymentMethod === 'MPESA_STK_PUSH' && phone && validatePhone(phone)));
 
   useEffect(() => {
@@ -739,6 +754,18 @@ export default function PaymentsPage() {
     );
   }
 
+  if (billIdParam && !billsLoading && !requestedBillLoading && !selectedBill && !pendingPaymentId) {
+    return (
+      <div className="pg fu" style={{ maxWidth: '720px', margin: '0 auto' }}>
+        <div className="card" style={{ padding: '56px 24px', textAlign: 'center' }}>
+          <AlertCircle size={36} style={{ color: '#f87171', margin: '0 auto 14px' }} />
+          <h2 style={{ fontSize: '20px', color: 'var(--t1)', fontWeight: 800 }}>Bill unavailable</h2>
+          <p style={{ color: 'var(--t2)', fontSize: '13px', marginTop: '8px' }}>The bill could not be loaded. No payment amount is available.</p>
+          <button className="btn bg" style={{ marginTop: '18px' }} onClick={() => router.push('/dashboard/billing')}>Back to bills</button>
+        </div>
+      </div>
+    );
+  }
   if (pendingPaymentId && statusData) {
     const status = statusMeta(statusData.status);
     const StatusIcon = status.icon;
@@ -783,7 +810,7 @@ export default function PaymentsPage() {
             <div><p style={{ fontSize: '11px', color: 'var(--ac)', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Make a payment</p><h2 style={{ fontSize: '22px', color: 'var(--t1)', fontWeight: 850, marginTop: '4px' }}>Settle your water bill</h2></div><div style={{ width: '42px', height: '42px', borderRadius: '13px', background: 'rgba(0, 198, 167, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Banknote size={21} style={{ color: 'var(--ac)' }} /></div>
           </div>
 
-          <div style={{ padding: '16px', borderRadius: '14px', background: 'linear-gradient(135deg, rgba(0, 198, 167, 0.15), var(--c2))', border: '1px solid rgba(0, 198, 167, 0.22)', marginBottom: '20px' }}><p style={{ fontSize: '11px', color: 'var(--t2)', fontWeight: 700 }}>Outstanding balance</p><p style={{ fontSize: '30px', color: 'var(--t1)', fontWeight: 900, letterSpacing: '-0.04em', marginTop: '4px' }}>{selectedBill ? formatMoney(selectedBill.balance) : 'Select a bill'}</p></div>
+          <div style={{ padding: '16px', borderRadius: '14px', background: 'linear-gradient(135deg, rgba(0, 198, 167, 0.15), var(--c2))', border: '1px solid rgba(0, 198, 167, 0.22)', marginBottom: '20px' }}><p style={{ fontSize: '11px', color: 'var(--t2)', fontWeight: 700 }}>Outstanding balance</p><p style={{ fontSize: '30px', color: 'var(--t1)', fontWeight: 900, letterSpacing: '-0.04em', marginTop: '4px' }}>{selectedBill ? formatMoney(selectedBill.balance) : 'Bill unavailable'}</p></div>
 
           <label style={{ display: 'block', fontSize: '12px', color: 'var(--t2)', fontWeight: 700, marginBottom: '7px' }}>Current bill</label>
           {billsLoading ? <div style={{ height: '44px', borderRadius: '10px', background: 'var(--c2)' }} /> : billsData && billsData.length > 0 ? <select className="inp" value={selectedBillId} onChange={(event) => setSelectedBillId(event.target.value)}><option value="">Select a bill to pay</option>{billsData.map((bill: any) => <option key={bill.id} value={bill.id}>Bill #{bill.billNumber} · {formatMoney(bill.balance)}</option>)}</select> : <div style={{ padding: '14px', borderRadius: '10px', background: 'var(--c2)', color: 'var(--t2)', fontSize: '12px' }}>No unpaid bills found. <button className="btn bg" style={{ marginTop: '10px' }} onClick={() => router.push('/dashboard/billing')}>View billing</button></div>}
@@ -796,7 +823,7 @@ export default function PaymentsPage() {
           </div>}
 
           <label style={{ display: 'block', fontSize: '12px', color: 'var(--t2)', fontWeight: 700, margin: '20px 0 7px' }}>Amount to pay</label>
-          <div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', color: 'var(--t3)', fontSize: '12px', fontWeight: 700 }}>KES</span><input className="inp" style={{ paddingLeft: '48px', fontSize: '18px', fontWeight: 800 }} type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" inputMode="decimal" /></div>
+          <div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', color: 'var(--t3)', fontSize: '12px', fontWeight: 700 }}>KES</span><input className="inp" style={{ paddingLeft: '48px', fontSize: '18px', fontWeight: 800 }} type="number" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder={selectedBill ? '0.00' : 'Bill unavailable'} inputMode="decimal" disabled={!selectedBill} /></div>
           {selectedBill && <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', marginTop: '10px' }}><button type="button" className="btn bg" style={{ padding: '7px 10px', fontSize: '11px' }} onClick={() => setAmount(String(selectedBill.balance || 0))}>Pay full balance</button>{[500, 1000].filter((value) => value <= Number(selectedBill.balance || 0)).map((value) => <button key={value} type="button" className="btn bg" style={{ padding: '7px 10px', fontSize: '11px' }} onClick={() => setAmount(String(value))}>{formatMoney(value)}</button>)}</div>}
 
           <label style={{ display: 'block', fontSize: '12px', color: 'var(--t2)', fontWeight: 700, margin: '20px 0 9px' }}>Payment method</label>

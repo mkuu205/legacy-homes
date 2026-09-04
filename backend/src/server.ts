@@ -12,6 +12,7 @@ import { logger } from './utils/logger';
 import prisma from './config/prisma';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
+import { configureSocketBroadcaster } from './services/socket-broadcaster';
 
 // Routes
 import authRoutes from './routes/auth.routes';
@@ -73,6 +74,10 @@ export const io = new SocketIOServer(httpServer, {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
   },
+});
+
+configureSocketBroadcaster((residentId, payload) => {
+  io.to(`user_${residentId}`).emit('bill_generated', payload);
 });
 
 // Socket.io connection handling
