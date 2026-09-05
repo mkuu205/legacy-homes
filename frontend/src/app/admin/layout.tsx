@@ -21,7 +21,9 @@ import {
   X,
   Shield,
   Activity,
-  Smartphone
+  Smartphone,
+  Search,
+  ChevronDown
 } from 'lucide-react';
 
 const navItems = [
@@ -145,16 +147,16 @@ export default function AdminLayout({
   };
 
   return (
-    <div className="dashboard-container">
-      <div className="shell">
+    <div className="dashboard-container admin-theme">
+      <div className="shell admin-shell">
         <aside
-          className={`sb fixed inset-y-0 left-0 z-50 lg:static lg:inset-auto transition-transform duration-300 ${
+          className={`sb admin-sidebar fixed inset-y-0 left-0 z-50 lg:static lg:inset-auto transition-transform duration-300 ${
             sidebarOpen
               ? 'translate-x-0'
               : '-translate-x-full lg:translate-x-0'
           }`}
         >
-          <div className="sb-logo">
+          <div className="sb-logo admin-brand">
             <div className="sb-logo-icon">
               <img
                 src="/brand/legacy-homes-logo.png"
@@ -186,7 +188,7 @@ export default function AdminLayout({
                   marginTop: '1px'
                 }}
               >
-                Admin Panel
+                NEXUS ADMIN
               </div>
             </div>
 
@@ -206,7 +208,7 @@ export default function AdminLayout({
           </div>
 
           <div
-            className="sb-user-card"
+            className="sb-user-card admin-sidebar-user"
             style={{ margin: '12px 8px' }}
           >
             <div
@@ -225,7 +227,7 @@ export default function AdminLayout({
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
-                  background: 'var(--gl)',
+                  background: 'linear-gradient(135deg, #7837c9, #16143b)',
                   border:
                     '1px solid rgba(0, 198, 167, 0.25)',
                   color: 'var(--ac)',
@@ -332,7 +334,7 @@ export default function AdminLayout({
         )}
 
         <div className="main-col">
-          <div className="topbar">
+          <div className="topbar admin-topbar">
             <button
               onClick={() => setSidebarOpen(true)}
               className="lg:hidden"
@@ -340,18 +342,9 @@ export default function AdminLayout({
               <Menu size={20} />
             </button>
 
-            <div style={{ flex: 1 }}>
-              <p
-                style={{
-                  fontSize: '11px',
-                  color: 'var(--t3)'
-                }}
-              >
-                Admin
-              </p>
-            </div>
+            <div className="admin-search"><Search size={16} /><span>Search anything...</span><kbd>⌘ K</kbd></div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="admin-top-actions">
               <Link
                 href="/admin/notifications"
                 className="notif-wrap"
@@ -362,18 +355,12 @@ export default function AdminLayout({
                   <div className="notif-dot" />
                 )}
               </Link>
-              <button
-                onClick={handleLogout}
-                className="btn-icon bg"
-                title="Sign Out"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <LogOut size={16} />
-              </button>
+              <div className="admin-profile-chip"><span className="admin-profile-avatar">{user.fullName?.charAt(0) || 'A'}</span><span className="admin-profile-copy"><strong>{user.fullName}</strong><small>Super Admin</small></span><ChevronDown size={15} /></div>
+              <button onClick={handleLogout} className="btn-icon bg admin-logout" title="Sign Out"><LogOut size={16} /></button>
             </div>
           </div>
 
-          <div className="pg">{children}</div>
+          <div className="pg admin-pg">{children}</div>
         </div>
       </div>
     </div>
