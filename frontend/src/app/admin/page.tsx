@@ -46,6 +46,8 @@ export default function AdminDashboardPage() {
   }
 
   const d = data || {};
+  const nairobiHour = Number(new Intl.DateTimeFormat('en-KE', { hour: '2-digit', hour12: false, timeZone: 'Africa/Nairobi' }).format(new Date()));
+  const greeting = nairobiHour < 12 ? 'Good morning' : nairobiHour < 18 ? 'Good afternoon' : 'Good evening';
   const revenueGrowth = Number(d.revenueGrowth || 0);
   const trend = (d.revenueTrend || []).map((item: { revenue: number }) => item.revenue);
   const revenueData = d.revenueTrend || [];
@@ -77,7 +79,7 @@ export default function AdminDashboardPage() {
       <section className="admin-welcome-row">
         <div>
           <p className="admin-eyebrow"><span className="admin-live-dot" /> SYSTEM OVERVIEW</p>
-          <h1>Good morning, <span>{'Administrator'}</span></h1>
+          <h1>{greeting}, <span>{'Administrator'}</span></h1>
           <p className="admin-subtitle">Here&apos;s what&apos;s happening across Legacy Homes today, {today}.</p>
         </div>
         <Link href="/admin/reports" className="admin-outline-button"><Activity size={15} /> View reports <ArrowUpRight size={14} /></Link>
