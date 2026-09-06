@@ -633,3 +633,46 @@ model OutageSubscription {
   @@index([isNotified, isActive])
   @@map("outage_subscriptions")
 }
+
+// ─────────────────────────────────────────────
+// PRODUCTION MONITORING
+// ─────────────────────────────────────────────
+model MonitoringCheck {
+  id              String   @id @default(uuid())
+  service         String
+  status          String
+  severity        String
+  responseTimeMs  Int?
+  errorMessage    String?
+  metadata        Json?
+  incidentId      String?
+  checkedAt       DateTime @default(now())
+  incident        MonitoringIncident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+
+  @@index([service, checkedAt])
+  @@index([status, checkedAt])
+  @@index([incidentId])
+  @@map("monitoring_checks")
+}
+
+model MonitoringIncident {
+  id                String   @id @default(uuid())
+  service           String
+  severity          String
+  status            String
+  startedAt         DateTime @default(now())
+  lastFailureAt     DateTime?
+  resolvedAt        DateTime?
+  failureCount      Int      @default(1)
+  errorMessage      String?
+  detectionSource   String
+  alertSentAt       DateTime?
+  recoverySentAt    DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  checks            MonitoringCheck[]
+
+  @@index([service, status])
+  @@index([status, updatedAt])
+  @@map("monitoring_incidents")
+}

@@ -5,6 +5,7 @@ import { dirname } from 'node:path';
 
 const healthUrl = process.env.HEALTH_URL || 'https://api.legacyhomes.co.ke/api/health/live';
 const recipientSyncUrl = process.env.RECIPIENT_SYNC_URL || 'https://api.legacyhomes.co.ke/api/auth/internal/outage-recipients';
+const extendedMonitoringUrl = process.env.EXTENDED_MONITORING_URL || 'https://api.legacyhomes.co.ke/api/auth/internal/monitoring-check';
 const monitorSecret = process.env.OUTAGE_MONITOR_SECRET || '';
 const pollIntervalMs = Number(process.env.POLL_INTERVAL_MS || 30000);
 const requestTimeoutMs = Number(process.env.REQUEST_TIMEOUT_MS || 10000);
@@ -54,6 +55,7 @@ async function loadState() {
     outageNotifiedAt: null,
     recoveryNotifiedAt: null,
     recipientSnapshotAt: null,
+    extendedAlerts: {},
     deliveries: { outage: {}, recovery: {}, adminOutage: {}, adminRecovery: {} },
   });
 }
@@ -99,6 +101,21 @@ async function syncRecipients() {
     await saveJsonAtomic(recipientsFile, normalizeEmails(payload.recipients));
     await saveJsonAtomic(adminRecipientsFile, normalizeEmails(payload.admins));
     return payload.generatedAt || new Date().toISOString();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function runExtendedMonitoring() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  try {
+    const response = await fetch(extendedMonitoringUrl, {
+      signal: controller.signal,
+      headers: { accept: 'application/json', 'x-outage-monitor-secret': monitorSecret },
+    });
+    if (!response.ok) throw new Error(`extended monitoring returned HTTP ${response.status}`);
+    return await response.json();
   } finally {
     clearTimeout(timeout);
   }
@@ -190,6 +207,24 @@ async function processIncident(state, recovered, now) {
   }
 }
 
+async function processExtendedAlerts(state, payload, now) {
+  const incidents = payload?.data?.incidents || [];
+  if (!Array.isArray(incidents) || incidents.length === 0) return;
+  const admins = await loadAdminRecipients();
+  if (admins.length === 0) throw new Error('No valid administrator recipients configured');
+  if (!state.extendedAlerts) state.extendedAlerts = {};
+  for (const incident of incidents) {
+    if (!incident?.id || state.extendedAlerts[incident.id]) continue;
+    for (const admin of admins) {
+      await sendEmail(admin, `Legacy Homes monitoring alert: ${incident.service}`,
+        `<p><strong>Operational alert</strong></p><p>Service: ${escapeHtml(incident.service)}</p><p>Severity: ${escapeHtml(incident.severity)}</p><p>${escapeHtml(incident.errorMessage || 'A monitored service is degraded.')}</p><p>Incident started: ${escapeHtml(incident.startedAt || now)}</p>`,
+        `legacy-homes-extended-${incident.id}-${admin}`);
+    }
+    state.extendedAlerts[incident.id] = now;
+    await saveState(state);
+  }
+}
+
 async function poll() {
   const state = await loadState();
   const online = await checkHealth();
@@ -202,6 +237,12 @@ async function poll() {
       state.recipientSnapshotAt = await syncRecipients();
     } catch (error) {
       console.error(`[outage-monitor] recipient sync failed: ${error.message}`);
+    }
+    try {
+      const extendedPayload = await runExtendedMonitoring();
+      await processExtendedAlerts(state, extendedPayload, now);
+    } catch (error) {
+      console.error(`[outage-monitor] extended monitoring failed: ${error.message}`);
     }
 
     if (state.status === 'OFFLINE' && state.consecutiveHealthy >= recoveryThreshold) {

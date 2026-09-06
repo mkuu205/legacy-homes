@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authController } from '../controllers/auth.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import rateLimit from 'express-rate-limit';
+import { monitoringController } from '../controllers/monitoring.controller';
 
 const router: import("express").Router = Router();
 
@@ -34,6 +35,7 @@ router.post('/2fa/verify-login', authLimiter, authController.verifyTwoFactorLogi
 // Independent outage monitor synchronization. The monitor calls this only while the API is healthy.
 import { outageController } from '../controllers/outage.controller';
 router.get('/internal/outage-recipients', outageController.syncRecipients.bind(outageController));
+router.get('/internal/monitoring-check', monitoringController.runInternalCheck.bind(monitoringController));
 
 // Token refresh - NO RATE LIMIT
 router.post('/refresh-token', refreshLimiter, authController.refreshToken.bind(authController));
