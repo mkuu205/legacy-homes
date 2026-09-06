@@ -5,7 +5,10 @@ import { useSystemStatusStore } from '@/stores/system-status.store';
 // API Configuration
 // --------------------------------------------------
 
-const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '');
+// Production must never fall back to a localhost API. Keep localhost available
+// only for local development when the developer has explicitly omitted the
+// public API setting.
+const configuredApiUrl = (process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? 'https://api.legacyhomes.co.ke/api' : undefined))?.replace(/\/+$/, '');
 const API_URL = configuredApiUrl?.endsWith('/api') ? configuredApiUrl : configuredApiUrl ? `${configuredApiUrl}/api` : undefined;
 
 if (!API_URL) {

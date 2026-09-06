@@ -6,8 +6,8 @@ import { io, Socket } from 'socket.io-client';
 
 // The ONLY backend URL the frontend should know.
 // Example:
-// NEXT_PUBLIC_API_URL=https://legacy-homes-backend-production.up.railway.app/api
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+// NEXT_PUBLIC_API_URL=https://api.legacyhomes.co.ke/api
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? 'https://api.legacyhomes.co.ke/api' : undefined);
 
 if (!API_URL) {
   throw new Error(

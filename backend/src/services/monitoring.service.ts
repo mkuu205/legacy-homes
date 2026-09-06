@@ -71,15 +71,15 @@ class MonitoringService {
         },
       });
     } else if (active && input.status === 'ONLINE') {
-      const healthyBefore = previous[0]?.status === 'ONLINE';
-      if (healthyBefore) {
-        await prisma.monitoringIncident.update({
-          where: { id: active.id },
-          data: { status: 'RECOVERED', resolvedAt: new Date(), recoverySentAt: new Date() },
-        });
-        logger.info(`[MONITORING] incident recovered service=${input.service}`);
-        incidentId = active.id;
-      }
+      // An incident is recovered by the first confirmed healthy check after
+      // the failure. Requiring a healthy predecessor could leave incidents
+      // open forever after an outage/recovery transition.
+      await prisma.monitoringIncident.update({
+        where: { id: active.id },
+        data: { status: 'RECOVERED', resolvedAt: new Date(), recoverySentAt: new Date() },
+      });
+      logger.info(`[MONITORING] incident recovered service=${input.service}`);
+      incidentId = active.id;
     }
 
     await prisma.monitoringCheck.create({
