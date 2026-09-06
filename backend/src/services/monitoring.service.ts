@@ -104,13 +104,22 @@ class MonitoringService {
     if (!item || item.status === 'OFFLINE') {
       return { service, status: 'OFFLINE', severity: severityFor('OFFLINE', customerImpact), errorMessage: item?.message || 'No health information available' };
     }
-    if (item.configured === true || item.configSummary) {
+    const configured = item.configured === true || item.status === 'ONLINE';
+    if (configured) {
       return {
         service,
-        status: 'DEGRADED',
+        status: 'ONLINE',
+        severity: 'INFO',
+        metadata: { configurationOnly: true, configSummary: item.configSummary || null },
+      };
+    }
+    if (item.configSummary) {
+      return {
+        service,
+        status: 'OFFLINE',
         severity: 'WARNING',
-        errorMessage: 'Configured, but no safe non-transactional provider probe is available',
-        metadata: { configurationOnly: true },
+        errorMessage: 'Required configuration is missing',
+        metadata: { configurationOnly: true, configSummary: item.configSummary },
       };
     }
     return { service, status: 'UNKNOWN', severity: 'WARNING', errorMessage: item.message || 'Health state unknown' };
