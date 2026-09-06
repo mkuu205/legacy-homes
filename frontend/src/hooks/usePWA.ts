@@ -8,7 +8,7 @@ export function usePWA() {
   useEffect(() => {
     // Register service worker
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((error) => {
+      navigator.serviceWorker.register('/sw.js?v=20260907-3').catch((error) => {
         console.error('Service Worker registration failed:', error);
       });
     }

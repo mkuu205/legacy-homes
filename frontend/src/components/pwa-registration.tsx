@@ -10,7 +10,7 @@ export function PWARegistration() {
 
     const register = async () => {
       try {
-        registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        registration = await navigator.serviceWorker.register('/sw.js?v=20260907-3', { scope: '/' });
         await registration.update();
       } catch (error) {
         // PWA support is progressive; the application remains usable without it.

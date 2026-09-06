@@ -26,6 +26,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (url.pathname === '/sw.js') return;
   if (url.pathname.startsWith('/api/') || url.pathname === '/health' || url.pathname.startsWith('/health/')) return;
 
   if (request.mode === 'navigate') {
