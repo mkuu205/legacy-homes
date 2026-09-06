@@ -180,10 +180,40 @@ class MonitoringService {
   }
 
   async getStatusSnapshot(latestChecks?: any[], source = 'admin-system-check') {
-    const checks = latestChecks || await prisma.monitoringCheck.findMany({ where: { checkedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }, orderBy: { checkedAt: 'desc' }, take: 200 });
+    const checks = await prisma.monitoringCheck.findMany({ where: { checkedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }, orderBy: { checkedAt: 'desc' }, take: 500 });
     const latestByService = new Map<string, any>();
     for (const check of checks) if (!latestByService.has(check.service)) latestByService.set(check.service, check);
     const activeIncidents = await prisma.monitoringIncident.findMany({ where: { status: { in: ['WARNING', 'MAJOR', 'CRITICAL'] } }, orderBy: { startedAt: 'desc' }, take: 50 });
+    const incidents = await prisma.monitoringIncident.findMany({ orderBy: { startedAt: 'desc' }, take: 200 });
+    const detailsByService = new Map<string, any[]>();
+    for (const check of checks) {
+      const history = detailsByService.get(check.service) || [];
+      history.push(check);
+      detailsByService.set(check.service, history);
+    }
+    for (const [service, history] of detailsByService) {
+      const latest = history[0];
+      const lastSuccess = history.find((check) => check.status === 'ONLINE');
+      const lastFailure = history.find((check) => check.status !== 'ONLINE');
+      let consecutiveFailures = 0;
+      for (const check of history) {
+        if (check.status === 'ONLINE') break;
+        consecutiveFailures += 1;
+      }
+      const latencies = history.map((check) => check.responseTimeMs).filter((value): value is number => Number.isFinite(value)).sort((a, b) => a - b);
+      const percentile = (ratio: number) => latencies.length ? latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * ratio))] : null;
+      const serviceIncidents = incidents.filter((incident) => incident.service === service);
+      latest.details = {
+        healthCheck: latest.metadata?.configurationOnly ? 'Configuration check' : 'Operational health check',
+        lastSuccessfulAt: lastSuccess?.checkedAt || null,
+        lastFailedAt: lastFailure?.checkedAt || null,
+        consecutiveFailures,
+        recentChecks: history.slice(0, 10),
+        incidents: serviceIncidents,
+        currentIncident: serviceIncidents.find((incident) => ['WARNING', 'MAJOR', 'CRITICAL'].includes(incident.status)) || null,
+        latency: { averageMs: latencies.length ? Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length) : null, p50Ms: percentile(.5), p95Ms: percentile(.95), p99Ms: percentile(.99) },
+      };
+    }
     const online = [...latestByService.values()].filter((check) => check.status === 'ONLINE').length;
     const degraded = [...latestByService.values()].filter((check) => check.status === 'DEGRADED' || check.status === 'WARNING').length;
     const offline = [...latestByService.values()].filter((check) => check.status === 'OFFLINE').length;
