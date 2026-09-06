@@ -1,4 +1,4 @@
-const CACHE_NAME = 'legacy-homes-shell-v2';
+const CACHE_NAME = 'legacy-homes-shell-v3';
 const OFFLINE_URL = '/offline.html';
 
 self.addEventListener('install', (event) => {
