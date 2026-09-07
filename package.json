@@ -8,7 +8,6 @@
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
     "build:backend": "cd backend && npm run build",
-    "build:frontend": "cd frontend && npm run build",
-    "start:backend": "npm run --workspace legacy-homes-backend start"
+    "build:frontend": "cd frontend && npm run build"
   }
 }
