@@ -101,28 +101,9 @@ class MonitoringService {
     item: any,
     customerImpact = false,
   ): CheckInput {
-    if (!item || item.status === 'OFFLINE') {
-      return { service, status: 'OFFLINE', severity: severityFor('OFFLINE', customerImpact), errorMessage: item?.message || 'No health information available' };
-    }
-    const configured = item.configured === true || item.status === 'ONLINE';
-    if (configured) {
-      return {
-        service,
-        status: 'ONLINE',
-        severity: 'INFO',
-        metadata: { configurationOnly: true, configSummary: item.configSummary || null },
-      };
-    }
-    if (item.configSummary) {
-      return {
-        service,
-        status: 'OFFLINE',
-        severity: 'WARNING',
-        errorMessage: 'Required configuration is missing',
-        metadata: { configurationOnly: true, configSummary: item.configSummary },
-      };
-    }
-    return { service, status: 'UNKNOWN', severity: 'WARNING', errorMessage: item.message || 'Health state unknown' };
+    if (!item) return { service, status: 'UNKNOWN', severity: 'WARNING', errorMessage: 'No health information available' };
+    const status = item.status === 'OFFLINE' ? 'OFFLINE' : item.status === 'WARNING' ? 'DEGRADED' : item.status === 'ONLINE' ? 'ONLINE' : 'UNKNOWN';
+    return { service, status, severity: severityFor(status, customerImpact), errorMessage: item.message, metadata: { diagnostics: item.diagnostics || [], configSummary: item.configSummary || null } };
   }
 
   async runChecks(source = 'extended-monitoring') {
@@ -213,7 +194,7 @@ class MonitoringService {
       const percentile = (ratio: number) => latencies.length ? latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * ratio))] : null;
       const serviceIncidents = incidents.filter((incident) => incident.service === service);
       latest.details = {
-        healthCheck: latest.metadata?.configurationOnly ? 'Configuration check' : 'Operational health check',
+        healthCheck: latest.metadata?.diagnostics?.length ? 'Service-specific configuration and operational checks' : 'Operational health check',
         lastSuccessfulAt: lastSuccess?.checkedAt || null,
         lastFailedAt: lastFailure?.checkedAt || null,
         consecutiveFailures,

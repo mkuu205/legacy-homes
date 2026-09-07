@@ -708,150 +708,104 @@ export class PaymentEngineService {
   }
 
   async checkSystemHealth() {
+    type Diagnostic = { key: string; label: string; status: 'PASS' | 'WARNING' | 'FAIL' | 'NOT_TESTED'; message: string };
     const services: Record<string, any> = {};
     const startTime = Date.now();
+    const diagnostic = (key: string, label: string, present: boolean, message: string): Diagnostic => ({
+      key, label, status: present ? 'PASS' : 'FAIL', message,
+    });
+    const summarize = (checks: Diagnostic[], healthyMessage: string, degradedMessage: string) => {
+      const failed = checks.filter((check) => check.status === 'FAIL');
+      const warnings = checks.filter((check) => check.status === 'WARNING' || check.status === 'NOT_TESTED');
+      return {
+        status: failed.length ? (failed.length === checks.length ? 'OFFLINE' : 'WARNING') : warnings.length ? 'WARNING' : 'ONLINE',
+        message: failed.length ? `${degradedMessage}: ${failed.map((check) => check.label).join(', ')}` : warnings.length ? degradedMessage : healthyMessage,
+        diagnostics: checks,
+      };
+    };
 
     services.backendApi = {
-      status: 'ONLINE',
-      message: 'API is responding correctly',
-      responseTime: `${Date.now() - startTime}ms`,
-      version: process.env.npm_package_version || '1.0.0'
+      status: 'ONLINE', message: 'Authenticated monitoring request reached the backend', responseTime: `${Date.now() - startTime}ms`,
+      diagnostics: [{ key: 'request', label: 'Backend request', status: 'PASS', message: 'The authenticated health request was handled successfully.' }],
+      version: process.env.npm_package_version || '1.0.0',
     };
 
     try {
       const dbStart = Date.now();
       await prisma.$queryRaw`SELECT 1`;
-      services.database = {
-        status: 'ONLINE',
-        message: 'Database connection is healthy',
-        responseTime: `${Date.now() - dbStart}ms`
-      };
+      services.database = { status: 'ONLINE', message: 'Database connectivity probe succeeded', responseTime: `${Date.now() - dbStart}ms`, diagnostics: [diagnostic('connectivity', 'Database connectivity', true, 'SELECT 1 completed successfully.')] };
     } catch (error) {
-      services.database = {
-        status: 'OFFLINE',
-        message: error instanceof Error ? error.message : 'Database connection failed'
-      };
+      services.database = { status: 'OFFLINE', message: 'Database connectivity probe failed', diagnostics: [diagnostic('connectivity', 'Database connectivity', false, 'The database did not complete the SELECT 1 health probe.')] };
     }
 
-    // Check Pesapal
-    const pesapalProvider = this.providers.get('PESAPAL');
-    if (pesapalProvider) {
-      const isConfigured = pesapalProvider.isConfigured();
-      services.pesapalApi = {
-        status: isConfigured ? 'ONLINE' : 'OFFLINE',
-        message: isConfigured ? 'PESAPAL provider is configured' : 'PESAPAL provider is not configured',
-        configured: isConfigured,
-      };
-    } else {
-      services.pesapalApi = {
-        status: 'OFFLINE',
-        message: 'PESAPAL provider not initialized',
-        configured: false,
-      };
-    }
-
-    // Check TUMA
-    const tumaProvider = this.providers.get('TUMA');
-    if (tumaProvider) {
-      const isConfigured = tumaProvider.isConfigured();
-      services.tumaApi = {
-        status: isConfigured ? 'ONLINE' : 'OFFLINE',
-        message: isConfigured ? 'TUMA provider is configured' : 'TUMA provider is not configured',
-        configured: isConfigured,
-      };
-      logger.info(`[PAYMENT ENGINE] TUMA health check: ${services.tumaApi.status} - ${services.tumaApi.message}`);
-    } else {
-      services.tumaApi = {
-        status: 'OFFLINE',
-        message: 'TUMA provider not initialized',
-        configured: false,
-      };
-      logger.warn(`[PAYMENT ENGINE] TUMA health check: ${services.tumaApi.status} - ${services.tumaApi.message}`);
-    }
-
-    const callbackUrl = process.env.PAYMENT_CALLBACK_URL || process.env.PESAPAL_CALLBACK_URL;
-    services.callbackEndpoint = {
-      status: callbackUrl ? 'ONLINE' : 'OFFLINE',
-      message: callbackUrl ? `Callback URL is configured` : 'Callback URL is not configured',
-      configSummary: {
-        urlSet: !!callbackUrl,
-        ipnIdSet: !!process.env.PESAPAL_IPN_ID,
-      }
-    };
-
-    const hasEmailConfig = !!(process.env.SMTP_USER && process.env.SMTP_PASS) || !!process.env.BREVO_API_KEY;
-    services.emailService = {
-      status: hasEmailConfig ? 'ONLINE' : 'OFFLINE',
-      message: hasEmailConfig ? 'Email service is configured' : 'Email service is not configured',
-      configSummary: {
-        smtpUser: !!process.env.SMTP_USER,
-        smtpPass: !!process.env.SMTP_PASS,
-        brevoApiKey: !!process.env.BREVO_API_KEY,
-      }
-    };
-
-    const talksasaConfigured = !!process.env.TALKSASA_API_TOKEN;
-    services.talksasaSms = {
-      status: talksasaConfigured ? 'ONLINE' : 'OFFLINE',
-      message: talksasaConfigured ? 'TalkSasa SMS service is configured' : 'TalkSasa SMS service is not configured',
-      configSummary: {
-        apiToken: talksasaConfigured,
-        senderId: !!process.env.TALKSASA_SENDER_ID,
-        apiUrl: !!(process.env.TALKSASA_API_URL || 'https://bulksms.talksasa.com/api/v3/'),
-      }
-    };
-
-    const requiredVars = [
-      'DATABASE_URL',
-      'JWT_ACCESS_SECRET',
-      'JWT_REFRESH_SECRET',
-      'PESAPAL_CONSUMER_KEY',
-      'PESAPAL_CONSUMER_SECRET',
+    const pesapalProvider: any = this.providers.get('PESAPAL');
+    const pesapalChecks: Diagnostic[] = [
+      diagnostic('consumer-key', 'Consumer key configured', !!process.env.PESAPAL_CONSUMER_KEY, 'PESAPAL_CONSUMER_KEY is present.'),
+      diagnostic('consumer-secret', 'Consumer secret configured', !!process.env.PESAPAL_CONSUMER_SECRET, 'PESAPAL_CONSUMER_SECRET is present.'),
+      diagnostic('callback-url', 'Callback URL configured', !!(process.env.PESAPAL_CALLBACK_URL || process.env.PAYMENT_CALLBACK_URL), 'A payment callback URL is configured.'),
+      diagnostic('ipn-id', 'IPN identifier configured', !!process.env.PESAPAL_IPN_ID, 'PESAPAL_IPN_ID is present.'),
     ];
-    
-    const optionalVars = [
-      'TUMA_BUSINESS_EMAIL',
-      'TUMA_API_KEY',
-      'PAYMENT_CALLBACK_URL',
-      'BREVO_API_KEY',
-      'SMTP_USER',
-      'SMTP_PASS',
-      'TALKSASA_API_TOKEN',
-      'TALKSASA_SENDER_ID',
+    if (pesapalProvider?.isConfigured?.()) {
+      try {
+        const probeStart = Date.now();
+        await pesapalProvider.getAccessToken();
+        pesapalChecks.push({ key: 'connectivity', label: 'Credential connectivity', status: 'PASS', message: `PESAPAL token request succeeded in ${Date.now() - probeStart}ms; credentials were not exposed.` });
+      } catch (error) {
+        pesapalChecks.push({ key: 'connectivity', label: 'Credential connectivity', status: 'FAIL', message: 'PESAPAL configuration is present but the credential/token probe failed.' });
+      }
+    } else {
+      pesapalChecks.push({ key: 'connectivity', label: 'Credential connectivity', status: 'NOT_TESTED', message: 'Not tested because the provider is not fully configured.' });
+    }
+    services.pesapalApi = { ...summarize(pesapalChecks, 'PESAPAL credentials are configured and reachable', 'PESAPAL configuration or connectivity needs attention'), configSummary: Object.fromEntries(pesapalChecks.map((check) => [check.key, check.status === 'PASS'])) };
+
+    const tumaProvider: any = this.providers.get('TUMA');
+    const tumaChecks: Diagnostic[] = [
+      diagnostic('business-email', 'Business email configured', !!(process.env.TUMA_BUSINESS_EMAIL || process.env.TUMA_EMAIL), 'TUMA business email is present.'),
+      diagnostic('api-key', 'API key configured', !!process.env.TUMA_API_KEY, 'TUMA_API_KEY is present.'),
+      diagnostic('callback-url', 'Callback URL configured', !!(process.env.PAYMENT_CALLBACK_URL || process.env.TUMA_CALLBACK_URL), 'A TUMA/payment callback URL is configured.'),
     ];
-
-    const missingRequired = requiredVars.filter(v => !process.env[v]);
-    const missingOptional = optionalVars.filter(v => !process.env[v]);
-    
-    const tumaConfigured = !!(process.env.TUMA_BUSINESS_EMAIL && process.env.TUMA_API_KEY);
-    
-    services.environmentVariables = {
-      status: missingRequired.length === 0 ? 'ONLINE' : 'WARNING',
-      message: missingRequired.length === 0 
-        ? 'All required environment variables are set' 
-        : `Missing required: ${missingRequired.join(', ')}`,
-      configSummary: {
-        required: requiredVars.reduce((acc, v) => ({ ...acc, [v]: !!process.env[v] }), {}),
-        optional: optionalVars.reduce((acc, v) => ({ ...acc, [v]: !!process.env[v] }), {}),
-        tumaConfigured: tumaConfigured,
+    if (tumaProvider?.isConfigured?.()) {
+      try {
+        await tumaProvider.getAccessToken();
+        tumaChecks.push({ key: 'connectivity', label: 'Credential connectivity', status: 'PASS', message: 'TUMA token request succeeded; credentials were not exposed.' });
+      } catch (error) {
+        tumaChecks.push({ key: 'connectivity', label: 'Credential connectivity', status: 'FAIL', message: 'TUMA configuration is present but the credential/token probe failed.' });
       }
-    };
+    } else {
+      tumaChecks.push({ key: 'connectivity', label: 'Credential connectivity', status: 'NOT_TESTED', message: 'Not tested because the provider is not fully configured.' });
+    }
+    services.tumaApi = { ...summarize(tumaChecks, 'TUMA credentials are configured and reachable', 'TUMA configuration or connectivity needs attention'), configSummary: Object.fromEntries(tumaChecks.map((check) => [check.key, check.status === 'PASS'])) };
 
-    const allOnline = Object.values(services).every((s: any) => s.status === 'ONLINE');
-    const hasWarnings = Object.values(services).some((s: any) => s.status === 'WARNING');
+    const callbackChecks: Diagnostic[] = [
+      diagnostic('url', 'Callback URL configured', !!(process.env.PAYMENT_CALLBACK_URL || process.env.PESAPAL_CALLBACK_URL || process.env.TUMA_CALLBACK_URL), 'A callback URL is present.'),
+      diagnostic('ipn-id', 'PESAPAL IPN identifier configured', !!process.env.PESAPAL_IPN_ID, 'PESAPAL_IPN_ID is present for asynchronous payment notifications.'),
+    ];
+    services.callbackEndpoint = { ...summarize(callbackChecks, 'Payment callback configuration is present', 'Payment callback configuration is incomplete'), configSummary: Object.fromEntries(callbackChecks.map((check) => [check.key, check.status === 'PASS'])) };
 
-    return {
-      status: allOnline ? 'ONLINE' : (hasWarnings ? 'WARNING' : 'OFFLINE'),
-      timestamp: new Date().toISOString(),
-      serverTime: new Date().toISOString(),
-      timezone: 'Africa/Nairobi',
-      services,
-      summary: {
-        totalServices: Object.keys(services).length,
-        online: Object.values(services).filter((s: any) => s.status === 'ONLINE').length,
-        offline: Object.values(services).filter((s: any) => s.status === 'OFFLINE').length,
-        warnings: Object.values(services).filter((s: any) => s.status === 'WARNING').length,
-      }
-    };
+    const emailChecks: Diagnostic[] = [
+      diagnostic('smtp-user', 'SMTP username configured', !!process.env.SMTP_USER, 'SMTP_USER is present.'),
+      diagnostic('smtp-password', 'SMTP password configured', !!process.env.SMTP_PASS, 'SMTP_PASS is present; its value is never returned.'),
+      diagnostic('brevo-api-key', 'Brevo API key configured', !!process.env.BREVO_API_KEY, 'BREVO_API_KEY is present; its value is never returned.'),
+    ];
+    const emailConfigured = (!!process.env.SMTP_USER && !!process.env.SMTP_PASS) || !!process.env.BREVO_API_KEY;
+    if (emailConfigured) emailChecks.push({ key: 'provider-selection', label: 'Email provider configuration', status: 'PASS', message: 'At least one supported email delivery configuration is complete.' });
+    else emailChecks.push({ key: 'provider-selection', label: 'Email provider configuration', status: 'FAIL', message: 'Neither a complete SMTP credential pair nor a Brevo API key is configured.' });
+    services.emailService = { ...summarize(emailChecks, 'Email delivery configuration is present', 'Email delivery configuration needs attention'), configSummary: Object.fromEntries(emailChecks.map((check) => [check.key, check.status === 'PASS'])) };
+
+    const smsChecks: Diagnostic[] = [
+      diagnostic('api-token', 'TalkSasa API token configured', !!process.env.TALKSASA_API_TOKEN, 'TALKSASA_API_TOKEN is present; its value is never returned.'),
+      diagnostic('api-url', 'TalkSasa API endpoint configured', !!(process.env.TALKSASA_API_URL || 'https://bulksms.talksasa.com/api/v3/'), 'TalkSasa uses the configured endpoint or its provider default.'),
+      diagnostic('sender-id', 'Sender ID configured', !!process.env.TALKSASA_SENDER_ID, 'TALKSASA_SENDER_ID is present.'),
+    ];
+    services.talksasaSms = { ...summarize(smsChecks, 'TalkSasa SMS configuration is present', 'TalkSasa SMS configuration needs attention'), configSummary: Object.fromEntries(smsChecks.map((check) => [check.key, check.status === 'PASS'])) };
+
+    const requiredVars = ['DATABASE_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'PESAPAL_CONSUMER_KEY', 'PESAPAL_CONSUMER_SECRET'];
+    const optionalVars = ['TUMA_BUSINESS_EMAIL', 'TUMA_API_KEY', 'PAYMENT_CALLBACK_URL', 'BREVO_API_KEY', 'SMTP_USER', 'SMTP_PASS', 'TALKSASA_API_TOKEN', 'TALKSASA_SENDER_ID'];
+    const environmentChecks: Diagnostic[] = [...requiredVars.map((name) => diagnostic(name, name, !!process.env[name], process.env[name] ? `${name} is present.` : `${name} is missing.`)), ...optionalVars.map((name) => ({ key: name, label: name, status: process.env[name] ? 'PASS' as const : 'WARNING' as const, message: process.env[name] ? `${name} is present.` : `${name} is optional and is not configured.` }))];
+    services.environmentVariables = { ...summarize(environmentChecks, 'Required environment variables are present', 'Environment configuration needs attention'), configSummary: { required: Object.fromEntries(requiredVars.map((name) => [name, !!process.env[name]])), optional: Object.fromEntries(optionalVars.map((name) => [name, !!process.env[name]])) } };
+
+    const values = Object.values(services);
+    const status = values.some((service: any) => service.status === 'OFFLINE') ? 'OFFLINE' : values.some((service: any) => service.status === 'WARNING') ? 'WARNING' : 'ONLINE';
+    return { status, timestamp: new Date().toISOString(), serverTime: new Date().toISOString(), timezone: 'Africa/Nairobi', services, summary: { totalServices: values.length, online: values.filter((service: any) => service.status === 'ONLINE').length, offline: values.filter((service: any) => service.status === 'OFFLINE').length, warnings: values.filter((service: any) => service.status === 'WARNING').length } };
   }
 }
