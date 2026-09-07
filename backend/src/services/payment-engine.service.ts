@@ -735,7 +735,8 @@ export class PaymentEngineService {
       await prisma.$queryRaw`SELECT 1`;
       services.database = { status: 'ONLINE', message: 'Database connectivity probe succeeded', responseTime: `${Date.now() - dbStart}ms`, diagnostics: [diagnostic('connectivity', 'Database connectivity', true, 'SELECT 1 completed successfully.')] };
     } catch (error) {
-      services.database = { status: 'OFFLINE', message: 'Database connectivity probe failed', diagnostics: [diagnostic('connectivity', 'Database connectivity', false, 'The database did not complete the SELECT 1 health probe.')] };
+      const errorCode = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : null;
+      services.database = { status: 'OFFLINE', message: errorCode ? `Database connectivity probe failed (${errorCode})` : 'Database connectivity probe failed', diagnostics: [diagnostic('connectivity', 'Database connectivity', false, errorCode ? `The SELECT 1 health probe failed with database code ${errorCode}.` : 'The database did not complete the SELECT 1 health probe.')] };
     }
 
     const pesapalProvider: any = this.providers.get('PESAPAL');
@@ -800,7 +801,7 @@ export class PaymentEngineService {
     services.talksasaSms = { ...summarize(smsChecks, 'TalkSasa SMS configuration is present', 'TalkSasa SMS configuration needs attention'), configSummary: Object.fromEntries(smsChecks.map((check) => [check.key, check.status === 'PASS'])) };
 
     const requiredVars = ['DATABASE_URL', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'PESAPAL_CONSUMER_KEY', 'PESAPAL_CONSUMER_SECRET'];
-    const optionalVars = ['TUMA_BUSINESS_EMAIL', 'TUMA_API_KEY', 'PAYMENT_CALLBACK_URL', 'BREVO_API_KEY', 'SMTP_USER', 'SMTP_PASS', 'TALKSASA_API_TOKEN', 'TALKSASA_SENDER_ID'];
+    const optionalVars = ['TUMA_BUSINESS_EMAIL', 'TUMA_EMAIL', 'TUMA_API_KEY', 'PAYMENT_CALLBACK_URL', 'TUMA_CALLBACK_URL', 'PESAPAL_CALLBACK_URL', 'BREVO_API_KEY', 'SMTP_USER', 'SMTP_PASS', 'TALKSASA_API_TOKEN', 'TALKSASA_SENDER_ID'];
     const environmentChecks: Diagnostic[] = [...requiredVars.map((name) => diagnostic(name, name, !!process.env[name], process.env[name] ? `${name} is present.` : `${name} is missing.`)), ...optionalVars.map((name) => ({ key: name, label: name, status: process.env[name] ? 'PASS' as const : 'WARNING' as const, message: process.env[name] ? `${name} is present.` : `${name} is optional and is not configured.` }))];
     services.environmentVariables = { ...summarize(environmentChecks, 'Required environment variables are present', 'Environment configuration needs attention'), configSummary: { required: Object.fromEntries(requiredVars.map((name) => [name, !!process.env[name]])), optional: Object.fromEntries(optionalVars.map((name) => [name, !!process.env[name]])) } };
 
